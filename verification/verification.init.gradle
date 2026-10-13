@@ -13,5 +13,16 @@ allprojects {
                     p.configurations.compileClasspath
             mainClass = 'com.maestroai.training.StandaloneRegression'
         }
+        p.tasks.register('sourceVerification', JavaExec) {
+            dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            classpath = p.sourceSets.verification.output +
+                    p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
+                    p.configurations.compileClasspath
+            mainClass = 'com.maestroai.training.SourceVerification'
+            doFirst {
+                if (!p.hasProperty('verificationSource')) throw new GradleException('Missing pinned extracted source directory')
+                args p.property('verificationSource')
+            }
+        }
     }
 }

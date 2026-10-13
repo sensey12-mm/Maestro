@@ -49,3 +49,8 @@ jobs:
         run: |
           python3 verification/check_jar.py --self-test
           python3 verification/check_jar.py build/libs/maestroai-1.0.0.jar
+      - name: Verify pinned simulator source and relocated engine
+        run: |
+          node --version
+          python3 verification/source_oracle.py --self-test
+          python3 verification/source_oracle.py
