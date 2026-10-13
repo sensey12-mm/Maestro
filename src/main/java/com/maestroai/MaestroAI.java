@@ -1,0 +1,33 @@
+package com.maestroai;
+
+import com.gitlab.srcmc.rctapi.api.util.JTO;
+import com.maestroai.ai.MaestroBattleAI;
+import com.maestroai.training.ControlledBattleCaptureRegistry;
+import net.fabricmc.api.ModInitializer;
+
+public class MaestroAI implements ModInitializer {
+
+    public static final String MOD_ID = "maestroai";
+
+    @Override
+    public void onInitialize() {
+        /*
+         * Register Maestro's custom battle AI with RCT.
+         *
+         * Trainer JSON can now use:
+         *
+         * "ai": {
+         *   "type": "maestro"
+         * }
+         */
+        JTO.registerParser(
+                "maestro",
+                data -> new MaestroBattleAI()
+        );
+
+        ControlledBattleCaptureRegistry.install();
+
+        System.out.println("[MaestroAI] Loaded.");
+        System.out.println("[MaestroAI] Registered AI type: maestro");
+    }
+}

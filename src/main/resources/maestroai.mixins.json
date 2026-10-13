@@ -1,0 +1,7 @@
+{
+  "required": false,
+  "package": "com.maestroai.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["OwnRequestDispatchMixin", "OwnTurnDispatchMixin", "SimulatorDomainMixin"],
+  "injectors": {"defaultRequire": 0}
+}

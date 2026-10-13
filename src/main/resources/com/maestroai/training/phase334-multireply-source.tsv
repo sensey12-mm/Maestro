@@ -1,0 +1,17 @@
+# P4 is independent source-executed conditional reply/action/HP interval; no response probabilities.
+# P4 id reply own_action low_exchange high_exchange; S4 id strict_best_or_UNKNOWN
+P4	priority-explicit-finisher	tackle	move:quickattack	0.06666666666666667	0.06666666666666667
+P4	priority-explicit-finisher	tackle	move:tackle	-0.15	-0.15
+P4	priority-explicit-finisher	quickattack	move:quickattack	-0.15	-0.15
+P4	priority-explicit-finisher	quickattack	move:tackle	-0.15	-0.15
+S4	priority-explicit-finisher	UNKNOWN
+P4	spikes-entry-sacrifice	tackle	move:tackle	-0.3333333333333333	-0.13666666666666666
+P4	spikes-entry-sacrifice	tackle	switch:reserve	-0.45	-0.42
+P4	spikes-entry-sacrifice	quickattack	move:tackle	-0.3333333333333333	-0.13666666666666666
+P4	spikes-entry-sacrifice	quickattack	switch:reserve	-0.45	-0.42
+S4	spikes-entry-sacrifice	move:tackle
+P4	bulk-up-opportunity	tackle	move:tackle	-0.03333333333333333	0.01
+P4	bulk-up-opportunity	tackle	move:bulkup	-0.09	-0.07333333333333333
+P4	bulk-up-opportunity	quickattack	move:tackle	-0.03333333333333333	0.01
+P4	bulk-up-opportunity	quickattack	move:bulkup	-0.13333333333333333	-0.11
+S4	bulk-up-opportunity	move:tackle

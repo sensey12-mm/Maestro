@@ -1,0 +1,100 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+repositories {
+    maven {
+        name = "CurseMaven"
+        url = "https://cursemaven.com"
+    }
+
+    maven {
+        name = "Architectury"
+        url = "https://maven.architectury.dev/"
+    }
+
+    mavenCentral()
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        "maestroai" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Cobblemon 1.7.3 — exact Fabric 1.21.1 build
+    modImplementation "curse.maven:cobblemon-687131:7553235"
+
+    // Kotlin runtime required by Cobblemon's Kotlin classes
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.0.21"
+
+    // Architectury required by RCT API
+    modImplementation "dev.architectury:architectury-fabric:13.0.2"
+
+    // RCT API 0.15.2-beta
+    modImplementation "curse.maven:radical-cobblemon-trainers-api-1152792:7952421"
+}
+
+// The legacy example client mixin is retained in Git history but excluded
+// from processed client/main resources BEFORE the distributable is assembled.
+tasks.withType(ProcessResources).configureEach {
+    exclude 'modid.client.mixins.json'
+}
+
+processResources {
+    def version = project.version
+
+    inputs.property "version", version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+java {
+    withSourcesJar()
+
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+    // The legacy example client mixin is tracked history, NEVER distributable.
+    // This file comes from src/client/resources and is not a MaestroAI mixin.
+    exclude 'modid.client.mixins.json'
+    def projectName = project.name
+
+    inputs.property "projectName", projectName
+
+    from("LICENSE") {
+        rename { "${it}_${projectName}" }
+    }
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+    }
+}

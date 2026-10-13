@@ -1,0 +1,27 @@
+# H3/HX: independent executed Cobblemon 1.7.3 conditional HP exchange; not Minecraft or win rates
+# H3 category id hp foeHP atk def speed foeAtk foeDef foeSpeed reserveHP reserveAtk reserveDef reserveSpeed spikes rocks actions reply trick magic wind item ownAbility reserveAbility terrain protect taunt preference fixedBaseline
+# HX id action lower upper
+H3	priority-explicit-finisher	45	20	280	170	90	260	160	310	290	100	340	170	0	0	move:quickattack,move:tackle	tackle	false	false	false	none	runaway	runaway	none	false	false	move:quickattack	move:tackle
+HX	priority-explicit-finisher	move:quickattack	0.06666666666666667	0.06666666666666667
+HX	priority-explicit-finisher	move:tackle	-0.15	-0.15
+H3	priority-nonfinish	170	240	250	180	90	240	180	310	270	100	280	190	0	0	move:quickattack,move:tackle	tackle	false	false	false	none	runaway	runaway	none	false	false	UNKNOWN	move:quickattack
+HX	priority-nonfinish	move:quickattack	-0.03	0.04666666666666667
+HX	priority-nonfinish	move:tackle	-0.03	0.04666666666666667
+H3	priority-psychic-field	55	35	260	110	95	280	190	310	280	100	300	200	0	0	move:quickattack,move:tackle	tackle	false	false	false	none	runaway	runaway	psychicterrain	false	false	UNKNOWN	move:tackle
+HX	priority-psychic-field	move:quickattack	-0.18333333333333332	-0.18333333333333332
+HX	priority-psychic-field	move:tackle	-0.18333333333333332	-0.18333333333333332
+H3	spikes-entry-sacrifice	100	280	170	150	105	310	180	300	260	100	270	190	3	0	move:tackle,switch:reserve	tackle	false	false	false	none	runaway	runaway	none	false	false	move:tackle	switch:reserve
+HX	spikes-entry-sacrifice	move:tackle	-0.3333333333333333	-0.13666666666666666
+HX	spikes-entry-sacrifice	switch:reserve	-0.45	-0.42
+H3	rock-spike-combination	185	155	130	190	110	250	240	325	280	100	260	185	2	1	move:tackle,switch:reserve	tackle	false	false	false	none	runaway	runaway	none	false	false	move:tackle	move:tackle
+HX	rock-spike-combination	move:tackle	-0.14666666666666667	-0.09333333333333334
+HX	rock-spike-combination	switch:reserve	-0.46	-0.43
+H3	healthy-reserve-no-hazards	70	240	85	290	95	280	250	325	300	100	420	205	0	0	move:tackle,switch:reserve	tackle	false	false	false	none	runaway	runaway	none	false	false	UNKNOWN	switch:reserve
+HX	healthy-reserve-no-hazards	move:tackle	-0.11666666666666667	-0.07666666666666666
+HX	healthy-reserve-no-hazards	switch:reserve	-0.12	-0.1
+H3	bulk-up-opportunity	280	295	100	240	320	180	150	180	300	100	200	200	0	0	move:tackle,move:bulkup	tackle	false	false	false	none	runaway	runaway	none	false	false	move:tackle	move:bulkup
+HX	bulk-up-opportunity	move:tackle	-0.03333333333333333	0.01
+HX	bulk-up-opportunity	move:bulkup	-0.09	-0.07333333333333333
+H3	swords-dance-pressure	210	250	240	160	325	270	310	190	260	100	210	190	0	0	move:tackle,move:swordsdance	tackle	false	false	false	none	runaway	runaway	none	false	false	move:tackle	move:tackle
+HX	swords-dance-pressure	move:tackle	-0.17666666666666667	-0.10333333333333333
+HX	swords-dance-pressure	move:swordsdance	-0.29	-0.24333333333333335
