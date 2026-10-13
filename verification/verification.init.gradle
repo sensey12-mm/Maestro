@@ -1,0 +1,17 @@
+allprojects {
+    afterEvaluate { p ->
+        p.sourceSets.create('verification') {
+            java.srcDirs = ['verification/java']
+            resources.srcDirs = []
+            compileClasspath = p.sourceSets.main.output + p.configurations.compileClasspath
+            runtimeClasspath = output + compileClasspath
+        }
+        p.tasks.register('standaloneRegression', JavaExec) {
+            dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            classpath = p.sourceSets.verification.output +
+                    p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
+                    p.configurations.compileClasspath
+            mainClass = 'com.maestroai.training.StandaloneRegression'
+        }
+    }
+}
