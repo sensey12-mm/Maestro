@@ -33,7 +33,11 @@ def declared_methods(data: bytes) -> set[str]:
     while index < count:
         tag = u1()
         if tag == 1:
-            pool[index] = read(u2()).decode("utf-8")
+            # Class files use Java *modified* UTF-8 (not ordinary UTF-8):
+            # NUL is C0 80; surrogate escapes may also occur in string constants.
+            # Only ASCII method selector names are checked below; replacing
+            # non-ASCII malformed/modified data never creates an ASCII selector.
+            pool[index] = read(u2()).decode("utf-8", errors="replace")
         elif tag in (3, 4): read(4)
         elif tag in (5, 6):
             read(8)
@@ -94,6 +98,22 @@ def verify_pinned_hooks(pinned_dependency: bytes):
 
 
 class HookOracleRegression(unittest.TestCase):
+    def test_java_modified_utf8_constants_do_not_break_selector_verification(self):
+        # A minimal JVM class containing a modified-UTF8 NUL constant and an
+        # ordinary ASCII method selector. Negative tests still reject bad magic.
+        raw = (
+            bytes.fromhex("cafebabe00000041")
+            + bytes.fromhex("0003")
+            + bytes.fromhex("01000378c080")
+            + bytes.fromhex("010004626f6f74")
+            + bytes.fromhex("002100000000")  # flags, this, superclass
+            + bytes.fromhex("0000")  # interfaces
+            + bytes.fromhex("0000")  # fields
+            + bytes.fromhex("0001")  # methods
+            + bytes.fromhex("0001000200020000")  # method with name_index=2
+        )
+        self.assertEqual(declared_methods(raw), {"boot"})
+
     def test_not_a_class(self):
         with self.assertRaises(ValueError):
             declared_methods(b"not a class")
