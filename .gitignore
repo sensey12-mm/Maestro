@@ -1,0 +1,18 @@
+# Local Gradle outputs and development runtime data.
+/.gradle/
+/build/
+/out/
+/run/
+/logs/
+/local.properties
+
+# Local editor settings and environment secrets; keep public examples visible.
+/.idea/
+/.vscode/
+/*.iml
+/.env
+/.env.*
+!/.env.example
+__pycache__/
+*.py[cod]
+.DS_Store

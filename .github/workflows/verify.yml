@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'LICENSE'
+      - '.gitignore'
       - 'src/**'
       - 'build.gradle'
       - 'settings.gradle'
@@ -15,6 +17,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'LICENSE'
+      - '.gitignore'
       - 'src/**'
       - 'build.gradle'
       - 'settings.gradle'
@@ -43,6 +47,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
+      - name: Check repository safeguards and notice regressions
+        run: |
+          python3 verification/check_repository.py --self-test
+          python3 verification/check_repository.py
       - name: Build and run standalone regressions
         run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression --stacktrace
       - name: Check JAR and checker regressions

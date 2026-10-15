@@ -87,13 +87,19 @@ class PackagingRegression(unittest.TestCase):
         with self.assertRaises(ValueError): inspect(*self.fixture(**{'maestroai-refmap.json': b'{"mappings":{"unexpected":"value"},"data":{}}'}))
     def test_changed_metadata(self):
         with self.assertRaises(ValueError): inspect(*self.fixture(**{'fabric.mod.json': b'{"id":"unexpected","version":"1"}'}))
-    def test_missing_manifest(self):
+    def without(self, name):
         args = list(self.fixture()); stream = io.BytesIO()
         with zipfile.ZipFile(io.BytesIO(args[0])) as original, zipfile.ZipFile(stream, 'w') as output:
-            for name in original.namelist():
-                if name != 'META-INF/MANIFEST.MF': output.writestr(name, original.read(name))
+            for entry in original.namelist():
+                if entry != name: output.writestr(entry, original.read(entry))
         args[0] = stream.getvalue()
-        with self.assertRaises(ValueError): inspect(*args)
+        return args
+
+    def test_missing_manifest(self):
+        with self.assertRaises(ValueError): inspect(*self.without('META-INF/MANIFEST.MF'))
+    def test_missing_notice(self):
+        with self.assertRaises(ValueError): inspect(*self.without('LICENSE_maestroai'))
+
 
 
 def main():
