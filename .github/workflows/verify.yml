@@ -47,7 +47,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
-      - name: Check repository safeguards and notice regressions
+      - name: Check local-file safeguards and Gradle notices
         run: |
           python3 verification/check_repository.py --self-test
           python3 verification/check_repository.py

@@ -7,6 +7,8 @@ An unofficial Fabric trainer-AI mod integrating with Radical Cobblemon Trainers 
 The pinned build targets Minecraft 1.21.1, Java 21, Cobblemon Fabric 1.7.3 (build 7553235), RCT API 0.15.2-beta (build 7952421) and the versions in `gradle.properties`. Dependencies are installed separately under their respective terms. The RCT AI selector registered by this mod is `maestro`.
 
 ```sh
+python3 verification/check_repository.py --self-test
+python3 verification/check_repository.py
 bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression
 python3 verification/check_jar.py --self-test
 python3 verification/check_jar.py build/libs/maestroai-1.0.0.jar
@@ -15,6 +17,8 @@ python3 verification/source_oracle.py
 ```
 
 The last command requires Node.js 20 or newer. It checks the exact downloaded dependency and bundled simulator hashes, executes 50 fixed synthetic damage/hazard/order/speed cases in that simulator, and checks initialized public configuration using Cobblemon's relocated Graal engine. It does not reproduce every scenario in the larger bundled corpus or establish Minecraft compatibility. Upstream sources are extracted only into a temporary local test directory and are not included in this repository or the mod JAR.
+
+The repository safeguard checks exercise local-file ignore rules, required build inputs, LICENSE-trigger coverage and the retained Gradle Apache notices. Ignore rules help prevent accidental staging; they do not replace review of newly added files.
 
 Verification classes are excluded from the mod JAR. CI checks Java21 classes, expected resources/notices and unwanted archive entries; it publishes no artifacts. Experimental Shadow analysis remains observational; these tests do not promote it to live decisions or demonstrate battle win rates.
 
