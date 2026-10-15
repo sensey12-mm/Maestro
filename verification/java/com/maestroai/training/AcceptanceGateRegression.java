@@ -36,7 +36,83 @@ public final class AcceptanceGateRegression {
         return PublicReplyCoverage.evaluate(snapshot,mechanics,Map.of(),null,protocol,
                 "p2a",Known.unknown(),CobblemonMechanics.Critical.BOTH);
     }
+    /** Positive production evaluator path, under explicitly justified synthetic scopes.
+     * No private opponent request, battle result, or runtime pack-override proof.
+     */
+    private static void positivePath() {
+        var publicStream=new PublicProtocolEvidence();
+        publicStream.update(List.of(
+                "update\n|gen|9\n|gametype|singles\n|start\n"
+                    +"|switch|p1a: Own|Mew, L100|100/100\n"
+                    +"|switch|p2a: Foe|Mew, L100|100/100\n|turn|1",
+                "update\n|-enditem|p2a: Foe|Sitrus Berry\n|-ability|p2a: Foe|Run Away",
+                "update\n|move|p2a: Foe|Tackle|p1a: Own",
+                "update\n|move|p2a: Foe|Quick Attack|p1a: Own"));
+        var observations=new PublicMechanicsEvidence(species -> null);
+        observations.update(publicStream);
+        var fieldObserver=new PublicFieldEvidence();
+        var field=fieldObserver.update(publicStream,observations);
+        yes(field.turn()==1 && field.unknown().isEmpty() && field.allActorsCovered(),
+                "complete public field observations required to compare");
+        var ownSeen=observations.observation("p1a");
+        var foeSeen=observations.observation("p2a");
+        yes(foeSeen!=null && foeSeen.item().known() && foeSeen.ability().known()
+                && foeSeen.item().value().equals("none")
+                && foeSeen.ability().value().equals("runaway"),
+                "public opponent item/ability must be explicitly observed");
+        var yesScope=Known.of(true,"explicit synthetic verified engine scope");
+        var execution=new ScopedExecution(field,Map.of(
+                "self",new ScopedExecution.Binding(ownSeen,
+                        Known.of("none","own current item"),Known.of("runaway","own current ability"),yesScope),
+                "opponent",new ScopedExecution.Binding(foeSeen,foeSeen.item(),foeSeen.ability())),
+                ExecutionCoverage.Scopes.all(yesScope));
+        Map<String,Known<CobblemonMechanics.IntRange>> stats=new TreeMap<>();
+        for(String k:List.of("atk","def","spa","spd","spe"))
+            stats.put(k,Known.of(CobblemonMechanics.IntRange.exact(220),"synthetic bounded stats"));
+        var own=new CobblemonMechanics.Profile("self",Known.of(100,"own level"),
+                Known.of(CobblemonMechanics.IntRange.exact(300),"own max HP"),stats,
+                Known.of(List.of("normal"),"own types"),yesScope);
+        var foe=new CobblemonMechanics.Profile("opponent",Known.of(100,"public level fixture"),
+                Known.of(CobblemonMechanics.IntRange.exact(300),"public bounded HP fixture"),stats,
+                Known.of(List.of("normal"),"public types fixture"),yesScope);
+        var none=new Hazards(Map.of(),true,"synthetic no hazard certificate");
+        var context=new Context(Known.of(new Interval(1,1),"own HP"),
+                Known.of(new Interval(1,1),"public HP"),
+                Known.of("none","own status"),Known.of("none","public status"),
+                none,none,Map.of(),Map.of(),Set.of());
+        var mechanics=new PublicMechanics(Map.of(),Map.of(),Set.of(),false,false,false,1,
+                new Evidence(context,Map.of(),Map.of()));
+        var neutral=new BattleSnapshot.Combatant("Mew",1.0,List.of("normal"),
+                Map.of("atk",0,"def",0,"spa",0,"spd",0,"spe",0),
+                List.of("tackle","quickattack"),null,null,false);
+        var scenario=new BattleSnapshot(1,neutral,neutral,List.of(),List.of(),
+                List.of("tackle","quickattack"),List.of(),Map.of(),false,null);
+        var audit=PublicReplyCoverage.evaluate(scenario,mechanics,
+                Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
+                field.trickRoom(),CobblemonMechanics.Critical.NON_CRITICAL);
+        yes(audit.compared() && audit.allCandidates() && audit.replyCount()==2
+                && audit.candidateCount()==2 && audit.result()!=null,
+                "valid public witness did not reach production evaluator");
+        yes(audit.result().candidateCoverageComplete()
+                && audit.result().rankings().size()==2
+                && audit.result().rankings().stream().allMatch(r->r.lines().size()>=2),
+                "every legal root action must evaluate both witnessed replies");
+        yes(audit.result().rankings().stream().allMatch(r->r.utility().known()),
+                "explicit ordinary-source conditions failed to produce bounded exchange");
+        yes(audit.safeLine().contains("responseProbabilities=NONE")
+                && !audit.safeLine().contains("quickattack")
+                && !audit.safeLine().contains("Foe"),
+                "successful audit leaked opponent reply or invented probability");
+        fieldObserver.reset();
+        var expired=PublicReplyCoverage.evaluate(scenario,mechanics,
+                Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
+                Known.of(false,"prior field record"),CobblemonMechanics.Critical.NON_CRITICAL);
+        yes(!expired.compared() && expired.reasons().contains("UNSUPPORTED_COMPARISON"),
+                "reset field cert continued to rank previous turn");
+    }
+
     public static void run() {
+        positivePath();
         String secret="SECRET_OPPONENT_HELD_ITEM_01234";
         var observed=protocol("|move|p2a: Foe|Tackle|p1a: Own",
                 "|move|p2a: Foe|Quick Attack|p1a: Own");
