@@ -101,10 +101,17 @@ class SourceGuards(unittest.TestCase):
 
 def main():
     if sys.argv[1:] == ['--self-test']:
-        return 0 if unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(SourceGuards)).wasSuccessful() else 1
+        from runtime_hook_oracle import HookOracleRegression
+        suite = unittest.TestSuite((
+            unittest.defaultTestLoader.loadTestsFromTestCase(SourceGuards),
+            unittest.defaultTestLoader.loadTestsFromTestCase(HookOracleRegression),
+        ))
+        return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
     if sys.argv[1:]: raise ValueError('Unknown oracle argument')
     home = Path(os.environ.get('GRADLE_USER_HOME', str(Path.home() / '.gradle')))
     dependency = checked_bytes(cache_dependency(home).read_bytes(), DEPENDENCY_SHA256)
+    from runtime_hook_oracle import verify_pinned_hooks
+    verify_pinned_hooks(dependency)
     with zipfile.ZipFile(io.BytesIO(dependency)) as archive:
         simulator = checked_bytes(archive.read('data/cobblemon/showdown.zip'), SIMULATOR_SHA256)
     with tempfile.TemporaryDirectory(prefix='maestroai-source-') as folder:

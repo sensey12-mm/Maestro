@@ -64,6 +64,11 @@ public final class PublicReplyCoverage {
             if (!eventSlot.equals(slot)) continue;
             if (event.equals("switch") || event.equals("drag")) {
                 seen.clear(); current = true; ambiguous = false;
+            } else if (event.equals("faint")) {
+                // A witnessed faint ends this active appearance. Its formerly
+                // revealed moves cannot be presented as presently executable
+                // replies while a replacement is still pending.
+                seen.clear(); current = false; ambiguous = false;
             } else if (event.equals("replace") || event.equals("-transform") || event.equals("-formechange")
                     || event.equals("detailschange")) {
                 seen.clear(); ambiguous = true;

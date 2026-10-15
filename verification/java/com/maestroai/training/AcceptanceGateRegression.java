@@ -145,6 +145,18 @@ public final class AcceptanceGateRegression {
                 "private sideupdate added a hypothetical response");
         yes(!audit(current,ordinary,privatePacket).safeLine().contains(secret),
                 "private payload leaked through diagnostic");
+        var fainted=protocol("|move|p2a: Foe|Tackle|p1a: Own",
+                "|faint|p2a: Foe");
+        yes(PublicReplyCoverage.currentReplies(fainted,"p2a").isEmpty(),
+                "fainted public active retained a presently executable move");
+        yes(!audit(current,ordinary,fainted).compared(),
+                "fainted opponent generated executable conditional reply");
+        var replaced=protocol("|move|p2a: Foe|Tackle|p1a: Own",
+                "|faint|p2a: Foe",
+                "|switch|p2a: New Foe|Mew, L100|100/100",
+                "|move|p2a: New Foe|Quick Attack|p1a: Own");
+        yes(PublicReplyCoverage.currentReplies(replaced,"p2a").equals(List.of("quickattack")),
+                "new opponent appearance inherited an old fainted move");
         var illusion=protocol("|replace|p2a: Foe|Zoroark, L100",
                 "|move|p2a: Foe|Tackle|p1a: Own");
         yes(PublicReplyCoverage.currentReplies(illusion,"p2a").isEmpty()
@@ -187,6 +199,42 @@ public final class AcceptanceGateRegression {
         rejects(()->new ShadowPrerequisiteDiagnostics.Summary(false,false,false,false,false,
                 1,1,true,Set.of(secret)),"untrusted diagnostic reason allowed");
 
+        // Actual owning transport: never parse or accept a foreign actor.
+        var ownLedger=new OwnRequestTransport();
+        Object battle=new Object(), actor=new Object(), foreign=new Object(), token=new Object();
+        ownLedger.owner(battle,actor,"p1");
+        var validId=UUID.fromString("00000000-0000-0000-0000-000000000001");
+        var owned=new OwnRequestEvidence.Sample(validId,"p1: Own","300/300",true,"Run Away",
+                List.of("normal"));
+        var ownedPokemon=new OwnRequestTransport.Pokemon(owned,100,
+                Map.of("atk",220,"def",220,"spa",220,"spd",220,"spe",220),
+                "none",List.of("normal"),"",false);
+        var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,
+                List.of(ownedPokemon));
+        var parserCalls=new int[]{0};
+        ownLedger.dispatched(battle,foreign,"p2",token,()->{
+            parserCalls[0]++; return request;
+        });
+        yes(parserCalls[0]==0,"foreign actor was allowed to read owning request");
+        ownLedger.dispatched(battle,actor,"p1",token,()->{
+            parserCalls[0]++; return request;
+        });
+        yes(parserCalls[0]==1,"own authorized dispatch was not parsed exactly once");
+        ownLedger.turnDispatched(battle,1);
+        yes(ownLedger.observedTurnAllowed(0),"source-covered queued turn transition refused");
+        var ownLease=ownLedger.beginChoice(battle,actor,token,validId,false,
+                ()->true);
+        yes(ownLease.current() && ownLease.turn()==1,"own request did not bind current choice");
+        var noPrivate=ownLedger.evidence(ownLease,"self",validId,false,false);
+        yes(noPrivate.fresh().known() && noPrivate.unknown().contains("PACK_EFFECT_SCOPE_UNKNOWN"),
+                "own-only receipt guessed effective modifiers");
+        ownLedger.endChoice();
+        yes(!ownLease.current(),"consumed own request lease resurrected");
+        ownLedger.dispatched(battle,actor,"p1",token,()->request);
+        var duplicate=ownLedger.beginChoice(battle,actor,token,validId,false,()->true);
+        yes(!duplicate.current(),"duplicate own dispatch reused after choice");
+        ownLedger.owner(new Object(),actor,"p1");
+        yes(!ownLease.current(),"foreign battle overwrote old own lease");
         String digest="a".repeat(64);
         var observedHash=new String[]{digest};
         var active=new boolean[]{true};
