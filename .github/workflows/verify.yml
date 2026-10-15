@@ -2,32 +2,8 @@ name: Verify MaestroAI
 on:
   push:
     branches: [main]
-    paths:
-      - 'LICENSE'
-      - '.gitignore'
-      - 'src/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - 'gradle.properties'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'verification/**'
-      - '.github/workflows/verify.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'LICENSE'
-      - '.gitignore'
-      - 'src/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - 'gradle.properties'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'verification/**'
-      - '.github/workflows/verify.yml'
 permissions:
   contents: read
 concurrency:

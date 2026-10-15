@@ -43,11 +43,12 @@ def check_workflow(source):
     for event in ('push', 'pull_request'):
         match = re.search(r'(?m)^  ' + event + r':\n((?:^    .*\n|^      .*\n)+)', source)
         block = match.group(1) if match else ''
-        if '    branches: [main]\n' not in block or '    paths-ignore:' in block:
+        if '    branches: [main]\n' not in block:
             raise ValueError('Missing main branch verification')
-        paths = re.findall(r"(?m)^      - '([^']+)'$", block)
-        if not {'LICENSE', '.gitignore', 'verification/**', '.github/workflows/verify.yml'} <= set(paths) or any(p.startswith('!') for p in paths):
-            raise ValueError('Notice or safeguard changes bypass CI')
+        # Required verify must be scheduled for every main PR/push, including
+        # README-only changes. Workflow-level path skips leave required checks pending.
+        if re.search(r'(?m)^ +(paths|paths-ignore):', block):
+            raise ValueError('Path filters can strand required verification')
     if 'python3 verification/check_repository.py\n' not in source or 'python3 verification/check_repository.py --self-test\n' not in source:
         raise ValueError('Safeguards not executed')
 
@@ -70,17 +71,24 @@ class SafeguardRegression(unittest.TestCase):
         with self.assertRaises(ValueError): check_ignore((ROOT / '.gitignore').read_text() + '\n*.jar\n')
     def test_overbroad_source_rule_rejected(self):
         with self.assertRaises(ValueError): check_ignore((ROOT / '.gitignore').read_text() + '\nsrc/\n')
-    def test_both_notice_triggers_required(self):
+    def test_both_events_cover_docs_notices_and_other_paths(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
         check_workflow(source)
-        for occurrence in (0, 1):
-            parts = source.split("      - 'LICENSE'\n")
-            # Remove only this event's LICENSE entry; the other still covers it.
-            broken = "      - 'LICENSE'\n".join(parts[:occurrence + 1]) + "      - 'LICENSE'\n".join(parts[occurrence + 1:])
-            with self.subTest(event=occurrence), self.assertRaises(ValueError): check_workflow(broken)
-    def test_exclusion_cannot_bypass_notice(self):
-        source = (ROOT / '.github/workflows/verify.yml').read_text().replace("      - 'LICENSE'", "      - 'LICENSE'\n      - '!LICENSE'")
-        with self.assertRaises(ValueError): check_workflow(source)
+        for event in ('push', 'pull_request'):
+            for filter_name in ('paths', 'paths-ignore'):
+                for path in ('src/**', 'README.md', 'LICENSE', '**/*.md', '!LICENSE'):
+                    broken = source.replace('  ' + event + ':\n', '  ' + event + ':\n'
+                                            + "    " + filter_name + ":\n      - '" + path + "'\n", 1)
+                    with self.subTest(event=event, filter=filter_name, path=path), self.assertRaises(ValueError):
+                        check_workflow(broken)
+    def test_missing_or_wrong_branch_trigger_rejected(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        for event in ('push', 'pull_request'):
+            for replacement in ('  unsupported_event:', '  ' + event + ':\n    paths: []'):
+                with self.subTest(event=event), self.assertRaises(ValueError):
+                    check_workflow(source.replace('  ' + event + ':', replacement, 1))
+        with self.assertRaises(ValueError):
+            check_workflow(source.replace('branches: [main]', 'branches: [other]'))
     def test_wrapper_notice_retained(self): check_wrapper(ROOT)
     def test_missing_wrapper_notice_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

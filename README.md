@@ -34,6 +34,6 @@ This project is not affiliated with or endorsed by Mojang, Microsoft, Nintendo, 
 
 ## Reports and contributions
 
-For ordinary bugs, open an issue with versions, reproduction steps and minimal synthetic examples. Do not submit credentials, personal/player identities, private battle packets or raw server logs. For a sensitive security issue, use GitHub's private vulnerability reporting feature **only if it is enabled**; otherwise keep sensitive details out of public issues and request a private reporting route without disclosing the vulnerability.
+GitHub Issues and Discussions are disabled; this repository currently provides no general bug-report intake. Keep any reproduction notes minimal and synthetic. Do not post credentials, personal/player identities, private battle packets or raw server logs in pull requests or other public channels. For a sensitive security issue, use GitHub's private vulnerability reporting feature **only if it is enabled**. If no private reporting route is available, do not disclose sensitive details publicly.
 
 An issue or pull request is a proposal, not write/merge permission. Maintainer assignment and review are required; review actual changed content, appropriate tests and third-party notices. Do not assume branch rules automatically enforce every check. Contributions must include sufficient rights to the proposed content; acceptance and licensing terms must be agreed before integration. No external contribution changes this project's source-use notice automatically.
