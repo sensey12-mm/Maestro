@@ -2,6 +2,7 @@ package com.maestroai.training;
 
 import java.util.*;
 import static com.maestroai.training.PublicTransitionState.*;
+import static com.maestroai.training.PublicStateSearchAdapter.*;
 
 /** Independent MaestroAI Phase 3.35 Shadow/owning evidence checks, NOT Minecraft. */
 public final class AcceptanceGateRegression {
