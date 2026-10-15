@@ -71,6 +71,7 @@ public final class StandaloneRegression {
         check(!limited.complete() && limited.nodes() == 1 && limited.preferred().equals("move:attack"));
         reject(() -> new ShadowSearchEngine.Branch("move", "attack", List.of(
                 new ShadowSearchEngine.Outcome("synthetic", .5, 1, 0, "leaf"))));
+        AcceptanceGateRegression.run();
         System.out.println("Standalone synthetic regressions PASS: " + checks + " checks");
     }
 }

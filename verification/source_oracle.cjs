@@ -64,4 +64,22 @@ for (const row of rows) {
     assert.equal(compared<0?'SELF_FIRST':compared>0?'OPPONENT_FIRST':'BOTH',expected,id);
   }
 }
-console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases (20 damage, 12 entry, 10 order, 8 speed)');
+// Source-executed dual-public-reply priority checks; neither reply receives a probability.
+const replyPairs = [
+ ['quickattack','tackle',80,120,'SELF_FIRST'],
+ ['tackle','quickattack',80,120,'OPPONENT_FIRST'],
+ ['quickattack','quickattack',80,120,'OPPONENT_FIRST'],
+ ['tackle','tackle',80,120,'OPPONENT_FIRST'],
+ ['quickattack','quickattack',150,100,'SELF_FIRST'],
+ ['tackle','tackle',150,100,'SELF_FIRST'],
+];
+for(const [action,reply,aSpeed,bSpeed,expected] of replyPairs) {
+  const {engine,own,other}=actors(['Normal'],['Normal']);
+  own.storedStats.spe=aSpeed; other.storedStats.spe=bSpeed;
+  const a=engine.queue.resolveAction({choice:'move',pokemon:own,moveid:action,targetLoc:1})[0];
+  const b=engine.queue.resolveAction({choice:'move',pokemon:other,moveid:reply,targetLoc:1})[0];
+  const order=engine.comparePriority(a,b);
+  assert.equal(order<0?'SELF_FIRST':order>0?'OPPONENT_FIRST':'BOTH',expected,
+    action+'/'+reply);
+}
+console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases and 6 two-public-reply priority checks');

@@ -178,6 +178,10 @@ public final class PublicProtocolEvidence {
     public boolean complete() { return complete; }
     public boolean framed() { return complete && framed; }
     public boolean corrupted() { return corrupt; }
+    /** Public turn is unknown until a fully framed, source-modeled spectator envelope exists. */
+    public int publicTurn() {
+        return framed() && !corrupt && coverageUnknown.isEmpty() && lastTurn > 0 ? lastTurn : -1;
+    }
 
     private boolean apply(String line) {
         String[] fields = line.split("\\|", -1);
