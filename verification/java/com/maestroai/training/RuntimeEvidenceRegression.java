@@ -65,6 +65,10 @@ final class RuntimeEvidenceRegression {
             Files.delete(artifact);
             var files=Map.of("index.js",hash(code));var classes=Map.of("public/Source.class",hash(clazz));
             check(RuntimeSourceAudit.inspect(root,files,classes,n->clazz).verified());
+            var pristine=RuntimeSourceAudit.fingerprints(root,files,classes,n->clazz);
+            check(pristine.size()==1 && pristine.getFirst().contains("checked=2 matched=2"));
+            check(pristine.equals(RuntimeSourceAudit.fingerprints(root,files,classes,n->clazz)));
+
             check(RuntimeSourceAudit.inspect(root,files,classes,n->null).reason()==RuntimeSourceAudit.Reason.CLASS_MISSING);
             check(RuntimeSourceAudit.inspect(root,files,classes,n->code).reason()==RuntimeSourceAudit.Reason.CLASS_HASH_MISMATCH);
             Files.writeString(root.resolve("index.js"),"changed hook");
@@ -74,17 +78,29 @@ final class RuntimeEvidenceRegression {
             var unknown=RuntimeSourceAudit.inspect(root,files,classes,n->clazz);
             check(unknown.reason()==RuntimeSourceAudit.Reason.UNEXPECTED_SOURCE_FILE && unknown.reference().isEmpty());
             check(!unknown.safeReason().contains("PRIVATE") && !unknown.safeReason().contains(root.toString()));
+            var privateAdded=RuntimeSourceAudit.fingerprints(root,files,classes,n->clazz);
+            check(privateAdded.equals(pristine));
+            check(privateAdded.stream().noneMatch(x->x.contains("PRIVATE")||x.contains("NEVER_LOG_ME")));
+            var differences=RuntimeSourceAudit.fingerprints(root,files,classes,n->code);
+            check(differences.stream().anyMatch(x->x.contains("kind=CLASS reference=public/Source.class observed=")&&x.contains("matches=false")));
+            check(differences.stream().noneMatch(x->x.contains(root.toString())||x.contains("NEVER_LOG_ME")));
+
             Files.delete(root.resolve("PRIVATE_PLAYER_CONFIG.json"));Files.delete(root.resolve("index.js"));
             check(RuntimeSourceAudit.inspect(root,files,classes,n->clazz).reason()==RuntimeSourceAudit.Reason.FILE_MISSING);
             Files.createSymbolicLink(root.resolve("index.js"),root.resolve("private-outside-target"));
             var link=RuntimeSourceAudit.inspect(root,files,classes,n->clazz);
             check(link.reason()==RuntimeSourceAudit.Reason.SOURCE_LINK_UNSUPPORTED && link.reference().isEmpty());
+            check(RuntimeSourceAudit.fingerprints(root,files,classes,n->clazz).stream().anyMatch(x->x.contains("observed=LINK")));
+
             Files.delete(root.resolve("index.js"));
             Files.createSymbolicLink(root.resolve("unlisted-directory"),root);
             check(RuntimeSourceAudit.inspect(root,files,classes,n->clazz).reason()==RuntimeSourceAudit.Reason.SOURCE_LINK_UNSUPPORTED);
             Files.delete(root.resolve("unlisted-directory"));
             check(RuntimeSourceAudit.inspect(root,Map.of("../escape.js",hash(code)),classes,n->clazz).reason()==RuntimeSourceAudit.Reason.MANIFEST_INVALID);
             check(RuntimeSourceAudit.inspect(root,files,classes,n->{throw new IllegalStateException("PRIVATE_PAYLOAD");}).safeReason().equals("SOURCE_AUDIT_AUDIT_UNAVAILABLE"));
+            check(RuntimeSourceAudit.fingerprints(root,files,classes,n->{throw new IllegalStateException("PRIVATE_PAYLOAD");}).stream().noneMatch(x->x.contains("PRIVATE_PAYLOAD")));
+            check(RuntimeSourceAudit.fingerprints(root,Map.of("../escape.js",hash(code)),classes,n->{throw new AssertionError("invalid read");}).getFirst().contains("MANIFEST_INVALID"));
+
         } finally {
             try(var walk=Files.walk(root)){for(Path p:walk.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}
         }

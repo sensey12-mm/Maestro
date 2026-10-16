@@ -73,6 +73,20 @@ public final class SimulatorDomainBridge {
         s.source &= finished.verified(); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
         s.boot = s.source && s.context != null && s.dispatcher != null;
         s.nativeFactories = null; s.nativePending = null;
+        logSourceFingerprints(service);
+    }
+    private static void logSourceFingerprints(Object service) {
+        if(!Boolean.getBoolean("maestroai.envelopeCapture")) return;
+        try {
+            RuntimeSourceAudit.fingerprints(Path.of("showdown"),pins("runtime-domain-files.tsv"),
+                    pins("runtime-domain-classes.tsv"),name->{
+                try(var stream=service.getClass().getResourceAsStream("/"+name)) {
+                    return stream==null?null:stream.readNBytes(8*1024*1024+1);
+                } catch(IOException unavailable){return null;}
+            }).forEach(System.out::println);
+        } catch(IOException | RuntimeException unavailable) {
+            System.out.println("[MaestroAI] PUBLIC_SOURCE_HASH status=UNAVAILABLE diagnosticOnly=true");
+        }
     }
     public static synchronized void invalidate(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null;

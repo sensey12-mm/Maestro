@@ -35,6 +35,46 @@ public final class RuntimeSourceAudit {
         String n = p.getFileName().toString();
         return n.endsWith(".js") || n.endsWith(".json") && !n.equals("showdown.json");
     }
+    /** Diagnostic only. Never reads an unlisted path or grants execution scope. */
+    public static List<String> fingerprints(Path directory, Map<String,String> files,
+                                           Map<String,String> classes, Function<String,byte[]> classBytes) {
+        String prefix="[MaestroAI] PUBLIC_SOURCE_HASH ";
+        if(!valid(files)||!valid(classes)||files.size()>1024||classes.size()>64)
+            return List.of(prefix+"status=MANIFEST_INVALID diagnosticOnly=true");
+        var lines=new ArrayList<String>();var transcript=new StringBuilder();int matched=0,checked=0;
+        long remaining=128L*1024*1024; final int perFile=8*1024*1024;
+        Path root=directory.toAbsolutePath().normalize();
+        boolean rootLink=false;for(Path p=root;p!=null;p=p.getParent())rootLink|=Files.isSymbolicLink(p);
+        for(String kind:List.of("CLASS","FILE")) {
+            var manifest=kind.equals("CLASS")?classes:files;
+            for(String name:new TreeSet<>(manifest.keySet())) {
+                String observed="UNAVAILABLE";byte[] bytes=null;
+                try {
+                    if(remaining<=0) observed="LIMIT";
+                    else if(kind.equals("CLASS")) bytes=classBytes.apply(name);
+                    else {
+                        Path current=root;boolean link=rootLink;
+                        for(Path part:Path.of(name)) {current=current.resolve(part);link|=Files.isSymbolicLink(current);}
+                        if(link) observed="LINK";
+                        else if(!Files.isRegularFile(current,LinkOption.NOFOLLOW_LINKS)) observed="MISSING";
+                        else try(var input=Files.newInputStream(current)) {
+                            bytes=input.readNBytes((int)Math.min(remaining,perFile)+1);
+                        }
+                    }
+                    if(bytes!=null) {
+                        if(bytes.length>perFile||bytes.length>remaining) observed="LIMIT";
+                        else {remaining-=bytes.length;observed=hash(bytes);}
+                    }
+                } catch(IOException | RuntimeException unavailable) { observed="UNAVAILABLE"; }
+                checked++;boolean same=manifest.get(name).equals(observed);if(same)matched++;
+                transcript.append(kind).append('\t').append(name).append('\t').append(observed).append('\n');
+                if(!same)lines.add(prefix+"kind="+kind+" reference="+name+" observed="+observed+" matches=false diagnosticOnly=true");
+            }
+        }
+        lines.add(prefix+"checked="+checked+" matched="+matched+" digest="+hash(transcript.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                +" unlistedFiles=NOT_READ payloads=EXCLUDED diagnosticOnly=true");
+        return List.copyOf(lines);
+    }
     public static Report inspect(Path directory, Map<String,String> files,
                                  Map<String,String> classes, Function<String,byte[]> classBytes) {
         if (!valid(files) || !valid(classes)) return new Report(Reason.MANIFEST_INVALID, "");
