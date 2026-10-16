@@ -70,6 +70,8 @@ def declared_methods(data: bytes) -> set[str]:
 
 
 SELECTORS = {
+    "com/cobblemon/mod/common/battles/interpreter/instructions/ErrorInstruction.class":
+        {"invoke$lambda$0"},
     "com/cobblemon/mod/common/battles/interpreter/instructions/RequestInstruction.class":
         {"invoke$lambda$0"},
     "com/cobblemon/mod/common/battles/interpreter/instructions/TurnInstruction.class":

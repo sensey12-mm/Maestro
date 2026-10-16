@@ -82,4 +82,29 @@ for(const [action,reply,aSpeed,bSpeed,expected] of replyPairs) {
   assert.equal(order<0?'SELF_FIRST':order>0?'OPPONENT_FIRST':'BOTH',expected,
     action+'/'+reply);
 }
-console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases and 6 two-public-reply priority checks');
+// Independent engine oracle: legal exceptions and a rejected uncertain switch
+// must differ. These are standard synthetic species, not runtime pack evidence.
+function trapCase(species, item) {
+  const engine = new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+  function set(species,ability,moves,item='') {
+    return {species,ability,moves,item,level:100,movesInfo:moves.map(()=>({pp:40,maxPp:40}))};
+  }
+  engine.setPlayer('p1',{team:[set('Wobbuffet','shadowtag',['splash'])]});
+  engine.setPlayer('p2',{team:[set(species,'pressure',['tackle'],item),set('Mew','synchronize',['tackle'])]});
+  engine.makeChoices('team 1','team 12');
+  return engine;
+}
+const trapped = trapCase('Mewtwo','');
+assert.equal(trapped.p2.activeRequest.active[0].trapped ?? false,false);
+assert.equal(trapped.p2.activeRequest.active[0].maybeTrapped,true);
+assert.equal(trapped.choose('p2','switch 2'),false);
+assert.match(trapped.p2.choice.error,/active Pokémon is trapped/);
+assert.equal(trapped.p2.activeRequest.active[0].trapped,true);
+assert.equal(trapped.choose('p2','move 1'),true);
+assert.equal(trapped.choose('p1','move 1'),true);
+assert.equal(trapped.turn,2,'legal rechoice must advance the simulator');
+for (const [species,item] of [['Mewtwo','shedshell'],['Gengar','']]) {
+  const legal = trapCase(species,item);
+  assert.equal(legal.choose('p2','switch 2'),true,`${species}/${item}: legal switch exception`);
+}
+console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases, 6 paired priority cases and 3 trapping/rechoice scenarios');

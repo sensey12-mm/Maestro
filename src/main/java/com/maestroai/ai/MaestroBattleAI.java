@@ -208,6 +208,7 @@ public class MaestroBattleAI extends RCTBattleAI {
      */
     private final Map<UUID, ElementalType> activeTeraTypes = new HashMap<>();
     private UUID currentBattleId = null;
+    private final OwnChoiceRecovery choiceRecovery = new OwnChoiceRecovery();
     private UUID lastSwitchDestination = null;
     private int lastSwitchTurn = -100;
     private final com.maestroai.training.OwnRequestTransport ownTransport = new com.maestroai.training.OwnRequestTransport();
@@ -244,6 +245,34 @@ public class MaestroBattleAI extends RCTBattleAI {
 
     public void ownTransportUnavailable() { ownTransport.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE"); }
 
+    public void ownChoiceRejected(PokemonBattle battle,
+            com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor,
+            java.util.function.Supplier<String> raw) {
+        if (!ownTransportVersionSupported() || actor.getBattleAI() != this || actor.getBattle() != battle
+                || battle.getActor(actor.getShowdownId()) != actor || battle.getEnded()
+                || actor.getActivePokemon().size() != 1) return;
+        var active = actor.getActivePokemon().getFirst().getBattlePokemon();
+        if (active != null) choiceRecovery.rejected(battle, actor, actor.getRequest(), battle.getTurn(), active.getUuid(), raw);
+    }
+
+    public void ownRequestCorrected(PokemonBattle battle,
+            com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor,
+            com.cobblemon.mod.common.battles.ShowdownActionRequest request) {
+        if (!ownTransportVersionSupported() || actor.getBattleAI() != this || actor.getBattle() != battle
+                || battle.getActor(actor.getShowdownId()) != actor || battle.getEnded()
+                || actor.getRequest() != request || actor.getActivePokemon().size() != 1
+                || !actor.getResponses().isEmpty()) return;
+        var active = actor.getActivePokemon().getFirst().getBattlePokemon();
+        var moves = request.getActive();
+        boolean ordinary = !request.getWait() && !request.getForceSwitch().contains(true)
+                && moves != null && moves.size() == 1 && moves.getFirst() != null;
+        if (active != null && choiceRecovery.corrected(battle, actor, request, battle.getTurn(), active.getUuid(),
+                actor.getMustChoose(), ordinary && moves.getFirst().getTrapped(), ordinary)) {
+            System.out.println("[MaestroAI] Retrying corrected own trapped-switch request");
+            actor.onChoiceRequested();
+        }
+    }
+
     public void ownTurnFinished(PokemonBattle battle,
             com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor, int turn) {
         if (actor.getBattleAI() == this && actor.getBattle() == battle) ownTransport.turnFinished(battle, turn);
@@ -277,9 +306,15 @@ public class MaestroBattleAI extends RCTBattleAI {
             } catch (RuntimeException unavailable) {
                 ownTransportUnavailable(); ownChoiceLease = null;
             }
-            return LivePromotionGate.choose(
+            ShowdownActionResponse response = LivePromotionGate.choose(
                 () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
                 null, null, false);
+            if (activePokemon != null && activePokemon.getActor() != null && activePokemon.getBattlePokemon() != null) {
+                var actor = activePokemon.getActor();
+                choiceRecovery.submitted(battle, actor, actor.getRequest(), battle.getTurn(),
+                        activePokemon.getBattlePokemon().getUuid(), !forceSwitch && response instanceof SwitchActionResponse);
+            }
+            return response;
         } finally {
             ownTransport.endChoice(); ownChoiceLease = null;
         }
