@@ -1,7 +1,7 @@
 // Read only PUBLIC simulator configuration. Never enumerate a battle, side, team,
 // Pokemon, request, log, event handlers or a private payload. Caller supplies an
 // already initialized battle; this function never starts one or changes a rule.
-(function (battle, modules, registryOnly) {
+(function (battle, modules, registryOnly, nativeFactories) {
   if (!battle || !battle.dex || !battle.dex.dataCache) throw Error('domain not initialized');
   const canonical = value => {
     // Graal includes a trailing newline for one bundled arrow expression;
@@ -54,7 +54,7 @@
   }
   const catalog = {};
   for (const id of ['zoroark','gholdengo','ditto','mew','pikachu','blissey','shedinja','shuckle',
-                    'genesect','calyrexshadow','arceus','xerneas','marshadow']) {
+                    'genesect','calyrexshadow','arceus','xerneas','marshadow','mewtwo']) {
     // Public registry lookup only; avoid get(), which populates caches.
     const species = registries.species.contents.get(id) || data.Pokedex[id];
     catalog[id] = species ? {stats: species.baseStats, types: species.types, fixedHp: species.maxHP || null} : null;
@@ -106,9 +106,12 @@
       const definition = sourceTable && !sourceTable.get && !sourceTable.set && sourceTable.value &&
         Object.getOwnPropertyDescriptor(sourceTable.value, sourceId);
       if (definition && !definition.get && !definition.set) canonical(definition.value);
-      if (typeof id !== 'string' || !/^[a-z0-9]+$/.test(id) ||
-          !normalizedId || normalizedId.get || normalizedId.set || normalizedId.value !== id ||
-          !table || typeof ctor !== 'function' || !definition || definition.get || definition.set ||
+      const native = nativeFactories && Object.getOwnPropertyDescriptor(nativeFactories, group);
+      const nativeMap = native && !native.get && !native.set ? native.value : null;
+      const nativeMatch = ['bagItem','heldItem'].includes(group) && nativeMap instanceof Map && Object.getPrototypeOf(nativeMap) === Map.prototype &&
+        !Reflect.ownKeys(nativeMap).length && nativeMap.has(id) && exact(value, nativeMap.get(id), {n: 20000});
+      const canonicalMatch = normalizedId && !normalizedId.get && !normalizedId.set && normalizedId.value === id &&
+          table && typeof ctor === 'function' && definition && !definition.get && !definition.set &&
           // Registry.register() installs a normalized Effect object. Verify
           // against an independently constructed standard effect from the
           // pinned engine class, not against unnormalized dex JSON.
@@ -117,9 +120,10 @@
           // either exact source representation or its actual pinned execution
           // deepClone, which preserves callbacks by identity; never relax a
           // descriptor comparison or synthesize/re-evaluate a function.
-          !(exact(value, new ctor({name: sourceId, ...definition.value}), {n: 20000}) ||
+          (exact(value, new ctor({name: sourceId, ...definition.value}), {n: 20000}) ||
             dex.deepClone === modules.Utils.deepClone &&
-            exact(value, new ctor({name: sourceId, ...modules.Utils.deepClone(definition.value)}), {n: 20000}))) registryEquivalent = false;
+            exact(value, new ctor({name: sourceId, ...modules.Utils.deepClone(definition.value)}), {n: 20000}));
+      if (typeof id !== 'string' || !/^[a-z0-9]+$/.test(id) || !(nativeMatch || canonicalMatch)) registryEquivalent = false;
       listed.push([id, canonical(value)]);
     }
     registryAudit[group] = listed.sort(([a], [b]) => String(a).localeCompare(String(b)));

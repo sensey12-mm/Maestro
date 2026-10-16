@@ -157,3 +157,61 @@ arriving.side.addSideCondition('stealthrock',f);
 pipeline.makeChoices('switch 2','move 3');
 assert.equal(341-arriving.hp,98,'actual switch execution: two Spikes layers plus Stealth Rock');
 console.log('Pinned tactical provider holdouts PASS: 128 damage samples, two immune replies, capped setup and actual hazard switch');
+
+// A naturally obtainable acceptance fixture, separate from the artificial
+// Gengar/Run Away holdout. Source facts and numerical oracles do not depend on Java.
+const crypto=require('node:crypto');
+const {Dex}=require(path.join(root,'sim/dex'));
+const publicCatalog={};
+for(const row of fs.readFileSync(path.join(__dirname,'../src/main/resources/com/maestroai/training/public-species-catalog.tsv'),'utf8').trim().split('\n')) {
+  const [id,...columns]=row.split('\t'),species=Dex.species.get(id);
+  assert.deepEqual(columns,[...['hp','atk','def','spa','spd','spe'].map(k=>species.baseStats[k]),species.types.map(t=>t.toLowerCase()).join(','),species.maxHP||'-'].map(String),'public catalog '+id);
+  publicCatalog[id]={stats:species.baseStats,types:species.types,fixedHp:species.maxHP||null};
+}
+const sorted=x=>x===null||typeof x!=='object'?x:Array.isArray(x)?x.map(sorted):Object.fromEntries(Object.keys(x).sort().map(k=>[k,sorted(x[k])]));
+const catalogHash=crypto.createHash('sha256').update(JSON.stringify(sorted(publicCatalog))).digest('hex');
+const componentPins=fs.readFileSync(path.join(__dirname,'../src/main/resources/com/maestroai/training/runtime-domain-components.tsv'),'utf8');
+assert(componentPins.includes('catalog\t'+catalogHash+'\n'),'public catalog receipt does not cover the verified values');
+const natural=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+function naturalSet(species,level,ability,moves,item='',evs={}) {
+  return {species,level,ability,moves,item,evs,ivs:{hp:31,atk:0,def:31,spa:31,spd:31,spe:31},nature:'Bold',movesInfo:moves.map(()=>({pp:40,maxPp:40}))};
+}
+natural.setPlayer('p1',{team:[naturalSet('Weavile',50,'pressure',['shadowclaw','swordsdance']),naturalSet('Mewtwo',50,'pressure',['bulkup','nastyplot'])]});
+natural.setPlayer('p2',{team:[naturalSet('Skarmory',100,'sturdy',['spikes','stealthrock'],'',{hp:252,def:252,spd:4}),naturalSet('Mewtwo',100,'pressure',['psychocut','bulkup','aurasphere'],'sitrusberry',{hp:252,def:252,spd:4})]});
+natural.makeChoices('team 12','team 12');
+assert.equal(natural.p1.active[0].storedStats.atk,112);
+natural.makeChoices('move swordsdance','move spikes');
+natural.makeChoices('move swordsdance','move stealthrock');
+natural.makeChoices('move swordsdance','switch 2');
+const na=natural.p1.active[0],nf=natural.p2.active[0];
+assert.equal(na.boosts.atk,6);assert.equal(nf.maxhp,416);assert.equal(nf.storedStats.def,306);
+natural.makeChoices('move shadowclaw','move psychocut');
+natural.makeChoices('move shadowclaw','move bulkup');
+// These low-attack/high-defense builds survive a critical hit and reach an
+// actual publicly announced berry removal, without inventing absent items.
+for(let n=0;n<8 && nf.item && !nf.fainted;n++) natural.makeChoices('move shadowclaw','move psychocut');
+assert(!nf.fainted && nf.item==='','natural fixture must consume Sitrus before fainting');
+assert(natural.log.some(l=>l.includes('|-enditem|p2a:')&&l.includes('|Sitrus Berry')));
+assert.equal(na.hp,na.maxhp,'Psycho Cut must respect Dark immunity');
+const values=[];natural.randomChance=()=>false;
+for(const defense of [166,306])for(const critical of [false,true])for(let roll=0;roll<16;roll++) {
+  nf.storedStats.def=defense;nf.boosts.def=1;natural.random=()=>roll;
+  const m=natural.dex.getActiveMove('shadowclaw');m.willCrit=critical;
+  values.push(natural.actions.getDamage(na,nf,m,true)||0);
+}
+assert.deepEqual([Math.min(...values),Math.max(...values)],[54,254],'natural public spread with observed Bulk Up');
+const cut=natural.dex.moves.get('psychocut');
+assert.equal(cut.basePower,70);assert.equal(cut.priority,0);assert.equal(cut.type,'Psychic');
+assert.equal(cut.category,'Physical');assert.equal(cut.critRatio,2);assert.equal(cut.secondary,null);
+assert(!Object.keys(cut).some(k=>k.startsWith('on')),'Psycho Cut acquired an unsupported callback');
+// Source-check Psychic effectiveness for every defending type, including both
+// dual-type orders with immunity. This is independent of Java's type table.
+for(const type of ['Normal','Fire','Water','Electric','Grass','Ice','Fighting','Poison','Ground','Flying','Psychic','Bug','Rock','Ghost','Dragon','Dark','Steel','Fairy']) {
+  const immune=!natural.dex.getImmunity('Psychic',type), exponent=natural.dex.getEffectiveness('Psychic',type);
+  assert.equal(immune,type==='Dark');
+  assert.equal(exponent,['Fighting','Poison'].includes(type)?1:['Psychic','Steel'].includes(type)?-1:0);
+}
+nf.storedStats.def=306;
+const before=natural.p1.pokemon[1].hp;natural.makeChoices('switch 2','move bulkup');
+assert.equal(before-natural.p1.active[0].hp,44,'actual natural reserve entry through two hazards');
+console.log('Natural acceptance source oracle PASS: 14 catalog entries, legal abilities/moves, actual berry consumption, 64 damage bounds, Psychic immunity and real hazard entry');

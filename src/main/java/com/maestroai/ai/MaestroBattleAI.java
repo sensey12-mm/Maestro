@@ -6206,8 +6206,9 @@ public class MaestroBattleAI extends RCTBattleAI {
         var types = new ArrayList<String>();
         for (var type : species.getTypes()) types.add(type.getName().toLowerCase(java.util.Locale.ROOT));
         try {
-            return new PublicMechanicsEvidence.Species(stats, types,
-                    publicName.equals("shedinja") && stats.get("hp") == 1 ? 1 : null);
+            return com.maestroai.training.PublicSpeciesCatalog.verified(publicName,
+                    new PublicMechanicsEvidence.Species(stats, types,
+                    publicName.equals("shedinja") && stats.get("hp") == 1 ? 1 : null));
         } catch (IllegalArgumentException outsideDomain) { return null; }
     }
 

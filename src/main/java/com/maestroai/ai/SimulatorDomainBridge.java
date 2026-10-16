@@ -5,6 +5,8 @@ import com.google.gson.*;
 import com.maestroai.training.RuntimeDomain;
 import com.maestroai.training.RuntimeRegistryLease;
 import com.maestroai.training.RuntimeSourceAudit;
+import com.maestroai.training.NativeRegistryEvidence;
+import com.cobblemon.mod.relocations.graalvm.polyglot.Value;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -21,8 +23,11 @@ public final class SimulatorDomainBridge {
     private static final Map<Object, State> STATES = new WeakHashMap<>();
     private static final class State {
         long epoch; boolean boot, source; int mutations; Object context, dispatcher;
+        Value nativeFactories;
+        NativePending nativePending;
         RuntimeSourceAudit.Report audit = new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
     }
+    private record NativePending(NativeRegistryEvidence.Dispatch dispatch, long epoch, boolean payloadMatched) {}
     private static State state(Object service) { return STATES.computeIfAbsent(service, key -> new State()); }
     private static String resource(String name) throws IOException {
         try (var stream = SimulatorDomainBridge.class.getResourceAsStream(ROOT + name)) {
@@ -58,6 +63,7 @@ public final class SimulatorDomainBridge {
     }
     public static synchronized void bootStarting(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null; s.mutations = 0;
+        s.nativeFactories = null; s.nativePending = null;
         s.audit = verifySource(service); s.source = s.audit.verified();
     }
     public static synchronized void bootFinished(GraalShowdownService service) {
@@ -66,12 +72,61 @@ public final class SimulatorDomainBridge {
         if (s.source || !finished.verified()) s.audit = finished;
         s.source &= finished.verified(); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
         s.boot = s.source && s.context != null && s.dispatcher != null;
+        s.nativeFactories = null; s.nativePending = null;
     }
     public static synchronized void invalidate(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null;
+        s.nativeFactories = null; s.nativePending = null;
     }
     public static synchronized void mutationStarting(Object service) { var s = state(service); s.epoch++; s.mutations++; }
     public static synchronized void mutationFinished(Object service) { var s = state(service); s.epoch++; s.mutations = Math.max(0, s.mutations - 1); }
+    /** Public registry API only. Never receives simulator message/team/request data.
+     * A whole map must match pinned native factory bytes before any result is
+     * attested. A partial known subset cannot bless unknown initializer code.
+     */
+    public static synchronized void registryDataStarting(GraalShowdownService service, Map<String,String> data, String type) {
+        mutationStarting(service); var s=state(service); s.nativePending=null;
+        if (!s.boot || !s.source || s.context!=service.getContext()) return;
+        try {
+            if(s.nativeFactories==null) s.nativeFactories=service.getContext().eval("js","Object.create(null)");
+            if(Set.of("bagItem","heldItem").contains(type)) s.nativeFactories.removeMember(type);
+            if(s.mutations!=1) return;
+            var dispatch=NativeRegistryEvidence.dispatch(type,data,pins("runtime-native-factories.tsv"));
+            if(dispatch!=null) s.nativePending=new NativePending(dispatch,s.epoch,false);
+        } catch(IOException | RuntimeException unavailable) { s.nativeFactories=null; }
+    }
+    /** Observe the exact immutable transport arguments at Value.execute, not a
+     * mutable Java map that could change between inspection and dispatch.
+     */
+    public static synchronized void registryDataPayload(Object service, Object[] actual) {
+        var s=state(service); var pending=s.nativePending;
+        if(pending==null) return;
+        s.nativePending=pending.epoch()==s.epoch && pending.dispatch().matches(actual)
+                ? new NativePending(pending.dispatch(),pending.epoch(),true) : null;
+    }
+    public static synchronized void registryDataFinished(GraalShowdownService service) {
+        var s=state(service); var pending=s.nativePending; s.nativePending=null;
+        try {
+            if(pending!=null && pending.payloadMatched() && s.boot && s.source && s.mutations==1 && pending.epoch()==s.epoch
+                    && s.context==service.getContext() && s.nativeFactories!=null) {
+                Value snapshot=service.getContext().eval("js",resource("runtime-native-snapshot.js"));
+                Value registry=service.getContext().eval("js","Cobblemon.registries."+pending.dispatch().type());
+                Value ids=service.getContext().eval("js",new Gson().toJson(new TreeSet<>(pending.dispatch().ids())));
+                s.nativeFactories.putMember(pending.dispatch().type(),snapshot.execute(registry,ids));
+                if(Boolean.getBoolean("maestroai.envelopeCapture"))
+                    System.out.println("[MaestroAI] Native public factory receipt group="+pending.dispatch().type()
+                            +" entries="+pending.dispatch().ids().size()+" transportMatched=true runtimeAcceptance=UNVERIFIED");
+            }
+        } catch(IOException | RuntimeException unavailable) { s.nativeFactories=null; }
+        finally { mutationFinished(service); }
+    }
+    public static synchronized void resetNative(Object service, String type) {
+        var s=state(service); s.nativePending=null;
+        try {
+            if(type==null) s.nativeFactories=null;
+            else if(s.nativeFactories!=null) s.nativeFactories.removeMember(type);
+        } catch(RuntimeException unavailable) { s.nativeFactories=null; }
+    }
     public static synchronized Set<String> unavailable(Object service) {
         State s = STATES.get(service);
         if (s == null) return Set.of("SIMULATOR_BOOT_RECEIPT_NOT_OBSERVED");
@@ -93,11 +148,11 @@ public final class SimulatorDomainBridge {
     public static RuntimeDomain capture(GraalShowdownService service, UUID battleId, BooleanSupplier choiceCurrent) {
         try {
             if (!choiceCurrent.getAsBoolean()) return null;
-            Object context; long epoch;
+            Object context; long epoch; Value nativeFactories;
             synchronized (SimulatorDomainBridge.class) {
                 var s = STATES.get(service);
                 if (s == null || !s.boot || s.mutations != 0) return null;
-                context = s.context; epoch = s.epoch;
+                context = s.context; epoch = s.epoch; nativeFactories=s.nativeFactories;
             }
             if (!current(service, context, epoch)) return null;
             // battleMap is the source-audited index.js lexical binding. Only the
@@ -109,9 +164,10 @@ public final class SimulatorDomainBridge {
                     + "DataMove:require('./sim/dex-moves').DataMove,BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,"
                     + "Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon}";
             String function = resource("runtime-domain-probe.js");
-            String invocation = "(battleMap.get('" + battleId + "').battle," + modules;
-            String script = function + invocation + ")";
-            String json = service.getContext().eval("js", script).asString();
+            Value probe=service.getContext().eval("js",function);
+            Value publicModules=service.getContext().eval("js","("+modules+")");
+            Value publicBattle=service.getContext().eval("js","battleMap.get('"+battleId+"').battle");
+            String json = probe.execute(publicBattle,publicModules,false,nativeFactories).asString();
             if (json.length() > 12_000_000 || !current(service, context, epoch)) return null;
             JsonObject raw = JsonParser.parseString(json).getAsJsonObject();
             var components = new TreeMap<String,String>();
@@ -128,7 +184,7 @@ public final class SimulatorDomainBridge {
                 // Recheck only global public configuration, never actor events,
                 // moves/PP, teams or private requests. Registry changes outside
                 // the observed service API must also withdraw an old receipt.
-                String observed = service.getContext().eval("js", function + invocation + ",true)").asString();
+                String observed = probe.execute(publicBattle,publicModules,true,nativeFactories).asString();
                 if (observed.length() > 4_500_000) return null;
                 JsonObject fresh = JsonParser.parseString(observed).getAsJsonObject();
                 if (!fresh.get("registryEquivalent").getAsBoolean()) return null;

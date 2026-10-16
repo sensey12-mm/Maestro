@@ -183,7 +183,12 @@ public final class PublicFieldEvidence {
             } else if (event.equals("move")) {
                 // Already executed moves outside the modeled set may leave unannounced
                 // state (Baton Pass, forced locks, ability changes). Do not erase it.
-                if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null) {
+                // These source-audited setters leave only the side-condition
+                // events already tracked above. They are not supported root
+                // actions in the HP-exchange evaluator. A current runtime source
+                // certificate is still required before any field result is used.
+                boolean observedHazardSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb").contains(key(p[3]));
+                if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !observedHazardSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }
                 for (int i = 4; i < p.length; i++) if (p[i].startsWith("[")) {

@@ -110,6 +110,7 @@ final class PublicPipelineRegression {
         check(!lateLease.current(),"new battle revived an old owning receipt");
         // A full source receipt cannot repair a partial or unsupported field.
         for (String event:List.of("|-swapsideconditions", "|-transform|p2a: Public|p1a: "+OWN,
+                "|move|p2a: Public|Spikes|p1a: "+OWN+"|[from] move: Metronome",
                 "|-start|p2a: Public|Custom Effect", "|win|Public fixture")) {
             var changed=new PublicProtocolEvidence(); changed.update(List.of(start,"update\n"+event));
             var p=new PublicMechanicsEvidence(id->null);p.update(changed);
@@ -117,7 +118,7 @@ final class PublicPipelineRegression {
             check(!c.hazards("p1",domain.effectiveState()).complete(),"unsupported/terminal event certified a complete hazard scope");
             check(c.stages(p.observation("p2a"),domain.effectiveState()).isEmpty(),"unsupported/terminal event certified initial stages");
         }
-        var layered=new PublicProtocolEvidence(); layered.update(List.of(start,"update\n|-sidestart|p1|Spikes\n|-sidestart|p1|Spikes\n|-sidestart|p1|Stealth Rock"));
+        var layered=new PublicProtocolEvidence(); layered.update(List.of(start,"update\n|move|p2a: Public|Spikes|p1a: "+OWN+"\n|-sidestart|p1|Spikes\n|move|p2a: Public|Spikes|p1a: "+OWN+"\n|-sidestart|p1|Spikes\n|move|p2a: Public|Stealth Rock|p1a: "+OWN+"\n|-sidestart|p1|Stealth Rock"));
         var layerEvidence=new PublicMechanicsEvidence(id->null);layerEvidence.update(layered);
         var layeredField=new PublicFieldEvidence().update(layered,layerEvidence);
         var layerHazards=layeredField.hazards("p1",domain.effectiveState());

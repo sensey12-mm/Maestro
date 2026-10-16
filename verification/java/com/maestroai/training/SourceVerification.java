@@ -33,15 +33,16 @@ public final class SourceVerification {
                     + "Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,DataMove:require('./sim/dex-moves').DataMove,"
                     + "BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,"
                     + "Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon}";
-            String expression = Files.readString(resources.resolve("runtime-domain-probe.js"))
-                    + "(verificationStream.battle," + moduleExpression + ")";
-            var clean = JsonParser.parseString(engine.eval("js", expression).asString()).getAsJsonObject();
+            var probe=engine.eval("js",Files.readString(resources.resolve("runtime-domain-probe.js")));
+            var publicBattle=engine.eval("js","verificationStream.battle");
+            var modules=engine.eval("js","("+moduleExpression+")");
+            var clean = JsonParser.parseString(probe.execute(publicBattle,modules,false,null).asString()).getAsJsonObject();
             var observed = new TreeMap<String,String>();
             for (var value : clean.getAsJsonObject("components").entrySet()) {
                 byte[] data = value.getValue().getAsString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
                 observed.put(value.getKey(), HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data)));
             }
-            if (!observed.equals(expected)) throw new AssertionError("Initialized source components differ");
+            if (!observed.equals(expected)) throw new AssertionError("Initialized source components differ: "+observed);
             var sourceDomain = new RuntimeDomain(new RuntimeDomain.Snapshot(
                     clean.get("mod").getAsString().equals("cobblemon") && clean.get("gen").getAsInt()==9
                             && clean.get("gameType").getAsString().equals("singles"),
@@ -54,43 +55,47 @@ public final class SourceVerification {
                     + "Cobblemon.registries.move.register({name:id,...verificationStream.battle.dex.dataCache.Moves[id]},id);"
                     + "for(const id of ['runaway','pressure'])"
                     + "Cobblemon.registries.ability.register({name:id,...verificationStream.battle.dex.dataCache.Abilities[id]},id);");
-            var overlay=JsonParser.parseString(engine.eval("js",expression).asString()).getAsJsonObject();
+            var nativeRefs=NativeRegistryRegression.prepare(engine,probe,publicBattle,modules,resources);
+            var capture=(java.util.function.Supplier<com.google.gson.JsonObject>)()->JsonParser
+                    .parseString(probe.execute(publicBattle,modules,false,nativeRefs).asString()).getAsJsonObject();
+            var overlay=capture.get();
             if(!overlay.get("registryEquivalent").getAsBoolean()) throw new AssertionError("Exact source overlays refused");
             for(var value:overlay.getAsJsonObject("components").entrySet())
                 if(!hash(value.getValue().getAsString()).equals(expected.get(value.getKey())))
                     throw new AssertionError("Standard registry changed source component");
             var overlayComponents=new TreeMap<>(observed);
             String digest=hash(overlay.get("registryReceipt").getAsString());overlayComponents.put("registryReceipt",digest);
-            String registryExpression=expression.substring(0,expression.length()-1)+",true)";
             var registryLease=new RuntimeRegistryLease(digest,()->true,()->{
-                var fresh=JsonParser.parseString(engine.eval("js",registryExpression).asString()).getAsJsonObject();
+                var fresh=JsonParser.parseString(probe.execute(publicBattle,modules,true,nativeRefs).asString()).getAsJsonObject();
                 return fresh.get("registryEquivalent").getAsBoolean()?hash(fresh.get("registryReceipt").getAsString()):null;
             });
             var overlayDomain=new RuntimeDomain(new RuntimeDomain.Snapshot(sourceDomain.effectiveState().known(),
                     overlay.get("extraEvents").getAsBoolean(),true,true,overlayComponents),expected,true,registryLease);
             PublicPipelineRegression.run(overlayDomain);
+            NaturalAcceptanceRegression.run(overlayDomain);
             engine.eval("js", "['p1','p2','sides','log','inputLog','activePokemon','activeTarget'].forEach(key=>"
                     + "Object.defineProperty(verificationStream.battle,key,{get(){throw Error('private state touched');}}));");
-            if (!overlay.equals(JsonParser.parseString(engine.eval("js", expression).asString())))
+            if (!overlay.equals(capture.get()))
                 throw new AssertionError("Private-state guards changed public configuration");
             engine.eval("js", "Cobblemon.registries.ability.register({name:'Run Away',onModifyPriority(){return 8;}},'runaway');");
-            var modified = JsonParser.parseString(engine.eval("js", expression).asString()).getAsJsonObject();
+            var modified = capture.get();
             if (modified.get("registryEquivalent").getAsBoolean())
                 throw new AssertionError("Unverified registry callback accepted");
             if (overlayDomain.effectiveState().known()) throw new AssertionError("Live source lease survived registry change");
-            engine.eval("js", "Cobblemon.registries.ability.reset();Cobblemon.registries.move.reset();");
-            if (!clean.equals(JsonParser.parseString(engine.eval("js", expression).asString())))
+            engine.eval("js", "Cobblemon.registries.ability.reset();Cobblemon.registries.move.reset();"
+                    +"Cobblemon.registries.bagItem.reset();Cobblemon.registries.heldItem.reset();");
+            if (!clean.equals(capture.get()))
                 throw new AssertionError("Reset did not restore source configuration");
             if(overlayDomain.effectiveState().known()) throw new AssertionError("Restoration revived old registry receipt");
             // Equal function text with a foreign closure is still foreign code.
             engine.eval("js", "let genuine=verificationStream.battle.dex.dataCache.Abilities.pressure;"
                     + "Cobblemon.registries.ability.register({...genuine,onStart:eval('({'+genuine.onStart.toString()+'}).onStart')},'pressure');");
-            if(JsonParser.parseString(engine.eval("js",expression).asString()).getAsJsonObject().get("registryEquivalent").getAsBoolean())
+            if(capture.get().get("registryEquivalent").getAsBoolean())
                 throw new AssertionError("Foreign closure accepted from equal source text");
             System.out.println("Relocated Graal source verification PASS: exact component hashes, private-state guards, changed callback rejection and reset");
         }
     }
-    private static String hash(String value) {
+    static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8))); }
         catch(java.security.NoSuchAlgorithmException impossible){throw new AssertionError(impossible);}
     }

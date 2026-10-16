@@ -2,6 +2,7 @@
 """Run source checks with pinned external bytes and temporary extraction only."""
 import hashlib
 import io
+import json
 import os
 from pathlib import Path, PurePosixPath
 import stat
@@ -42,6 +43,38 @@ def cache_dependency(home):
     if len(choices) != 1:
         raise ValueError('Expected one exact cached Cobblemon dependency after build')
     return choices[0]
+
+
+def verify_public_inputs(dependency, resources):
+    """Independent native bytes and obtainable fixture facts, never private sets."""
+    with zipfile.ZipFile(io.BytesIO(dependency)) as archive:
+        pins = dict(line.split('\t') for line in
+                    (resources / 'runtime-native-factories.tsv').read_text().splitlines())
+        expected = {('bagItem' if '/bag_items/' in n else 'heldItem') + '/' + Path(n).stem: n
+                    for n in archive.namelist()
+                    if n.startswith(('data/cobblemon/bag_items/', 'data/cobblemon/held_items/'))
+                    and n.endswith('.js')}
+        if len(expected) != 12 or set(pins) != set(expected):
+            raise ValueError('Native factory inventory differs')
+        for key, name in expected.items(): checked_bytes(archive.read(name), pins[key])
+        fixtures = {
+            'weavile': ('pressure', {'shadowclaw', 'swordsdance'}),
+            'mewtwo': ('pressure', {'psychocut', 'bulkup', 'aurasphere', 'nastyplot'}),
+            'skarmory': ('sturdy', {'spikes', 'stealthrock'}),
+            'wobbuffet': ('shadowtag', {'splash', 'counter', 'mirrorcoat'}),
+            'ditto': ('imposter', {'transform'}),
+            'porygonz': ('adaptability', {'hyperbeam'}),
+            'blissey': ('naturalcure', {'softboiled', 'growl', 'seismictoss'}),
+        }
+        for species, (ability, moves) in fixtures.items():
+            paths = [n for n in archive.namelist() if n.startswith('data/cobblemon/species/')
+                     and n.endswith('/' + species + '.json')]
+            if len(paths) != 1: raise ValueError('Ambiguous native fixture species')
+            data = json.loads(archive.read(paths[0]))
+            native_moves = {move.split(':')[-1] for move in data['moves']}
+            if ability not in {a.removeprefix('h:') for a in data['abilities']} or not moves <= native_moves:
+                raise ValueError('Fixture ability/learnset is not native')
+    print('Pinned native public inputs PASS: 12 factory byte hashes and seven natural fixture learnsets/abilities')
 
 
 class SourceGuards(unittest.TestCase):
@@ -112,6 +145,7 @@ def main():
     dependency = checked_bytes(cache_dependency(home).read_bytes(), DEPENDENCY_SHA256)
     from runtime_hook_oracle import verify_pinned_hooks
     verify_pinned_hooks(dependency)
+    verify_public_inputs(dependency, Path("src/main/resources/com/maestroai/training"))
     with zipfile.ZipFile(io.BytesIO(dependency)) as archive:
         simulator = checked_bytes(archive.read('data/cobblemon/showdown.zip'), SIMULATOR_SHA256)
     with tempfile.TemporaryDirectory(prefix='maestroai-source-') as folder:

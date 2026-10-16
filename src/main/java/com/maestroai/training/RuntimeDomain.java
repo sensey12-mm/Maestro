@@ -43,7 +43,8 @@ public final class RuntimeDomain {
         if (snapshot.extraEvents()) reasons.add("DYNAMIC_FORMAT_HOOKS_UNVERIFIED");
         // A nonempty public registry is permitted only when its complete
         // data fields AND live callback object identities equal the exact
-        // initialized pinned dex definitions, under a current receipt.
+        // initialized pinned dex definitions, or independently pinned native
+        // factory dispatches, under a current callback-identity receipt.
         if (snapshot.overrides() && (!snapshot.exactRegistryOverlay()
                 || !validRegistryReceipt()))
             reasons.add("REGISTRY_CALLBACK_OR_FIELD_OVERLAY_UNVERIFIED");
