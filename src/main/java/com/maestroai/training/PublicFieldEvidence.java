@@ -68,6 +68,36 @@ public final class PublicFieldEvidence {
             Boolean value = slot != null && slot.length() >= 2 ? tailwind.get(slot.substring(0, 2)) : null;
             return value == null ? Known.unknown() : Known.of(value, token());
         }
+        /** A witnessed ordinary switch initializes stages in the pinned engine.
+         * This requires current source AND full public effect/lifecycle coverage;
+         * an empty observer map alone is never evidence of zero stages.
+         */
+        public Map<String,Integer> stages(PublicMechanicsEvidence.Observation observation,
+                                          Known<Boolean> effectiveDomain) {
+            requireCurrent(turn);
+            Active active = actor(observation);
+            if (!effectiveDomain.known() || !Boolean.TRUE.equals(effectiveDomain.value())
+                    || active == null || !active.covered() || !allActorsCovered()
+                    || !unknown.isEmpty() || observation.ambiguous() || observation.unsupportedEffects()) return Map.of();
+            var observer = new PublicBattleObserver(); events.forEach(observer::accept);
+            String identity = observer.activeIdentity(observation.slot());
+            if (identity == null || observer.stagesUncertain(identity)) return Map.of();
+            var result = new TreeMap<String,Integer>();
+            STATS.forEach(stat -> result.put(stat, 0)); result.putAll(observer.knownStages(identity));
+            return Map.copyOf(result);
+        }
+        /** Only a witnessed initialized field plus a current engine receipt
+         * closes the partial protocol hazard map. Court Change, gaps and any
+         * unsupported field operation prevent this certificate.
+         */
+        public Hazards hazards(String side, Known<Boolean> effectiveDomain) {
+            requireCurrent(turn);
+            Hazards observed = protocol.sideHazards(side);
+            if (!Set.of("p1", "p2").contains(side) || !effectiveDomain.known()
+                    || !Boolean.TRUE.equals(effectiveDomain.value()) || !allActorsCovered()
+                    || !unknown.isEmpty()) return observed;
+            return new Hazards(observed.layers(), true, token() + ":source-verified-initial-field-and-side-events");
+        }
     }
     private long epoch;
     private Capture current;

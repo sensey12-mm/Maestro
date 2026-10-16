@@ -108,3 +108,52 @@ for (const [species,item] of [['Mewtwo','shedshell'],['Gengar','']]) {
   assert.equal(legal.choose('p2','switch 2'),true,`${species}/${item}: legal switch exception`);
 }
 console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases, 6 paired priority cases and 3 trapping/rechoice scenarios');
+// Positive announcements, not silence, distinguish this ordinary entry from
+// Illusion. Fixtures are independent of the Java identity-evidence provider.
+function pressureEntry(ability) {
+  const engine=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+  function set(species,ability){return {species,ability,level:80,moves:['tackle'],movesInfo:[{pp:40,maxPp:40}]};}
+  engine.setPlayer('p1',{team:[set('Mew','runaway')]});
+  engine.setPlayer('p2',{team:[set(ability==='illusion'?'Zoroark':'Mew',ability),set('Mew','pressure')]});
+  engine.makeChoices('team 1','team 12');return engine;
+}
+const announced=pressureEntry('pressure'),masked=pressureEntry('illusion');
+assert(announced.log.some(l=>l.startsWith('|-ability|p2a:')&&l.endsWith('|Pressure')));
+assert(!masked.log.some(l=>l.startsWith('|-ability|p2a:')&&l.endsWith('|Pressure')));
+assert(masked.p2.active[0].illusion,'negative fixture must actually carry an Illusion');
+const pressure=announced.dex.abilities.get('pressure');
+assert.equal(pressure.onDeductPP.call({},{isAlly:()=>false},{}),1);
+assert.equal(pressure.onDeductPP.call({},{isAlly:()=>true},{}),undefined);
+console.log('Pinned Pressure/Illusion source evidence PASS: positive entry and PP-only scope');
+// Held-out production-provider matchup. Numerical endpoints come solely from
+// this pinned engine; Java must enclose them using public spread bounds.
+function pipelineBattle() {
+  const engine=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+  function set(species,ability){return {species,ability,level:100,
+    moves:['scratch','shadowclaw','swordsdance','tackle'],movesInfo:[0,1,2,3].map(()=>({pp:40,maxPp:40}))};}
+  engine.setPlayer('p1',{team:[set('Gengar','runaway'),set('Mew','runaway')]});
+  engine.setPlayer('p2',{team:[set('Mew','pressure')]});
+  engine.makeChoices('team 12','team 1');return engine;
+}
+const pipeline=pipelineBattle(),a=pipeline.p1.active[0],f=pipeline.p2.active[0];
+a.storedStats.atk=166;
+for(const [id,expected] of [['scratch',[16,48]],['shadowclaw',[78,246]]]) {
+  const values=[];
+  for(const defense of [184,328]) for(const critical of [false,true]) for(let roll=0;roll<16;roll++) {
+    f.storedStats.def=defense;pipeline.random=()=>roll;
+    const effect=pipeline.dex.getActiveMove(id);effect.willCrit=critical;
+    values.push(pipeline.actions.getDamage(a,f,effect,true)||0);
+  }
+  assert.deepEqual([Math.min(...values),Math.max(...values)],expected,`public-spread endpoints ${id}`);
+}
+for(const id of ['tackle','quickattack'])
+  assert.equal(pipeline.actions.getDamage(f,a,pipeline.dex.getActiveMove(id),true)||0,0,`Ghost immunity ${id}`);
+assert(78/404>48/310,'strict bounded comparison must survive public spread uncertainty');
+a.boosts.atk=6;pipeline.boost({atk:2},a,a,pipeline.dex.moves.get('swordsdance'));
+assert.equal(a.boosts.atk,6,'repeated capped setup creates no extra stages');
+const arriving=pipeline.p1.pokemon[1];arriving.hp=arriving.maxhp=arriving.baseMaxhp=341;
+arriving.side.addSideCondition('spikes',f);arriving.side.addSideCondition('spikes',f);
+arriving.side.addSideCondition('stealthrock',f);
+pipeline.makeChoices('switch 2','move 3');
+assert.equal(341-arriving.hp,98,'actual switch execution: two Spikes layers plus Stealth Rock');
+console.log('Pinned tactical provider holdouts PASS: 128 damage samples, two immune replies, capped setup and actual hazard switch');

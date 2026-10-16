@@ -5875,7 +5875,9 @@ public class MaestroBattleAI extends RCTBattleAI {
             var execution = fieldCapture == null ? null : new com.maestroai.training.ScopedExecution(fieldCapture, executionBindings,
                     domainScopes);
             List<String> revealedOpponentMoves = publicOpponent.revealedMoves();
-            Map<String, Integer> publicStages = publicOpponent.knownBoosts();
+            Map<String, Integer> publicStages = fieldCapture == null ? Map.of()
+                    : fieldCapture.stages(opponentObservation, runtimeDomain == null
+                        ? PublicTransitionState.Known.unknown() : runtimeDomain.effectiveState());
             String publicItem = publicOpponent.revealedItem();
             String publicLastSeenItem = publicIdentity == null ? null
                     : publicProtocolObserver.revealedItem(publicIdentity);
@@ -5884,8 +5886,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             boolean publicTransformed = publicIdentity != null
                     && publicProtocolObserver.transformed(publicIdentity);
             String publicAbility = publicOpponent.revealedAbility();
-            boolean uncertainStages = publicIdentity == null
-                    || publicProtocolObserver.stagesUncertain(publicIdentity);
+            boolean uncertainStages = publicStages.isEmpty();
             PublicInteractionModel.Interaction itemRule =
                     PublicInteractionModel.item(publicItem);
             PublicInteractionModel.Interaction abilityRule =
@@ -5951,9 +5952,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                                     : PublicTransitionState.Kind.UNKNOWN);
                 }
                 Map<String, PublicTransitionState.SwitchTarget> targets = new java.util.TreeMap<>();
-                var ownHazards = publicProtocolEvidence.sideHazards(
-                        activePokemon.getPNX() == null || activePokemon.getPNX().length() < 2
-                                ? "" : activePokemon.getPNX().substring(0, 2));
+                String ownSide = activePokemon.getPNX() == null || activePokemon.getPNX().length() < 2
+                        ? "" : activePokemon.getPNX().substring(0, 2);
+                var domainEffective = runtimeDomain == null ? PublicTransitionState.Known.<Boolean>unknown()
+                        : runtimeDomain.effectiveState();
+                var ownHazards = fieldCapture == null ? publicProtocolEvidence.sideHazards(ownSide)
+                        : fieldCapture.hazards(ownSide, domainEffective);
                 for (int i = 0; i < legalSwitches.size(); i++) {
                     String id = legalSwitches.get(i);
                     // Own max HP is allowed. Groundedness, immunity, effective typing and
@@ -5976,9 +5980,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         ownedProfiles.get("self").observation().status(),
                         opponentObservation == null ? PublicTransitionState.Known.unknown() : opponentObservation.status(),
                         ownHazards,
-                        publicProtocolEvidence.sideHazards(
-                                opponentSlot == null || opponentSlot.length() < 2
-                                        ? "" : opponentSlot.substring(0, 2)), targets, intents,
+                        fieldCapture == null ? publicProtocolEvidence.sideHazards(
+                                opponentSlot == null || opponentSlot.length() < 2 ? "" : opponentSlot.substring(0, 2))
+                                : fieldCapture.hazards(opponentSlot == null || opponentSlot.length() < 2
+                                        ? "" : opponentSlot.substring(0, 2), domainEffective), targets, intents,
                         publicTransformed ? java.util.Set.of("APPEARANCE_ONLY", "TRANSFORMED")
                                 : java.util.Set.of("APPEARANCE_ONLY"));
                 var transitionEvidence = new PublicTransitionState.Evidence(context, Map.of(), Map.of());

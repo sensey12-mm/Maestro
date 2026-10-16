@@ -4,6 +4,7 @@ import com.cobblemon.mod.common.battles.runner.graal.GraalShowdownService;
 import com.google.gson.*;
 import com.maestroai.training.RuntimeDomain;
 import com.maestroai.training.RuntimeRegistryLease;
+import com.maestroai.training.RuntimeSourceAudit;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -18,7 +19,10 @@ public final class SimulatorDomainBridge {
     private SimulatorDomainBridge() {}
     private static final String ROOT = "/com/maestroai/training/";
     private static final Map<Object, State> STATES = new WeakHashMap<>();
-    private static final class State { long epoch; boolean boot, source; int mutations; Object context, dispatcher; }
+    private static final class State {
+        long epoch; boolean boot, source; int mutations; Object context, dispatcher;
+        RuntimeSourceAudit.Report audit = new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
+    }
     private static State state(Object service) { return STATES.computeIfAbsent(service, key -> new State()); }
     private static String resource(String name) throws IOException {
         try (var stream = SimulatorDomainBridge.class.getResourceAsStream(ROOT + name)) {
@@ -38,36 +42,29 @@ public final class SimulatorDomainBridge {
         }
         return pins;
     }
-    private static boolean codeFile(Path p) {
-        String name = p.getFileName().toString();
-        return name.endsWith(".js") || name.endsWith(".json") && !name.equals("showdown.json");
-    }
-    private static boolean verifySource(Object service) {
+    private static RuntimeSourceAudit.Report verifySource(Object service) {
         try {
-            for (var pin : pins("runtime-domain-classes.tsv").entrySet()) {
-                try (var stream = service.getClass().getResourceAsStream("/" + pin.getKey())) {
-                    if (stream == null || !hash(stream.readAllBytes()).equals(pin.getValue())) return false;
+            return RuntimeSourceAudit.inspect(Path.of("showdown"), pins("runtime-domain-files.tsv"),
+                    pins("runtime-domain-classes.tsv"), name -> {
+                try (var stream = service.getClass().getResourceAsStream("/" + name)) {
+                    return stream == null ? null : stream.readAllBytes();
+                } catch (IOException unavailable) {
+                    return null;
                 }
-            }
-            Path root = Path.of("showdown").toRealPath();
-            var expected = pins("runtime-domain-files.tsv"); var found = new TreeSet<String>();
-            try (var files = Files.walk(root)) {
-                for (Path p : files.filter(Files::isRegularFile).filter(SimulatorDomainBridge::codeFile).toList()) {
-                    if (!p.toRealPath().startsWith(root)) return false;
-                    String relative = root.relativize(p).toString().replace('\\', '/'); found.add(relative);
-                    if (!hash(Files.readAllBytes(p)).equals(expected.get(relative))) return false;
-                }
-            }
-            return found.equals(expected.keySet());
-        } catch (IOException | RuntimeException unavailable) { return false; }
+            });
+        } catch (IOException | RuntimeException unavailable) {
+            return new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
+        }
     }
     public static synchronized void bootStarting(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null; s.mutations = 0;
-        s.source = verifySource(service);
+        s.audit = verifySource(service); s.source = s.audit.verified();
     }
     public static synchronized void bootFinished(GraalShowdownService service) {
         var s = state(service); s.epoch++;
-        s.source &= verifySource(service); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
+        var finished = verifySource(service);
+        if (s.source || !finished.verified()) s.audit = finished;
+        s.source &= finished.verified(); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
         s.boot = s.source && s.context != null && s.dispatcher != null;
     }
     public static synchronized void invalidate(Object service) {
@@ -78,7 +75,12 @@ public final class SimulatorDomainBridge {
     public static synchronized Set<String> unavailable(Object service) {
         State s = STATES.get(service);
         if (s == null) return Set.of("SIMULATOR_BOOT_RECEIPT_NOT_OBSERVED");
-        if (!s.source) return Set.of("LOADED_SIMULATOR_SOURCE_UNVERIFIED");
+        if (!s.source) {
+            var reasons = new TreeSet<String>(); reasons.add("LOADED_SIMULATOR_SOURCE_UNVERIFIED");
+            reasons.add(s.audit.safeReason());
+            if (!s.audit.reference().isEmpty()) reasons.add("SOURCE_REFERENCE:" + s.audit.reference());
+            return Set.copyOf(reasons);
+        }
         if (!s.boot) return Set.of("SIMULATOR_CONTEXT_NOT_ATTESTED");
         if (s.mutations != 0) return Set.of("PUBLIC_REGISTRY_MUTATION_NOT_FINISHED");
         return Set.of("INITIALIZED_PUBLIC_PROBE_UNAVAILABLE");

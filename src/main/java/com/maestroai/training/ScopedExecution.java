@@ -70,7 +70,9 @@ public final class ScopedExecution {
                 if (b.lease() != null) leases.add(b.lease());
             }
             need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail").contains(b.item().value()));
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "levitate", "prankster", "stall").contains(b.ability().value()));
+            // Pressure affects PP consumption, not the outcome of one already
+            // legal, successful action. Future PP/requests are not certified.
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall").contains(b.ability().value()));
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
             else {
                 var a = field.actor(b.observation());

@@ -73,6 +73,7 @@ public final class StandaloneRegression {
                 new ShadowSearchEngine.Outcome("synthetic", .5, 1, 0, "leaf"))));
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
+        RuntimeEvidenceRegression.run();
         System.out.println("Standalone synthetic regressions PASS: " + checks + " checks");
     }
 }

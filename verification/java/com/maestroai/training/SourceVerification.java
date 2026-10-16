@@ -42,18 +42,56 @@ public final class SourceVerification {
                 observed.put(value.getKey(), HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data)));
             }
             if (!observed.equals(expected)) throw new AssertionError("Initialized source components differ");
+            var sourceDomain = new RuntimeDomain(new RuntimeDomain.Snapshot(
+                    clean.get("mod").getAsString().equals("cobblemon") && clean.get("gen").getAsInt()==9
+                            && clean.get("gameType").getAsString().equals("singles"),
+                    clean.get("extraEvents").getAsBoolean(),clean.get("overrides").getAsBoolean(),
+                    clean.get("registryEquivalent").getAsBoolean(),observed),expected,true,()->true);
+            // Actual normalized standard overlays must remain usable. These
+            // registrations preserve the pinned callbacks by object identity;
+            // no function text is evaluated or treated as closure provenance.
+            engine.eval("js", "for(const id of ['scratch','tackle','quickattack','shadowclaw','swordsdance'])"
+                    + "Cobblemon.registries.move.register({name:id,...verificationStream.battle.dex.dataCache.Moves[id]},id);"
+                    + "for(const id of ['runaway','pressure'])"
+                    + "Cobblemon.registries.ability.register({name:id,...verificationStream.battle.dex.dataCache.Abilities[id]},id);");
+            var overlay=JsonParser.parseString(engine.eval("js",expression).asString()).getAsJsonObject();
+            if(!overlay.get("registryEquivalent").getAsBoolean()) throw new AssertionError("Exact source overlays refused");
+            for(var value:overlay.getAsJsonObject("components").entrySet())
+                if(!hash(value.getValue().getAsString()).equals(expected.get(value.getKey())))
+                    throw new AssertionError("Standard registry changed source component");
+            var overlayComponents=new TreeMap<>(observed);
+            String digest=hash(overlay.get("registryReceipt").getAsString());overlayComponents.put("registryReceipt",digest);
+            String registryExpression=expression.substring(0,expression.length()-1)+",true)";
+            var registryLease=new RuntimeRegistryLease(digest,()->true,()->{
+                var fresh=JsonParser.parseString(engine.eval("js",registryExpression).asString()).getAsJsonObject();
+                return fresh.get("registryEquivalent").getAsBoolean()?hash(fresh.get("registryReceipt").getAsString()):null;
+            });
+            var overlayDomain=new RuntimeDomain(new RuntimeDomain.Snapshot(sourceDomain.effectiveState().known(),
+                    overlay.get("extraEvents").getAsBoolean(),true,true,overlayComponents),expected,true,registryLease);
+            PublicPipelineRegression.run(overlayDomain);
             engine.eval("js", "['p1','p2','sides','log','inputLog','activePokemon','activeTarget'].forEach(key=>"
                     + "Object.defineProperty(verificationStream.battle,key,{get(){throw Error('private state touched');}}));");
-            if (!clean.equals(JsonParser.parseString(engine.eval("js", expression).asString())))
+            if (!overlay.equals(JsonParser.parseString(engine.eval("js", expression).asString())))
                 throw new AssertionError("Private-state guards changed public configuration");
             engine.eval("js", "Cobblemon.registries.ability.register({name:'Run Away',onModifyPriority(){return 8;}},'runaway');");
             var modified = JsonParser.parseString(engine.eval("js", expression).asString()).getAsJsonObject();
             if (modified.get("registryEquivalent").getAsBoolean())
                 throw new AssertionError("Unverified registry callback accepted");
-            engine.eval("js", "Cobblemon.registries.ability.reset();");
+            if (overlayDomain.effectiveState().known()) throw new AssertionError("Live source lease survived registry change");
+            engine.eval("js", "Cobblemon.registries.ability.reset();Cobblemon.registries.move.reset();");
             if (!clean.equals(JsonParser.parseString(engine.eval("js", expression).asString())))
                 throw new AssertionError("Reset did not restore source configuration");
+            if(overlayDomain.effectiveState().known()) throw new AssertionError("Restoration revived old registry receipt");
+            // Equal function text with a foreign closure is still foreign code.
+            engine.eval("js", "let genuine=verificationStream.battle.dex.dataCache.Abilities.pressure;"
+                    + "Cobblemon.registries.ability.register({...genuine,onStart:eval('({'+genuine.onStart.toString()+'}).onStart')},'pressure');");
+            if(JsonParser.parseString(engine.eval("js",expression).asString()).getAsJsonObject().get("registryEquivalent").getAsBoolean())
+                throw new AssertionError("Foreign closure accepted from equal source text");
             System.out.println("Relocated Graal source verification PASS: exact component hashes, private-state guards, changed callback rejection and reset");
         }
+    }
+    private static String hash(String value) {
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8))); }
+        catch(java.security.NoSuchAlgorithmException impossible){throw new AssertionError(impossible);}
     }
 }
