@@ -59,12 +59,13 @@ def verify_public_inputs(dependency, resources):
         for key, name in expected.items(): checked_bytes(archive.read(name), pins[key])
         fixtures = {
             'weavile': ('pressure', {'shadowclaw', 'swordsdance'}),
-            'mewtwo': ('pressure', {'psychocut', 'bulkup', 'aurasphere', 'nastyplot'}),
-            'skarmory': ('sturdy', {'spikes', 'stealthrock'}),
-            'wobbuffet': ('shadowtag', {'splash', 'counter', 'mirrorcoat'}),
+            'mewtwo': ('pressure', {'psychocut', 'bulkup', 'aurasphere', 'nastyplot', 'calmmind', 'recover'}),
+            'skarmory': ('sturdy', {'spikes', 'stealthrock', 'roost', 'whirlwind'}),
+            'wobbuffet': ('shadowtag', {'splash', 'encore', 'counter', 'mirrorcoat'}),
             'ditto': ('imposter', {'transform'}),
             'porygonz': ('adaptability', {'hyperbeam'}),
             'blissey': ('naturalcure', {'softboiled', 'growl', 'seismictoss'}),
+            'mew': ('synchronize', {'transform','knockoff','roost','haze'}),
         }
         for species, (ability, moves) in fixtures.items():
             paths = [n for n in archive.namelist() if n.startswith('data/cobblemon/species/')
@@ -74,7 +75,16 @@ def verify_public_inputs(dependency, resources):
             native_moves = {move.split(':')[-1] for move in data['moves']}
             if ability not in {a.removeprefix('h:') for a in data['abilities']} or not moves <= native_moves:
                 raise ValueError('Fixture ability/learnset is not native')
-    print('Pinned native public inputs PASS: 12 factory byte hashes and seven natural fixture learnsets/abilities')
+        zoroark = json.loads(archive.read('data/cobblemon/species/generation5/zoroark.json'))
+        hisui = next(f for f in zoroark['forms'] if f['name'] == 'Hisui')
+        if not {'nastyplot','shadowball','flamethrower','hypervoice'} <= {m.split(':')[-1] for m in hisui['moves']}:
+            raise ValueError('Unverified Hisui learnset')
+        if json.loads(archive.read('data/cobblemon/species_features/hisuian.json')) != {'keys':['hisuian'],'type':'flag','isAspect':True,'default':False}:
+            raise ValueError('Unverified Hisui property')
+        for item in ['custap_berry','focus_sash','choice_scarf','sitrus_berry']:
+            if not any(n.endswith('/'+item+'.json') for n in archive.namelist()):
+                raise ValueError('Player item unavailable')
+    print('Pinned native public inputs PASS: 12 factory hashes, eight base learnsets, Hisui form and one-battle player items')
 
 
 class SourceGuards(unittest.TestCase):
