@@ -245,14 +245,12 @@ public class MaestroBattleAI extends RCTBattleAI {
 
     public void ownTransportUnavailable() { ownTransport.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE"); }
 
+    /** Error-return is a second readiness notification, never a payload source.
+     * If a corrected request arrived first, upstream now restored mustChoose.
+     */
     public void ownChoiceRejected(PokemonBattle battle,
-            com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor,
-            java.util.function.Supplier<String> raw) {
-        if (!ownTransportVersionSupported() || actor.getBattleAI() != this || actor.getBattle() != battle
-                || battle.getActor(actor.getShowdownId()) != actor || battle.getEnded()
-                || actor.getActivePokemon().size() != 1) return;
-        var active = actor.getActivePokemon().getFirst().getBattlePokemon();
-        if (active != null) choiceRecovery.rejected(battle, actor, actor.getRequest(), battle.getTurn(), active.getUuid(), raw);
+            com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor) {
+        ownRequestCorrected(battle, actor, actor.getRequest());
     }
 
     public void ownRequestCorrected(PokemonBattle battle,
@@ -260,7 +258,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             com.cobblemon.mod.common.battles.ShowdownActionRequest request) {
         if (!ownTransportVersionSupported() || actor.getBattleAI() != this || actor.getBattle() != battle
                 || battle.getActor(actor.getShowdownId()) != actor || battle.getEnded()
-                || actor.getRequest() != request || actor.getActivePokemon().size() != 1
+                || request == null || actor.getRequest() != request || actor.getActivePokemon().size() != 1
                 || !actor.getResponses().isEmpty()) return;
         var active = actor.getActivePokemon().getFirst().getBattlePokemon();
         var moves = request.getActive();
@@ -312,7 +310,12 @@ public class MaestroBattleAI extends RCTBattleAI {
             if (activePokemon != null && activePokemon.getActor() != null && activePokemon.getBattlePokemon() != null) {
                 var actor = activePokemon.getActor();
                 choiceRecovery.submitted(battle, actor, actor.getRequest(), battle.getTurn(),
-                        activePokemon.getBattlePokemon().getUuid(), !forceSwitch && response instanceof SwitchActionResponse);
+                        activePokemon.getBattlePokemon().getUuid(), !forceSwitch && response instanceof SwitchActionResponse
+                                && actor.getRequest() != null && !actor.getRequest().getWait()
+                                && !actor.getRequest().getForceSwitch().contains(true)
+                                && actor.getRequest().getActive() != null
+                                && actor.getRequest().getActive().size() == 1
+                                && moveset != null && !moveset.getTrapped());
             }
             return response;
         } finally {

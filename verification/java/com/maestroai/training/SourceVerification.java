@@ -10,6 +10,49 @@ import java.util.TreeMap;
 
 /** Source-engine configuration contracts, with artificial state and no Minecraft claim. */
 public final class SourceVerification {
+    private static void verifyNativeRecovery(Context engine) {
+        var wire = engine.eval("js", """
+            (()=>{
+              const b=new (require('./sim/battle').Battle)({formatid:'gen9customgame',seed:[7,11,13,17]});
+              const set=(species,ability,moves,item='')=>({species,ability,moves,item,level:100,movesInfo:moves.map(()=>({pp:40,maxPp:40}))});
+              b.setPlayer('p1',{team:[set('Wobbuffet','shadowtag',['splash','encore'])]});
+              b.setPlayer('p2',{team:[set('Xerneas','fairyaura',['geomancy','moonblast'],'powerherb'),set('Mew','synchronize',['tackle'])]});
+              b.makeChoices('team 1','team 12');
+              b.makeChoices('move 1','move 1');
+              b.makeChoices('move 2','move 1');
+              b.makeChoices('move 1','move 1');
+              if(b.turn!==4 || !b.p2.active[0].volatiles.encore || b.p2.active[0].item)throw new Error('Encore/consumed herb precondition');
+              const before=JSON.stringify(b.p2.activeRequest);
+              const own=[];const send=b.send.bind(b);
+              b.send=(kind,data)=>{if(kind==='sideupdate' && data.startsWith('p2\\n'))own.push(data);send(kind,data);};
+              const rejected=!b.choose('p2','switch 2');
+              globalThis.recoveryOracleBattle=b;
+              return JSON.stringify({before,own,rejected,turn:b.turn});
+            })()
+            """).asString();
+        var result=JsonParser.parseString(wire).getAsJsonObject();
+        var before=JsonParser.parseString(result.get("before").getAsString()).getAsJsonObject();
+        var own=result.getAsJsonArray("own");
+        if(!result.get("rejected").getAsBoolean() || own.size()!=2
+                || before.getAsJsonArray("active").get(0).getAsJsonObject().has("trapped"))
+            throw new AssertionError("Native uncertain switch precondition");
+        String correction=own.get(1).getAsString();
+        if(!own.get(0).getAsString().startsWith("p2\n|error|[Unavailable choice] Can't switch:")
+                || !correction.startsWith("p2\n|request|")) throw new AssertionError("Native correction wire");
+        var request=JsonParser.parseString(correction.substring("p2\n|request|".length())).getAsJsonObject();
+        boolean trapped=request.getAsJsonArray("active").get(0).getAsJsonObject().get("trapped").getAsBoolean();
+        Object battle=new Object(),actor=new Object(),original=new Object(),fresh=new Object();
+        var recovery=new com.maestroai.ai.OwnChoiceRecovery();
+        var active=new java.util.UUID(0,1);
+        recovery.submitted(battle,actor,original,result.get("turn").getAsInt(),active,true);
+        if(!recovery.corrected(battle,actor,fresh,result.get("turn").getAsInt(),active,true,trapped,true))
+            throw new AssertionError("Fresh native owning request failed recovery without error callback");
+        if(!engine.eval("js", "recoveryOracleBattle.choose('p2','move 1') && recoveryOracleBattle.choose('p1','move 1') && recoveryOracleBattle.turn===5").asBoolean())
+            throw new AssertionError("Native recovery failed to advance battle");
+        engine.eval("js", "delete globalThis.recoveryOracleBattle");
+        System.out.println("Graal native Encore/Geomancy/Xerneas trapping/corrected-own-request recovery PASS; synthetic, no Fabric callback claim");
+    }
+
     public static void main(String[] args) throws Exception {
         Path simulator = Path.of(args[0]).toAbsolutePath();
         Path resources = Path.of("src/main/resources/com/maestroai/training");
@@ -25,6 +68,7 @@ public final class SourceVerification {
                 .build()) {
             engine.eval("js", "var process={cwd:()=>''};");
             engine.eval("js", Files.readString(simulator.resolve("index.js")));
+            verifyNativeRecovery(engine);
             engine.eval("js", "var verificationStream=new BS.BattleStream(); battleMap.set('synthetic-verification',verificationStream);"
                     + "verificationStream.write('>start '+JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,"
                     + "ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'}}));");

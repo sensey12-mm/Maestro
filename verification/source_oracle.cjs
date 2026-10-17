@@ -97,7 +97,15 @@ function trapCase(species, item) {
 const trapped = trapCase('Mewtwo','');
 assert.equal(trapped.p2.activeRequest.active[0].trapped ?? false,false);
 assert.equal(trapped.p2.activeRequest.active[0].maybeTrapped,true);
+const rejectedWire=[];
+const originalSend=trapped.send.bind(trapped);
+trapped.send=(kind,data)=>{ if(kind==='sideupdate' && data.startsWith('p2\n')) rejectedWire.push(data); originalSend(kind,data); };
 assert.equal(trapped.choose('p2','switch 2'),false);
+assert.equal(rejectedWire.length,2,'native rejection must emit error and corrected owning request');
+assert.ok(rejectedWire[0].startsWith("p2\n|error|[Unavailable choice] Can't switch:"));
+assert.ok(rejectedWire[1].startsWith('p2\n|request|'));
+assert.equal(JSON.parse(rejectedWire[1].split('|request|')[1]).active[0].trapped,true);
+assert.equal(rejectedWire[1].includes('maybeTrapped'),false);
 assert.match(trapped.p2.choice.error,/active Pokémon is trapped/);
 assert.equal(trapped.p2.activeRequest.active[0].trapped,true);
 assert.equal(trapped.choose('p2','move 1'),true);
@@ -107,7 +115,23 @@ for (const [species,item] of [['Mewtwo','shedshell'],['Gengar','']]) {
   const legal = trapCase(species,item);
   assert.equal(legal.choose('p2','switch 2'),true,`${species}/${item}: legal switch exception`);
 }
-console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases, 6 paired priority cases and 3 trapping/rechoice scenarios');
+// Independent held-out: a consumed Power Herb, Encore and a completed second
+// Geomancy produce a switchable-looking request with one disabled alternative.
+const encored = new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+const nativeSet=(species,ability,moves,item='')=>({species,ability,moves,item,level:100,movesInfo:moves.map(()=>({pp:40,maxPp:40}))});
+encored.setPlayer('p1',{team:[nativeSet('Wobbuffet','shadowtag',['splash','encore'])]});
+encored.setPlayer('p2',{team:[nativeSet('Xerneas','fairyaura',['geomancy','moonblast'],'powerherb'),nativeSet('Marshadow','technician',['spectralthief'])]});
+encored.makeChoices('team 1','team 12');
+encored.makeChoices('move 1','move 1'); encored.makeChoices('move 2','move 1'); encored.makeChoices('move 1','move 1');
+assert.equal(encored.turn,4); assert.equal(encored.p2.active[0].item,'');
+assert.ok(encored.p2.active[0].volatiles.encore);
+assert.equal(encored.p2.activeRequest.active[0].maybeTrapped,true);
+assert.equal(encored.p2.activeRequest.active[0].moves[1].disabled,true);
+assert.equal(encored.choose('p2','switch 2'),false);
+assert.equal(encored.p2.activeRequest.active[0].trapped,true);
+assert.equal(encored.choose('p2','move 1'),true); assert.equal(encored.choose('p1','move 1'),true);
+assert.equal(encored.turn,5);
+console.log('Pinned simulator source oracle PASS: 50 fixed synthetic cases, 6 paired priority cases and 4 trapping/rechoice scenarios, including Encore/Geomancy');
 // Positive announcements, not silence, distinguish this ordinary entry from
 // Illusion. Fixtures are independent of the Java identity-evidence provider.
 function pressureEntry(ability) {

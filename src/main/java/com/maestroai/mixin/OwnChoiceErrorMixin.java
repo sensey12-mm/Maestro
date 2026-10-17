@@ -18,7 +18,7 @@ public abstract class OwnChoiceErrorMixin {
                                         CallbackInfoReturnable<Unit> ci) {
         if (instruction.getBattleActor() instanceof AIBattleActor actor
                 && actor.getBattleAI() instanceof MaestroBattleAI ai) {
-            ai.ownChoiceRejected(battle, actor, () -> instruction.getMessage().getRawMessage());
+            ai.ownChoiceRejected(battle, actor);
         }
     }
 }
