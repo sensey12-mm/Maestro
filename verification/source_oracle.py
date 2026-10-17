@@ -164,7 +164,7 @@ def main():
             archive.extractall(folder)
         subprocess.run(['node', 'verification/source_oracle.cjs', folder], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                        'sourceVerification', '-PverificationSource=' + folder, '--stacktrace'], check=True)
+                        'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
     print('Pinned external source checks PASS; temporary source tree removed; no Minecraft acceptance claimed')
     return 0
 

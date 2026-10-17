@@ -264,7 +264,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         var moves = request.getActive();
         boolean ordinary = !request.getWait() && !request.getForceSwitch().contains(true)
                 && moves != null && moves.size() == 1 && moves.getFirst() != null;
-        if (active != null && choiceRecovery.corrected(battle, actor, request, battle.getTurn(), active.getUuid(),
+        if (active != null && choiceRecovery.corrected(battle, actor, request,
+                ownTransport.dispatchedTurn(battle, actor, battle.getTurn()), active.getUuid(),
                 actor.getMustChoose(), ordinary && moves.getFirst().getTrapped(), ordinary)) {
             System.out.println("[MaestroAI] Retrying corrected own trapped-switch request");
             actor.onChoiceRequested();
@@ -307,20 +308,26 @@ public class MaestroBattleAI extends RCTBattleAI {
             ShowdownActionResponse response = LivePromotionGate.choose(
                 () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
                 null, null, false);
+            recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            return response;
+        } finally {
+            ownTransport.endChoice(); ownChoiceLease = null;
+        }
+    }
+
+    private void recordOwnChoice(PokemonBattle battle, ActiveBattlePokemon activePokemon,
+            ShowdownMoveset moveset, boolean forceSwitch, ShowdownActionResponse response) {
             if (activePokemon != null && activePokemon.getActor() != null && activePokemon.getBattlePokemon() != null) {
                 var actor = activePokemon.getActor();
-                choiceRecovery.submitted(battle, actor, actor.getRequest(), battle.getTurn(),
-                        activePokemon.getBattlePokemon().getUuid(), !forceSwitch && response instanceof SwitchActionResponse
+                int choiceTurn = ownTransport.dispatchedTurn(battle, actor, battle.getTurn());
+                choiceRecovery.submitted(battle, actor, actor.getRequest(), choiceTurn,
+                        activePokemon.getBattlePokemon().getUuid(), choiceTurn > 0 && !forceSwitch && response instanceof SwitchActionResponse
                                 && actor.getRequest() != null && !actor.getRequest().getWait()
                                 && !actor.getRequest().getForceSwitch().contains(true)
                                 && actor.getRequest().getActive() != null
                                 && actor.getRequest().getActive().size() == 1
                                 && moveset != null && !moveset.getTrapped());
             }
-            return response;
-        } finally {
-            ownTransport.endChoice(); ownChoiceLease = null;
-        }
     }
 
     private ShowdownActionResponse chooseLegacy(

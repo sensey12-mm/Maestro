@@ -3,25 +3,28 @@ allprojects {
         p.sourceSets.create('verification') {
             java.srcDirs = ['verification/java']
             resources.srcDirs = []
-            compileClasspath = p.sourceSets.main.output + p.configurations.compileClasspath
+            compileClasspath += p.sourceSets.main.output + p.configurations.compileClasspath
             runtimeClasspath = output + compileClasspath
         }
+        p.dependencies.add('verificationImplementation', 'org.ow2.asm:asm-commons:9.6')
         p.tasks.register('standaloneRegression', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
             classpath = p.sourceSets.verification.output +
                     p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
-                    p.configurations.compileClasspath
+                    p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
             mainClass = 'com.maestroai.training.StandaloneRegression'
         }
         p.tasks.register('sourceVerification', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
             classpath = p.sourceSets.verification.output +
                     p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
-                    p.configurations.compileClasspath
+                    p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
             mainClass = 'com.maestroai.training.SourceVerification'
             doFirst {
                 if (!p.hasProperty('verificationSource')) throw new GradleException('Missing pinned extracted source directory')
                 args p.property('verificationSource')
+                if (!p.hasProperty('verificationDependency')) throw new GradleException('Missing pinned dependency for native dispatch integration')
+                args p.property('verificationDependency')
             }
         }
     }

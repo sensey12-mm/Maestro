@@ -29,7 +29,7 @@ public final class OwnChoiceRecovery {
     }
 
     private boolean matches(Object battle, Object actor, int turn, UUID active) {
-        return battle != null && actor != null && active != null && this.battle == battle
+        return turn > 0 && battle != null && actor != null && active != null && this.battle == battle
                 && this.actor == actor && this.turn == turn && active.equals(this.active);
     }
 }

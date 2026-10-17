@@ -54,6 +54,7 @@ public final class SourceVerification {
     }
 
     public static void main(String[] args) throws Exception {
+        DispatchIntegrationRegression.run(Path.of(args[1]));
         Path simulator = Path.of(args[0]).toAbsolutePath();
         Path resources = Path.of("src/main/resources/com/maestroai/training");
         var expected = new TreeMap<String,String>();

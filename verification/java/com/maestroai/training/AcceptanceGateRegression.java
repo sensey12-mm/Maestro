@@ -220,8 +220,13 @@ public final class AcceptanceGateRegression {
             parserCalls[0]++; return request;
         });
         yes(parserCalls[0]==1,"own authorized dispatch was not parsed exactly once");
+        yes(ownLedger.dispatchedTurn(battle,actor,0)==-1,"missing turn hook invented a counter");
         ownLedger.turnDispatched(battle,1);
         yes(ownLedger.observedTurnAllowed(0),"source-covered queued turn transition refused");
+        yes(ownLedger.dispatchedTurn(battle,actor,0)==1,"own dispatch turn must precede Java counter");
+        yes(ownLedger.dispatchedTurn(new Object(),actor,0)==-1,"foreign battle turn accepted");
+        yes(ownLedger.dispatchedTurn(battle,new Object(),0)==-1,"foreign actor turn accepted");
+        yes(ownLedger.dispatchedTurn(battle,actor,2)==-1,"future Java counter accepted");
         var ownLease=ownLedger.beginChoice(battle,actor,token,validId,false,
                 ()->true);
         yes(ownLease.current() && ownLease.turn()==1,"own request did not bind current choice");
@@ -233,6 +238,11 @@ public final class AcceptanceGateRegression {
         ownLedger.dispatched(battle,actor,"p1",token,()->request);
         var duplicate=ownLedger.beginChoice(battle,actor,token,validId,false,()->true);
         yes(!duplicate.current(),"duplicate own dispatch reused after choice");
+        ownLedger.turnFinished(battle,1);
+        yes(ownLedger.dispatchedTurn(battle,actor,0)==-1,"pre-increment window survived dispatch completion");
+        yes(ownLedger.dispatchedTurn(battle,actor,1)==1,"completed current turn lost its identity");
+        ownLedger.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE");
+        yes(ownLedger.dispatchedTurn(battle,actor,1)==-1,"invalidated turn receipt revived");
         ownLedger.owner(new Object(),actor,"p1");
         yes(!ownLease.current(),"foreign battle overwrote old own lease");
         String digest="a".repeat(64);

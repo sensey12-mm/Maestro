@@ -35,13 +35,15 @@ public final class OwnRequestTransport {
     private final Set<UUID> initialReserves = new HashSet<>();
     private final Set<String> reasons = new TreeSet<>();
 
+    private boolean turnReceipt;
+
     public void owner(Object battle, Object actor, String side) {
         if (this.battle == battle && this.actor == actor && Objects.equals(this.side, side)) return;
         this.battle = battle; this.actor = actor; this.side = side;
-        turn = 0; turnDispatchOpen = false; previous = null; initialReserves.clear(); invalidate("OWN_DISPATCH_NOT_OBSERVED");
+        turn = 0; turnDispatchOpen = false; turnReceipt = false; previous = null; initialReserves.clear(); invalidate("OWN_DISPATCH_NOT_OBSERVED");
     }
     public void invalidate(String reason) {
-        epoch++; choiceOpen = false; turnDispatchOpen = false; token = null; receipt = null; reasons.clear(); reasons.add(reason);
+        epoch++; choiceOpen = false; turnDispatchOpen = false; turnReceipt = false; token = null; receipt = null; reasons.clear(); reasons.add(reason);
     }
     /** The lazy parser is NEVER invoked for a foreign actor, battle or side. */
     public void dispatched(Object battle, Object actor, String side, Object installedToken, Supplier<Request> parser) {
@@ -77,13 +79,20 @@ public final class OwnRequestTransport {
         if (this.battle != battle) return;
         epoch++; choiceOpen = false;
         if (nextTurn != turn + 1) { initialReserves.clear(); invalidate("OWN_TURN_SEQUENCE_UNSUPPORTED"); turn = Math.max(turn, nextTurn); return; }
-        turn = nextTurn; turnDispatchOpen = true;
+        turn = nextTurn; turnDispatchOpen = true; turnReceipt = true;
     }
     public void turnFinished(Object battle, int dispatchedTurn) {
         if (this.battle == battle && dispatchedTurn == turn) turnDispatchOpen = false;
     }
     public boolean observedTurnAllowed(int actualBattleTurn) {
         return turn > 0 && (actualBattleTurn == turn || turnDispatchOpen && actualBattleTurn == turn - 1);
+    }
+    /** Stable turn from the owning TurnInstruction receipt, including its
+     * source-verified window before PokemonBattle.turn writes the Java field.
+     * Never invent a +1 turn from an arbitrary caller's Java counter.
+     */
+    public int dispatchedTurn(Object battle, Object actor, int actualBattleTurn) {
+        return turnReceipt && this.battle == battle && this.actor == actor && observedTurnAllowed(actualBattleTurn) ? turn : -1;
     }
     public final class Lease {
         private final long generation;
