@@ -239,3 +239,38 @@ nf.storedStats.def=306;
 const before=natural.p1.pokemon[1].hp;natural.makeChoices('switch 2','move bulkup');
 assert.equal(before-natural.p1.active[0].hp,44,'actual natural reserve entry through two hazards');
 console.log('Natural acceptance source oracle PASS: 14 catalog entries, legal abilities/moves, actual berry consumption, 64 damage bounds, Psychic immunity and real hazard entry');
+const observedOnly = ['uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock',
+  'drainingkiss','energyball','closecombat','rocktomb','shadowball','hypervoice','aurasphere'];
+const rawMoves = require(path.join(root,'data/moves')).Moves;
+for (const id of observedOnly) {
+  const definition=rawMoves[id];
+  assert(definition && !Object.values(definition).some(v=>typeof v==='function'),`past-only source callbacks changed: ${id}`);
+  assert(definition.basePower>0 && ['Physical','Special'].includes(definition.category));
+  const secondary=definition.secondary;
+  if(secondary)assert(Object.keys(secondary).every(k=>['chance','status','boosts','volatileStatus'].includes(k)));
+  if(secondary?.volatileStatus)assert.equal(secondary.volatileStatus,'flinch');
+}
+assert.equal(rawMoves.uturn.selfSwitch,true);
+assert.deepEqual(rawMoves.drainingkiss.drain,[3,4]);
+assert.deepEqual(rawMoves.closecombat.self.boosts,{def:-1,spd:-1});
+assert.equal(require(path.join(root,'data/conditions')).Conditions.flinch.duration,1);
+const fieldCode=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/PublicFieldEvidence.java'),'utf8');
+const observedIds=[...fieldCode.match(/OBSERVED_ONLY = Set.of\(([\s\S]*?)\);/)[1].matchAll(/"([a-z]+)"/g)].map(x=>x[1]).sort();
+assert.deepEqual(observedIds,observedOnly.sort(),'past-only Java scope drift');
+console.log('Past-only public-state source oracle PASS: 14 declarative moves, ordinary pivot, observed drain/stages and one-turn flinch; no future secondary/pivot forecast');
+
+// Independently execute source healing, including odd max HP and capping.
+for (const [maxHp,hp,expected] of [[381,100,291],[381,300,381],[381,381,381],[1,1,1]]) {
+  const engine=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+  const set=move=>({species:'Mew',ability:'runaway',moves:[move],level:100,movesInfo:[{pp:40,maxPp:40}]});
+  engine.setPlayer('p1',{team:[set('recover')]});engine.setPlayer('p2',{team:[set('splash')]});
+  engine.makeChoices('team 1','team 1');
+  const own=engine.p1.active[0];
+  const recovery=engine.dex.moves.get('recover');
+  assert.deepEqual(recovery.heal,[1,2]);
+  assert.equal(recovery.priority,0);assert.equal(recovery.target,'self');
+  own.maxhp=own.baseMaxhp=maxHp;own.hp=hp;
+  engine.makeChoices('move recover','move splash');
+  assert.equal(own.hp,expected,'source Recover rounding/cap '+maxHp+'/'+hp);
+}
+console.log('Recover source oracle PASS: four exact rounding/capping cases');

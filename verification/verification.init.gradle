@@ -25,6 +25,8 @@ allprojects {
                 args p.property('verificationSource')
                 if (!p.hasProperty('verificationDependency')) throw new GradleException('Missing pinned dependency for native dispatch integration')
                 args p.property('verificationDependency')
+                if (p.hasProperty('verificationPack')) args 'pack'
+                if (p.hasProperty('verificationLayoutOnly')) args 'layout-only'
             }
         }
     }

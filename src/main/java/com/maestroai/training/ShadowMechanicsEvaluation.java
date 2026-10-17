@@ -58,11 +58,12 @@ public final class ShadowMechanicsEvaluation {
                                      Map<String, Profile> profiles, List<Plan> plans,
                                      Known<Boolean> trickRoom, Critical critical, String legacyAction, ScopedExecution execution) {
         Objects.requireNonNull(profiles); Objects.requireNonNull(trickRoom);
+        // Each executed operation issues its own certificate. Do not require
+        // all six unrelated scopes merely to copy a raw immutable actor profile.
+        ScopedExecution originalExecution=execution;
         if (execution != null) {
             execution.requireCurrent(snapshot.turn());
-            var scoped = new HashMap<String, Profile>();
-            profiles.forEach((id, p) -> scoped.put(id, execution.profile(p, !Set.of("self", "opponent").contains(id))));
-            profiles = Map.copyOf(scoped);
+            execution=execution.calculationFrame();
         }
         var projection = project(snapshot, mechanics);
         State root = projection.states().get("root");
@@ -111,6 +112,15 @@ public final class ShadowMechanicsEvaluation {
         String simple = root.legalMoves().stream().filter(m -> move(m) != null && move(m).power() > 0)
                 .sorted(Comparator.<String>comparingInt(m -> -move(m).power()).thenComparing(m -> m))
                 .map(m -> "move:" + m).findFirst().orElseGet(() -> legal.iterator().next());
+        if(originalExecution!=null && !originalExecution.sourceCurrent()) {
+            // No calculated state or known utility escapes a failed closing
+            // receipt. Actor/turn/own-transport checks still run per operation.
+            Set<String> expired=Set.of("SOURCE_CHANGED_DURING_COMPARISON");
+            var withdrawn=rankings.stream().map(r->new Ranking(r.action(),Known.<Utility>unknown(),
+                    r.lines().stream().map(l->new Line(root,Known.<Utility>unknown(),expired)).toList(),expired)).toList();
+            return new Comparison(withdrawn,null,legacyAction,simple,false,coverage,
+                    "source-receipt-withdrawn;advisoryOnly=true");
+        }
         return new Comparison(rankings, preferred, legacyAction, simple,
                 preferred != null && legacyAction != null && !preferred.equals(legacyAction), coverage,
                 "conditional-supplied-replies;successful-actions;HP-resource-exchange;not-win-probability;advisoryOnly=true");
@@ -203,6 +213,20 @@ public final class ShadowMechanicsEvaluation {
             }
             if (execution != null && execution.taunted(attacker.id())) return p; // source BeforeMove rejects setup
             if (possibleFaint(attacker)) return unknown(p, "SETUP_EXECUTION_SURVIVAL_UNKNOWN");
+            if (moveId.equals("recover")) {
+                Profile profile = profiles.get(attacker.id());
+                if (!profile.maxHp().known() || profile.maxHp().value().low() != profile.maxHp().value().high())
+                    return unknown(p, "EXACT_RECOVERY_MAX_HP_UNKNOWN");
+                int maxHp = profile.maxHp().value().low();
+                // Gen9 source uses Math.round(baseMaxhp / 2), including odd HP.
+                double recovery = ((maxHp + 1L) / 2) / (double) maxHp;
+                Interval hp = attacker.hp().value();
+                double low = Math.min(1 - hp.high(), recovery), high = Math.min(1 - hp.low(), recovery);
+                Actor healed = actor(attacker, new Interval(Math.min(1, hp.low() + recovery), Math.min(1, hp.high() + recovery)), attacker.stages());
+                State changed = state(p.state(), own ? healed : target, own ? target : healed, p.state().actionKind(), p.state().action());
+                return new Progress(changed, p.dealtLow() - (own ? 0 : high), p.dealtHigh() - (own ? 0 : low),
+                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown());
+            }
             Map<String, Integer> stages = new TreeMap<>(attacker.stages());
             for (var e : move.boosts().entrySet()) {
                 if (!stages.containsKey(e.getKey())) return unknown(p, "SETUP_STAGE_BASE_UNKNOWN");

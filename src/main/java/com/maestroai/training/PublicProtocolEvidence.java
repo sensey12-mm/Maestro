@@ -33,6 +33,7 @@ public final class PublicProtocolEvidence {
     // Non-state annotations emitted by the pinned simulator. Everything else
     // outside the modeled event set blocks a certificate, without retaining its payload.
     private static final Set<String> ANNOTATIONS = Set.of("", "player", "teamsize", "tier", "rule", "seed", "upkeep",
+            "-nothing", "-anim", "-mostlyineffective", "-extremelyeffective",
             "-crit", "-supereffective", "-resisted", "-immune", "-miss", "-fail", "-notarget");
     private static final Set<String> MECHANICS_EVENTS = Set.of("switch", "drag", "replace", "detailschange", "-formechange",
             "-transform", "-terastallize", "-start", "-end", "-activate", "-item", "-enditem", "-ability", "-endability",

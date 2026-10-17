@@ -53,8 +53,11 @@ public final class CobblemonMechanics {
     // Deliberately small fixed-power/no-secondary allowlist, checked against the pinned moves.js.
     private static final Map<String, Move> MOVES = Map.ofEntries(
             Map.entry("tackle", new Move("tackle", "normal", 40, true, 0, Map.of(), true)),
+            Map.entry("swift", new Move("swift", "normal", 60, false, 0, Map.of(), true)),
             Map.entry("scratch", new Move("scratch", "normal", 40, true, 0, Map.of(), true)),
             Map.entry("quickattack", new Move("quickattack", "normal", 40, true, 1, Map.of(), true)),
+            Map.entry("shadowsneak", new Move("shadowsneak", "ghost", 40, true, 1, Map.of(), true)),
+            Map.entry("recover", new Move("recover", "normal", 0, false, 0, Map.of(), false)),
             Map.entry("extremespeed", new Move("extremespeed", "normal", 80, true, 2, Map.of(), true)),
             Map.entry("shadowclaw", new Move("shadowclaw", "ghost", 70, true, 0, Map.of(), true)),
             Map.entry("psychocut", new Move("psychocut", "psychic", 70, true, 0, Map.of(), true)),
@@ -84,6 +87,10 @@ public final class CobblemonMechanics {
     /** Weather acts before crit/random/STAB, so scaling the final interval is wrong. */
     static Damage damage(String moveId, Profile attacker, Actor attackerState,
                          Profile target, Actor targetState, Critical critical, int weatherNumerator, int weatherDenominator) {
+        return damage(moveId, attacker, attackerState, target, targetState, critical, weatherNumerator, weatherDenominator, 1, 1);
+    }
+    static Damage damage(String moveId, Profile attacker, Actor attackerState, Profile target, Actor targetState,
+                         Critical critical, int weatherNumerator, int weatherDenominator, int powerNumerator, int powerDenominator) {
         bound(attacker, attackerState); bound(target, targetState); Objects.requireNonNull(critical);
         Move move = move(moveId);
         if (move == null || move.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
@@ -98,6 +105,8 @@ public final class CobblemonMechanics {
                 || !target.maxHp().known() || !attackerState.stages().containsKey(offense)
                 || !targetState.stages().containsKey(defense) || !attackerState.status().known())
             return Damage.unknown("PUBLIC_STAT_STAGE_LEVEL_HP_OR_STATUS_BOUNDS_MISSING");
+        int power = (int) halfDown(move.power(), powerNumerator, powerDenominator);
+        if (power < 1 || power > 1000) return Damage.unknown("BASE_POWER_MODIFIER_OUTSIDE_SLICE");
         int low = Integer.MAX_VALUE, high = 0;
         boolean stab = attacker.types().value().contains(move.type());
         boolean burn = move.physical() && attackerState.status().value().equals("brn");
@@ -108,9 +117,9 @@ public final class CobblemonMechanics {
             if (stage(attacker.stat(offense).value().low(), aStage) == 0
                     || stage(target.stat(defense).value().low(), dStage) == 0)
                 return Damage.unknown("ZERO_EFFECTIVE_STAT_OUTSIDE_SLICE");
-            int min = hit(attacker.level().value(), move.power(), stage(attacker.stat(offense).value().low(), aStage),
+            int min = hit(attacker.level().value(), power, stage(attacker.stat(offense).value().low(), aStage),
                     stage(target.stat(defense).value().high(), dStage), stab, exponent, burn, crit, 85, weatherNumerator, weatherDenominator);
-            int max = hit(attacker.level().value(), move.power(), stage(attacker.stat(offense).value().high(), aStage),
+            int max = hit(attacker.level().value(), power, stage(attacker.stat(offense).value().high(), aStage),
                     stage(target.stat(defense).value().low(), dStage), stab, exponent, burn, crit, 100, weatherNumerator, weatherDenominator);
             if (min < 0 || max < 0 || max > 10000) return Damage.unknown("DAMAGE_OVERFLOW_OUTSIDE_SLICE");
             low = Math.min(low, min); high = Math.max(high, max);

@@ -23,7 +23,8 @@ public final class SimulatorDomainBridge {
     private static final Map<Object, State> STATES = new WeakHashMap<>();
     private static final class State {
         long epoch; boolean boot, source; int mutations; Object context, dispatcher;
-        Value nativeFactories;
+        Value nativeFactories, sourceAnchor;
+        boolean pack;
         NativePending nativePending;
         RuntimeSourceAudit.Report audit = new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
     }
@@ -47,9 +48,29 @@ public final class SimulatorDomainBridge {
         }
         return pins;
     }
-    private static RuntimeSourceAudit.Report verifySource(Object service) {
+    private static String publicModules() {
+        return "{Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,"
+                    + "BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,"
+                    + "Pokemon:require('./sim/pokemon').Pokemon,"
+                    + "Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,"
+                    + "DataMove:require('./sim/dex-moves').DataMove,BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,"
+                    + "Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon}";
+    }
+    private static Map<String,Set<String>> alternatives(String name) throws IOException {
+        var result = new TreeMap<String,Set<String>>();
+        for (String line : resource(name).lines().toList()) {
+            String[] p = line.split("\t", -1);
+            if (p.length != 3 || result.put(p[0], Set.of(p[1],p[2])) != null) throw new IOException("invalid profile pins");
+        }
+        return result;
+    }
+    private static RuntimeSourceAudit.Report verifySource(Object service, boolean pack) {
         try {
-            return RuntimeSourceAudit.inspect(Path.of("showdown"), pins("runtime-domain-files.tsv"),
+            var required = new TreeMap<String,Set<String>>();
+            pins("runtime-domain-files.tsv").forEach((k,v)->required.put(k,Set.of(v)));
+            if (pack) required.putAll(alternatives("runtime-pack-files.tsv"));
+            return RuntimeSourceAudit.inspectAlternatives(Path.of("showdown"), required,
+                    pack ? alternatives("runtime-pack-optional.tsv") : Map.of(),
                     pins("runtime-domain-classes.tsv"), name -> {
                 try (var stream = service.getClass().getResourceAsStream("/" + name)) {
                     return stream == null ? null : stream.readAllBytes();
@@ -64,15 +85,25 @@ public final class SimulatorDomainBridge {
     public static synchronized void bootStarting(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null; s.mutations = 0;
         s.nativeFactories = null; s.nativePending = null;
-        s.audit = verifySource(service); s.source = s.audit.verified();
+        s.pack = false; s.sourceAnchor = null;
+        s.audit = verifySource(service, false);
+        if (!s.audit.verified()) {
+            var profile = verifySource(service, true);
+            if (profile.verified()) { s.audit = profile; s.pack = true; }
+        }
+        s.source = s.audit.verified();
     }
     public static synchronized void bootFinished(GraalShowdownService service) {
         var s = state(service); s.epoch++;
-        var finished = verifySource(service);
+        var finished = verifySource(service, s.pack);
         if (s.source || !finished.verified()) s.audit = finished;
         s.source &= finished.verified(); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
         s.boot = s.source && s.context != null && s.dispatcher != null;
-        s.nativeFactories = null; s.nativePending = null;
+        s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null;
+        if (s.boot) try {
+            s.sourceAnchor = service.getContext().eval("js", resource("runtime-source-anchor.js"))
+                    .execute(service.getContext().eval("js", "(" + publicModules() + ")"));
+        } catch (IOException | RuntimeException unavailable) { s.boot = false; }
         logSourceFingerprints(service);
     }
     private static void logSourceFingerprints(Object service) {
@@ -90,7 +121,7 @@ public final class SimulatorDomainBridge {
     }
     public static synchronized void invalidate(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null;
-        s.nativeFactories = null; s.nativePending = null;
+        s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null;
     }
     public static synchronized void mutationStarting(Object service) { var s = state(service); s.epoch++; s.mutations++; }
     public static synchronized void mutationFinished(Object service) { var s = state(service); s.epoch++; s.mutations = Math.max(0, s.mutations - 1); }
@@ -162,26 +193,22 @@ public final class SimulatorDomainBridge {
     public static RuntimeDomain capture(GraalShowdownService service, UUID battleId, BooleanSupplier choiceCurrent) {
         try {
             if (!choiceCurrent.getAsBoolean()) return null;
-            Object context; long epoch; Value nativeFactories;
+            Object context; long epoch; Value nativeFactories, sourceAnchor; boolean pack;
             synchronized (SimulatorDomainBridge.class) {
                 var s = STATES.get(service);
                 if (s == null || !s.boot || s.mutations != 0) return null;
-                context = s.context; epoch = s.epoch; nativeFactories=s.nativeFactories;
+                context = s.context; epoch = s.epoch; nativeFactories=s.nativeFactories; sourceAnchor=s.sourceAnchor; pack=s.pack;
             }
-            if (!current(service, context, epoch)) return null;
+            if (sourceAnchor == null || !current(service, context, epoch)) return null;
             // battleMap is the source-audited index.js lexical binding. Only the
             // public configuration fields named in the probe may be inspected.
-            String modules = "{Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,"
-                    + "BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,"
-                    + "Pokemon:require('./sim/pokemon').Pokemon,"
-                    + "Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,"
-                    + "DataMove:require('./sim/dex-moves').DataMove,BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,"
-                    + "Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon}";
+            String modules = publicModules();
             String function = resource("runtime-domain-probe.js");
             Value probe=service.getContext().eval("js",function);
             Value publicModules=service.getContext().eval("js","("+modules+")");
             Value publicBattle=service.getContext().eval("js","battleMap.get('"+battleId+"').battle");
-            String json = probe.execute(publicBattle,publicModules,false,nativeFactories).asString();
+            Value captured = probe.execute(publicBattle,publicModules,false,nativeFactories,sourceAnchor,true);
+            String json = captured.getMember("json").asString();
             if (json.length() > 12_000_000 || !current(service, context, epoch)) return null;
             JsonObject raw = JsonParser.parseString(json).getAsJsonObject();
             var components = new TreeMap<String,String>();
@@ -194,22 +221,15 @@ public final class SimulatorDomainBridge {
             if (registry.length() > 4_000_000 || raw.get("registryCount").getAsInt() > 8192) return null;
             components.put("registryReceipt", hash(registry.getBytes(StandardCharsets.UTF_8)));
             BooleanSupplier lifecycle = () -> choiceCurrent.getAsBoolean() && current(service, context, epoch);
-            var registryLease = new RuntimeRegistryLease(components.get("registryReceipt"), lifecycle, () -> {
-                // Recheck only global public configuration, never actor events,
-                // moves/PP, teams or private requests. Registry changes outside
-                // the observed service API must also withdraw an old receipt.
-                String observed = probe.execute(publicBattle,publicModules,true,nativeFactories).asString();
-                if (observed.length() > 4_500_000) return null;
-                JsonObject fresh = JsonParser.parseString(observed).getAsJsonObject();
-                if (!fresh.get("registryEquivalent").getAsBoolean()) return null;
-                return hash(fresh.get("registryReceipt").getAsString().getBytes(StandardCharsets.UTF_8));
-            });
-            var expected = pins("runtime-domain-components.tsv");
+            Value configurationLease = captured.getMember("current");
+            var registryLease = new RuntimeRegistryLease(components.get("registryReceipt"), lifecycle, () ->
+                    configurationLease.execute().asBoolean() ? components.get("registryReceipt") : null);
+            var expected = pins(pack ? "runtime-pack-components.tsv" : "runtime-domain-components.tsv");
             boolean format = raw.get("mod").getAsString().equals("cobblemon") && raw.get("gen").getAsInt() == 9
                     && raw.get("gameType").getAsString().equals("singles") && Objects.equals(components.get("format"), expected.get("format"));
             return new RuntimeDomain(new RuntimeDomain.Snapshot(format, raw.get("extraEvents").getAsBoolean(),
                     raw.get("overrides").getAsBoolean(),
-                    raw.get("registryEquivalent").getAsBoolean(), components), expected, true,
+                    raw.get("registryEquivalent").getAsBoolean(), raw.get("scopedRegistryEquivalent").getAsBoolean(), components), expected, true,
                     registryLease);
         } catch (IOException | RuntimeException unavailable) { return null; }
     }

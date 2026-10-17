@@ -10,7 +10,7 @@ import java.util.TreeMap;
 
 /** Source-engine configuration contracts, with artificial state and no Minecraft claim. */
 public final class SourceVerification {
-    private static void verifyNativeRecovery(Context engine) {
+    static void verifyNativeRecovery(Context engine) {
         var wire = engine.eval("js", """
             (()=>{
               const b=new (require('./sim/battle').Battle)({formatid:'gen9customgame',seed:[7,11,13,17]});
@@ -54,8 +54,9 @@ public final class SourceVerification {
     }
 
     public static void main(String[] args) throws Exception {
-        DispatchIntegrationRegression.run(Path.of(args[1]));
         Path simulator = Path.of(args[0]).toAbsolutePath();
+        if (args.length > 2) { PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3); return; }
+        DispatchIntegrationRegression.run(Path.of(args[1]));
         Path resources = Path.of("src/main/resources/com/maestroai/training");
         var expected = new TreeMap<String,String>();
         for (String line : Files.readAllLines(resources.resolve("runtime-domain-components.tsv"))) {

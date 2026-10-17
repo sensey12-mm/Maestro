@@ -74,6 +74,16 @@ final class RuntimeEvidenceRegression {
             Files.writeString(root.resolve("index.js"),"changed hook");
             check(RuntimeSourceAudit.inspect(root,files,classes,n->clazz).reason()==RuntimeSourceAudit.Reason.FILE_HASH_MISMATCH);
             Files.write(root.resolve("index.js"),code);
+            var alternatives=Map.of("index.js",Set.of(hash(code),hash("different exact pinned source".getBytes())));
+            check(RuntimeSourceAudit.inspectAlternatives(root,alternatives,Map.of(),classes,n->clazz).verified());
+            var optional=Map.of("unused.js",Set.of(hash(code)));
+            check(RuntimeSourceAudit.inspectAlternatives(root,alternatives,optional,classes,n->clazz).verified());
+            Files.write(root.resolve("unused.js"),code);
+            check(RuntimeSourceAudit.inspectAlternatives(root,alternatives,optional,classes,n->clazz).verified());
+            Files.writeString(root.resolve("unused.js"),"changed optional source");
+            check(RuntimeSourceAudit.inspectAlternatives(root,alternatives,optional,classes,n->clazz).reason()==RuntimeSourceAudit.Reason.FILE_HASH_MISMATCH);
+            Files.delete(root.resolve("unused.js"));
+            check(RuntimeSourceAudit.inspectAlternatives(root,alternatives,Map.of("../escape",Set.of(hash(code))),classes,n->clazz).reason()==RuntimeSourceAudit.Reason.MANIFEST_INVALID);
             Files.writeString(root.resolve("PRIVATE_PLAYER_CONFIG.json"),"NEVER_LOG_ME");
             var unknown=RuntimeSourceAudit.inspect(root,files,classes,n->clazz);
             check(unknown.reason()==RuntimeSourceAudit.Reason.UNEXPECTED_SOURCE_FILE && unknown.reference().isEmpty());
@@ -107,6 +117,24 @@ final class RuntimeEvidenceRegression {
     }
     static void run() {
         identity();
+        var annotated=stream("Pressure",false,false);
+        int events=annotated.mechanicsEvents().size();
+        String start="update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L100|100/100\n|switch|p2a: Foe|Mew, L80|100/100\n|-ability|p2a: Foe|Pressure\n|turn|1\n";
+        annotated.update(List.of(start,"update\n|-enditem|p2a: Foe|Focus Sash",
+                "update\n|-nothing\n|-anim|p1a: Own|Tackle|p2a: Foe\n|-mostlyineffective|p2a: Foe\n|-extremelyeffective|p2a: Foe"));
+        check(annotated.coverageUnknown().isEmpty() && annotated.mechanicsEvents().size()==events);
+        for(String prior:List.of("U-turn","Baton Pass")) {
+            var p=new PublicProtocolEvidence();p.update(List.of(start,"update\n|move|p1a: Own|"+prior+"|p2a: Foe\n|switch|p1a: Other|Arceus, L100|100/100\n|turn|2"));
+            var e=provider();e.update(p);var field=new PublicFieldEvidence().update(p,e);
+            check(field.unknown().isEmpty()==prior.equals("U-turn"));
+        }
+        for(boolean ended:List.of(false,true)) {
+            var p=new PublicProtocolEvidence();p.update(List.of(start,"update\n|move|p1a: Own|Iron Head|p2a: Foe\n|cant|p2a: Foe|flinch"+(ended?"\n|turn|2":"")));
+            var e=provider();e.update(p);var field=new PublicFieldEvidence().update(p,e);
+            check(field.allActorsCovered()==ended);
+        }
+        var unknown=new PublicProtocolEvidence();unknown.update(List.of(start,"update\n|-unknown-pack-effect|p2a: Foe"));
+        check(!unknown.coverageUnknown().isEmpty());
         try { provenance(); } catch(Exception e){throw new AssertionError("source provenance fixture",e);}
         System.out.println("Runtime public-evidence regressions PASS: "+checks+" checks");
     }

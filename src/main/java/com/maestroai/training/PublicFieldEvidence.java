@@ -99,6 +99,12 @@ public final class PublicFieldEvidence {
             return new Hazards(observed.layers(), true, token() + ":source-verified-initial-field-and-side-events");
         }
     }
+    // Past-only declarative outcomes: current public HP/status/stages and
+    // ordinary switches carry their effects. This does not grant future damage,
+    // drain, pivot or secondary-effect forecasting. Exact source/registry proof
+    // includes every ID below; unsupported transfers/volatiles still poison state.
+    private static final Set<String> OBSERVED_ONLY = Set.of("uturn","ironhead","icebeam","moonblast","focusblast",
+            "astralbarrage","psyshock","drainingkiss","energyball","closecombat","rocktomb","shadowball","hypervoice","aurasphere");
     private long epoch;
     private Capture current;
     public void reset() { epoch++; current = null; }
@@ -106,7 +112,7 @@ public final class PublicFieldEvidence {
         return raw.toLowerCase(Locale.ROOT).replaceFirst("^(move|ability):\\s*", "").replaceAll("[^a-z0-9]", "");
     }
     private static final class Mutable {
-        String slot, name; int entry; boolean covered; Set<String> volatiles = new HashSet<>();
+        String slot, name; int entry; boolean covered, transientFlinch; Set<String> volatiles = new HashSet<>();
     }
     public Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence) {
         epoch++; Set<String> unknown = new TreeSet<>();
@@ -132,7 +138,7 @@ public final class PublicFieldEvidence {
                 wind.put("p1", false); wind.put("p2", false); continue;
             }
             if (event.equals("turn")) {
-                turn = Integer.parseInt(p[2]); active.values().forEach(a -> a.volatiles.remove("protect")); continue;
+                turn = Integer.parseInt(p[2]); active.values().forEach(a -> { a.volatiles.remove("protect"); a.transientFlinch=false; }); continue;
             }
             if (event.equals("-weather")) {
                 String value = p.length >= 3 ? key(p[2]) : "";
@@ -170,6 +176,9 @@ public final class PublicFieldEvidence {
             Mutable a = active.get(slot);
             if (a == null || !a.name.equals(name)) { unknown.add("ACTOR_BINDING_UNKNOWN"); continue; }
             if (event.equals("replace")) { a.covered = false; unknown.add("REVEAL_EXECUTION_HISTORY_UNRESOLVED"); continue; }
+            if (event.equals("cant") && p.length > 3 && key(p[3]).equals("flinch")) {
+                a.transientFlinch = true; continue; // duration1 in the pinned conditions table
+            }
             if (event.equals("-singleturn")) {
                 if (p.length > 3 && key(p[3]).equals("protect")) a.volatiles.add("protect"); else a.covered = false;
             } else if (Set.of("-start", "-end").contains(event)) {
@@ -188,7 +197,7 @@ public final class PublicFieldEvidence {
                 // actions in the HP-exchange evaluator. A current runtime source
                 // certificate is still required before any field result is used.
                 boolean observedHazardSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb").contains(key(p[3]));
-                if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !observedHazardSetter) {
+                if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedHazardSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }
                 for (int i = 4; i < p.length; i++) if (p[i].startsWith("[")) {
@@ -198,7 +207,7 @@ public final class PublicFieldEvidence {
         }
         if (!start || !gen9 || !singles || turn == 0) unknown.add("WITNESSED_GEN9_SINGLES_START_OR_TURN_MISSING");
         Map<String, Active> actors = new HashMap<>();
-        active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered)));
+        active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered && !a.transientFlinch)));
         current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol); return current;
     }
 }

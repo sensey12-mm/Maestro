@@ -10,9 +10,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.request
+import re
 import zipfile
 
 DEPENDENCY_SHA256 = 'f7c25955176badc444ad6211fc556514fedbdba776227f105fe899f8819d74e3'
+PACK_REVISION = '2a6d0efb8a45652769c4fdecb8c6e26bbd7aabc9'
+PACK_BASE = 'https://raw.githubusercontent.com/yajatkaul/CobblemonMegaShowdown/' + PACK_REVISION + '/common/src/main/resources/assets/mega_showdown/showdown/'
+
 SIMULATOR_SHA256 = '1c398031f28fefcb2ce6b44a5ca289061ed4c5d0dccefaae0f7c070b3f7e8d10'
 
 
@@ -59,7 +64,7 @@ def verify_public_inputs(dependency, resources):
         for key, name in expected.items(): checked_bytes(archive.read(name), pins[key])
         fixtures = {
             'weavile': ('pressure', {'shadowclaw', 'swordsdance'}),
-            'mewtwo': ('pressure', {'psychocut', 'bulkup', 'aurasphere', 'nastyplot', 'calmmind', 'recover'}),
+            'mewtwo': ('pressure', {'psychocut', 'swift', 'bulkup', 'aurasphere', 'nastyplot', 'calmmind', 'recover'}),
             'skarmory': ('sturdy', {'spikes', 'stealthrock', 'roost', 'whirlwind'}),
             'wobbuffet': ('shadowtag', {'splash', 'encore', 'counter', 'mirrorcoat'}),
             'ditto': ('imposter', {'transform'}),
@@ -142,11 +147,70 @@ class SourceGuards(unittest.TestCase):
             with self.assertRaises(ValueError): cache_dependency(Path(folder))
 
 
+PACK_PATHS = frozenset(['data/abilities.js','data/conditions.js','data/moves.js','index.js',
+    'sim/battle-actions.js','sim/battle.js','sim/side.js'] + ['data/mods/cobblemon/' + name
+    for name in ('items.js','conditions.js','typechart.js','moves.js','abilities.js')])
+
+
+def pack_manifest(resources):
+    tables = []
+    for table, expected in [('runtime-pack-files.tsv', PACK_PATHS),
+                            ('runtime-pack-optional.tsv', frozenset(['sim/pokemons.js']))]:
+        pins = {}
+        for line in (resources / table).read_text().splitlines():
+            fields = line.split('\t')
+            if len(fields) != 3: raise ValueError('Invalid public source pins')
+            name, lf, crlf = fields
+            if name in pins or not all(re.fullmatch('[a-f0-9]{64}', p) for p in (lf, crlf)):
+                raise ValueError('Invalid or duplicate public source pins')
+            pins[name] = (lf, crlf)
+        if set(pins) != expected: raise ValueError('Public source inventory differs')
+        tables.append(pins)
+    return tables[0] | tables[1]
+
+
+def pack_sources(resources):
+    result = {}
+    for name, (lf, crlf) in pack_manifest(resources).items():
+        asset = 'pokemon.js' if name == 'sim/pokemons.js' else ('mods/' if name.startswith('data/mods/') else '') + Path(name).name
+        with urllib.request.urlopen(PACK_BASE + asset, timeout=60) as response:
+            data = response.read(8 * 1024 * 1024 + 1)
+        checked_bytes(data, lf)
+        if b'\r' in data: raise ValueError('Unexpected pinned source line layout')
+        checked_bytes(data.replace(b'\n', b'\r\n'), crlf)
+        result[name] = data
+    return result
+
+
+class PackSourceGuards(unittest.TestCase):
+    def test_exact_manifest(self):
+        self.assertEqual(len(pack_manifest(Path('src/main/resources/com/maestroai/training'))), 13)
+
+    def test_missing_added_duplicate_or_traversal_pin(self):
+        resources = Path('src/main/resources/com/maestroai/training')
+        original = (resources / 'runtime-pack-files.tsv').read_text()
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / 'runtime-pack-optional.tsv').write_text((resources / 'runtime-pack-optional.tsv').read_text())
+            for text in [original.split('\n', 1)[1], original + original.splitlines()[0] + '\n',
+                         original + '../private.js\t' + '0'*64 + '\t' + '1'*64 + '\n', original.replace('data/abilities.js','data/custom.js')]:
+                (folder / 'runtime-pack-files.tsv').write_text(text)
+                with self.assertRaises(ValueError): pack_manifest(folder)
+
+    def test_layout_hash_is_not_arbitrary_normalization(self):
+        raw = b"const x = 'safe';\n"
+        pin = hashlib.sha256(raw.replace(b'\n',b'\r\n')).hexdigest()
+        checked_bytes(raw.replace(b'\n',b'\r\n'), pin)
+        for changed in [raw, raw + b'\n', raw.replace(b'safe',b'other'), raw.replace(b' ',b'  ')]:
+            with self.assertRaises(ValueError): checked_bytes(changed, pin)
+
+
 def main():
     if sys.argv[1:] == ['--self-test']:
         from runtime_hook_oracle import HookOracleRegression
         suite = unittest.TestSuite((
             unittest.defaultTestLoader.loadTestsFromTestCase(SourceGuards),
+            unittest.defaultTestLoader.loadTestsFromTestCase(PackSourceGuards),
             unittest.defaultTestLoader.loadTestsFromTestCase(HookOracleRegression),
         ))
         return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
@@ -165,6 +229,21 @@ def main():
         subprocess.run(['node', 'verification/source_oracle.cjs', folder], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                         'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
+    assets = pack_sources(Path('src/main/resources/com/maestroai/training'))
+    with tempfile.TemporaryDirectory(prefix='maestroai-pack-source-') as folder:
+        with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
+            safe_entries(archive); archive.extractall(folder)
+        for name, data in assets.items():
+            (Path(folder) / name).write_bytes(data.replace(b'\n', b'\r\n'))
+        subprocess.run(['node', 'verification/source_oracle.cjs', folder], check=True)
+        subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
+                        'sourceVerification', '-PverificationSource=' + folder,
+                        '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true', '--stacktrace'], check=True)
+        for name, data in assets.items(): (Path(folder) / name).write_bytes(data)
+        subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
+                        'sourceVerification', '-PverificationSource=' + folder,
+                        '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true',
+                        '-PverificationLayoutOnly=true', '--stacktrace'], check=True)
     print('Pinned external source checks PASS; temporary source tree removed; no Minecraft acceptance claimed')
     return 0
 

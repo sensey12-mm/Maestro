@@ -77,7 +77,23 @@ public final class RuntimeSourceAudit {
     }
     public static Report inspect(Path directory, Map<String,String> files,
                                  Map<String,String> classes, Function<String,byte[]> classBytes) {
-        if (!valid(files) || !valid(classes)) return new Report(Reason.MANIFEST_INVALID, "");
+        return inspect(directory, files, Map.of(), classes, classBytes);
+    }
+    /** Complete required tree plus explicitly pinned optional, unused public source. */
+    public static Report inspect(Path directory, Map<String,String> files, Map<String,String> optional,
+                                 Map<String,String> classes, Function<String,byte[]> classBytes) {
+        var requiredPins = new TreeMap<String,Set<String>>(); files.forEach((k,v)->requiredPins.put(k,Set.of(v)));
+        var optionalPins = new TreeMap<String,Set<String>>(); optional.forEach((k,v)->optionalPins.put(k,Set.of(v)));
+        return inspectAlternatives(directory, requiredPins, optionalPins, classes, classBytes);
+    }
+    private static boolean validPins(Map<String,Set<String>> pins) {
+        return !pins.isEmpty() && pins.entrySet().stream().allMatch(e -> !e.getValue().isEmpty()
+                && e.getValue().size() <= 2 && e.getValue().stream().allMatch(v -> valid(Map.of(e.getKey(),v))));
+    }
+    public static Report inspectAlternatives(Path directory, Map<String,Set<String>> files, Map<String,Set<String>> optional,
+                                            Map<String,String> classes, Function<String,byte[]> classBytes) {
+        if (!validPins(files) || !valid(classes) || !optional.isEmpty() && !validPins(optional)
+                || optional.keySet().stream().anyMatch(files::containsKey)) return new Report(Reason.MANIFEST_INVALID, "");
         try {
             for (String name : new TreeSet<>(classes.keySet())) {
                 byte[] bytes = classBytes.apply(name);
@@ -94,15 +110,17 @@ public final class RuntimeSourceAudit {
                     String name = root.relativize(p).toString().replace('\\','/');
                     // Do not inspect/hash a new JSON file: it could be runtime
                     // data rather than code. Inventory mismatch suffices.
-                    if (!files.containsKey(name)) return new Report(Reason.UNEXPECTED_SOURCE_FILE, "");
+                    if (!files.containsKey(name) && !optional.containsKey(name)) return new Report(Reason.UNEXPECTED_SOURCE_FILE, "");
                     found.add(name);
                 }
             }
-            for (String name : new TreeSet<>(files.keySet())) {
+            var checked = new TreeMap<>(files);
+            optional.forEach((name, pin) -> { if (found.contains(name)) checked.put(name, pin); });
+            for (String name : checked.keySet()) {
                 if (!found.contains(name)) return new Report(Reason.FILE_MISSING, name);
                 Path p = root.resolve(name);
                 if (!p.toRealPath().startsWith(root)) return new Report(Reason.SOURCE_LINK_UNSUPPORTED, "");
-                if (!hash(Files.readAllBytes(p)).equals(files.get(name))) return new Report(Reason.FILE_HASH_MISMATCH, name);
+                if (!checked.get(name).contains(hash(Files.readAllBytes(p)))) return new Report(Reason.FILE_HASH_MISMATCH, name);
             }
             return new Report(Reason.VERIFIED, "");
         } catch (IOException | RuntimeException unavailable) {
