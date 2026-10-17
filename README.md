@@ -11,10 +11,12 @@ python3 verification/check_repository.py --self-test
 python3 verification/check_repository.py
 bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression
 python3 verification/check_jar.py --self-test
-python3 verification/check_jar.py build/libs/maestroai-1.0.0.jar
+python3 verification/check_jar.py
 python3 verification/source_oracle.py --self-test
 python3 verification/source_oracle.py
 ```
+
+Development builds use increasing patch versions (`1.0.1`, `1.0.2`, and so on). Update `version` in `gradle.properties` for each new mod development batch; rebuilding the same revision keeps its version. Gradle uses it for the JAR filename and Fabric metadata, and startup reports the loaded metadata version. The JAR checker derives its default path from that property. A version identifies a development revision; retain the commit/checksum for exact provenance.
 
 The last command requires Node.js 20 or newer. It checks the exact downloaded dependency and bundled simulator hashes, executes 50 fixed synthetic damage/hazard/order/speed cases in that simulator, and checks initialized public configuration using Cobblemon's relocated Graal engine. It does not reproduce every scenario in the larger bundled corpus or establish Minecraft compatibility. Upstream sources are extracted only into a temporary local test directory and are not included in this repository or the mod JAR.
 
