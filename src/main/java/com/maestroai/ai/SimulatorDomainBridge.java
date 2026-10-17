@@ -25,6 +25,7 @@ public final class SimulatorDomainBridge {
         long epoch; boolean boot, source; int mutations; Object context, dispatcher;
         Value nativeFactories, sourceAnchor;
         boolean pack;
+        RuntimeSourceAudit.Report packAudit;
         NativePending nativePending;
         RuntimeSourceAudit.Report audit = new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
     }
@@ -69,8 +70,13 @@ public final class SimulatorDomainBridge {
             var required = new TreeMap<String,Set<String>>();
             pins("runtime-domain-files.tsv").forEach((k,v)->required.put(k,Set.of(v)));
             if (pack) required.putAll(alternatives("runtime-pack-files.tsv"));
+            var optional = new TreeMap<String,Set<String>>();
+            if (pack) {
+                optional.putAll(alternatives("runtime-pack-optional.tsv"));
+                pins("runtime-pack-metadata.tsv").forEach((k,v)->optional.put(k,Set.of(v)));
+            }
             return RuntimeSourceAudit.inspectAlternatives(Path.of("showdown"), required,
-                    pack ? alternatives("runtime-pack-optional.tsv") : Map.of(),
+                    optional,
                     pins("runtime-domain-classes.tsv"), name -> {
                 try (var stream = service.getClass().getResourceAsStream("/" + name)) {
                     return stream == null ? null : stream.readAllBytes();
@@ -85,10 +91,11 @@ public final class SimulatorDomainBridge {
     public static synchronized void bootStarting(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null; s.mutations = 0;
         s.nativeFactories = null; s.nativePending = null;
-        s.pack = false; s.sourceAnchor = null;
+        s.pack = false; s.sourceAnchor = null; s.packAudit = null;
         s.audit = verifySource(service, false);
         if (!s.audit.verified()) {
             var profile = verifySource(service, true);
+            s.packAudit = profile;
             if (profile.verified()) { s.audit = profile; s.pack = true; }
         }
         s.source = s.audit.verified();
@@ -96,6 +103,7 @@ public final class SimulatorDomainBridge {
     public static synchronized void bootFinished(GraalShowdownService service) {
         var s = state(service); s.epoch++;
         var finished = verifySource(service, s.pack);
+        if (!s.pack && s.packAudit != null) s.packAudit = verifySource(service, true);
         if (s.source || !finished.verified()) s.audit = finished;
         s.source &= finished.verified(); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
         s.boot = s.source && s.context != null && s.dispatcher != null;
@@ -179,6 +187,10 @@ public final class SimulatorDomainBridge {
             var reasons = new TreeSet<String>(); reasons.add("LOADED_SIMULATOR_SOURCE_UNVERIFIED");
             reasons.add(s.audit.safeReason());
             if (!s.audit.reference().isEmpty()) reasons.add("SOURCE_REFERENCE:" + s.audit.reference());
+            if (s.packAudit != null && !s.packAudit.verified()) {
+                reasons.add("PACK_" + s.packAudit.safeReason());
+                if (!s.packAudit.reference().isEmpty()) reasons.add("PACK_SOURCE_REFERENCE:" + s.packAudit.reference());
+            }
             return Set.copyOf(reasons);
         }
         if (!s.boot) return Set.of("SIMULATOR_CONTEXT_NOT_ATTESTED");

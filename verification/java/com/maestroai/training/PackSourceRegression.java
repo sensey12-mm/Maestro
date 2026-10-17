@@ -19,6 +19,13 @@ final class PackSourceRegression {
                 a.getAsJsonObject("components").get(k).equals(b.getAsJsonObject("components").get(k)));
     }
     static void run(Path simulator, Path dependency, boolean layoutOnly) throws Exception {
+        if(!layoutOnly) {
+            check(simulator.getFileName().toString().equals("showdown"),"installer fixture root differs");
+            var child=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
+                    "-cp",System.getProperty("java.class.path"),BootProfileRegression.class.getName(),dependency.toString())
+                    .directory(simulator.getParent().toFile()).inheritIO().start();
+            check(child.waitFor()==0,"production boot profile child failed");
+        }
         Path resources=Path.of("src/main/resources/com/maestroai/training");
         var files=new TreeMap<String,Set<String>>();
         pins(resources.resolve("runtime-domain-files.tsv")).forEach((k,v)->files.put(k,Set.of(v)));
@@ -29,13 +36,47 @@ final class PackSourceRegression {
         for(String line:Files.readAllLines(resources.resolve("runtime-pack-optional.tsv"))) {
             var p=line.split("\t");optional.put(p[0],Set.of(p[1],p[2]));
         }
+        var metadata=pins(resources.resolve("runtime-pack-metadata.tsv"));
+        metadata.forEach((k,v)->optional.put(k,Set.of(v)));
         try(var jar=new ZipFile(dependency.toFile())) {
+            java.util.function.Function<String,byte[]> classBytes=name->{
+                try(var in=jar.getInputStream(jar.getEntry(name))){return in.readAllBytes();}
+                catch(Exception unavailable){return null;}
+            };
+            var classes=pins(resources.resolve("runtime-domain-classes.tsv"));
             var report=RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,
-                    pins(resources.resolve("runtime-domain-classes.tsv")),name->{
-                        try(var in=jar.getInputStream(jar.getEntry(name))){return in.readAllBytes();}
-                        catch(Exception unavailable){return null;}
-                    });
+                    classes,classBytes);
             check(report.verified(),"pack source inventory rejected: "+report);
+            var oldOptional=new TreeMap<>(optional); metadata.keySet().forEach(oldOptional::remove);
+            check(RuntimeSourceAudit.inspectAlternatives(simulator,files,oldOptional,classes,classBytes).reason()
+                    ==RuntimeSourceAudit.Reason.UNEXPECTED_SOURCE_FILE,"old profile did not reproduce installer-marker rejection");
+            Path marker=simulator.resolve("MSDPatch.json");byte[] saved=Files.readAllBytes(marker);
+            try {
+                for(String changed:List.of("{\"version\":\"1.0.1\"}","{\"version\":\"1.0.0\",\"private\":\"NEVER_LOG_ME\"}",
+                        "{\"version\":\"1.0.0\"}\n")) {
+                    Files.writeString(marker,changed);
+                    var rejected=RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes);
+                    check(rejected.reason()==RuntimeSourceAudit.Reason.FILE_HASH_MISMATCH
+                            && rejected.reference().equals("MSDPatch.json")&&!rejected.toString().contains("NEVER_LOG_ME"),
+                            "modified installer metadata accepted/leaked");
+                }
+                Files.delete(marker);
+                check(RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes).verified(),
+                        "optional absent metadata blocked exact source");
+                Files.createSymbolicLink(marker,simulator.resolve("index.js"));
+                check(RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes).reason()
+                        ==RuntimeSourceAudit.Reason.SOURCE_LINK_UNSUPPORTED,"linked metadata accepted");
+            } finally { Files.deleteIfExists(marker);Files.write(marker,saved); }
+            Path unknown=simulator.resolve("PRIVATE_PLAYER_SETTINGS.json");
+            try {
+                Files.writeString(unknown,"NEVER_LOG_ME");
+                var rejected=RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes);
+                check(rejected.reason()==RuntimeSourceAudit.Reason.UNEXPECTED_SOURCE_FILE&&rejected.reference().isEmpty(),
+                        "arbitrary JSON accepted or named");
+            } finally {Files.deleteIfExists(unknown);}
+            check(RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes).verified(),
+                    "exact installer source not restored");
+            System.out.println("Installer metadata provenance PASS: old-profile rejection, exact/absent marker, altered/private/linked/unknown negatives");
         }
         try(var engine=Context.newBuilder("js").allowIO(true).allowExperimentalOptions(true)
                 .option("engine.WarnInterpreterOnly","false").option("js.commonjs-require","true")

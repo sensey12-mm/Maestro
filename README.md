@@ -24,6 +24,8 @@ The repository safeguard checks exercise local-file ignore rules, required build
 
 Verification classes are excluded from the mod JAR. CI checks Java21 classes, expected resources/notices and unwanted archive entries; it publishes no artifacts. Experimental Shadow analysis remains observational; these tests do not promote it to live decisions or demonstrate battle win rates.
 
+The pinned pack-source check also executes the published MegaShowdown installer in a disposable Java host. Its exact version-marker bytes are allowed alongside the individually verified assets; a matching version string alone grants no source or operation scope. Altered markers, unlisted source files and unsupported runtime effects remain unverified.
+
 ## Runtime acceptance
 
 Actual Minecraft/server and installed external RCT datapack compatibility is **not yet accepted**. In particular, dependency loading, the `maestro` selector, trainer/datapack identity and references, battle initiation and turns, forced-switch legality and final battle handling require controlled runtime testing. Source/build checks cannot substitute for those tests. Back up an existing installation before an independently authorized test; do not treat this repository as a verified drop-in deployment.

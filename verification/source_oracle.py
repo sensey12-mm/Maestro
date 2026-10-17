@@ -208,10 +208,12 @@ class PackSourceGuards(unittest.TestCase):
 def main():
     if sys.argv[1:] == ['--self-test']:
         from runtime_hook_oracle import HookOracleRegression
+        from pack_loader_oracle import InstallerGuards
         suite = unittest.TestSuite((
             unittest.defaultTestLoader.loadTestsFromTestCase(SourceGuards),
             unittest.defaultTestLoader.loadTestsFromTestCase(PackSourceGuards),
             unittest.defaultTestLoader.loadTestsFromTestCase(HookOracleRegression),
+            unittest.defaultTestLoader.loadTestsFromTestCase(InstallerGuards),
         ))
         return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
     if sys.argv[1:]: raise ValueError('Unknown oracle argument')
@@ -231,17 +233,19 @@ def main():
                         'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
     assets = pack_sources(Path('src/main/resources/com/maestroai/training'))
     with tempfile.TemporaryDirectory(prefix='maestroai-pack-source-') as folder:
+        simulator_root = Path(folder) / 'showdown'
+        simulator_root.mkdir()
         with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
-            safe_entries(archive); archive.extractall(folder)
-        for name, data in assets.items():
-            (Path(folder) / name).write_bytes(data.replace(b'\n', b'\r\n'))
-        subprocess.run(['node', 'verification/source_oracle.cjs', folder], check=True)
+            safe_entries(archive); archive.extractall(simulator_root)
+        from pack_loader_oracle import run_installer
+        run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
+        subprocess.run(['node', 'verification/source_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                        'sourceVerification', '-PverificationSource=' + folder,
+                        'sourceVerification', '-PverificationSource=' + str(simulator_root),
                         '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true', '--stacktrace'], check=True)
-        for name, data in assets.items(): (Path(folder) / name).write_bytes(data)
+        for name, data in assets.items(): (simulator_root / name).write_bytes(data)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                        'sourceVerification', '-PverificationSource=' + folder,
+                        'sourceVerification', '-PverificationSource=' + str(simulator_root),
                         '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true',
                         '-PverificationLayoutOnly=true', '--stacktrace'], check=True)
     print('Pinned external source checks PASS; temporary source tree removed; no Minecraft acceptance claimed')
