@@ -24,7 +24,7 @@ public final class NativeRegistryEvidence {
             if(ids.isEmpty()) return null;
             // Exact pinned sendRegistryData$lambda$0 and joinToString recipe.
             var payload=new StringJoiner(", ","{","}");
-            copy.forEach((key,code)->payload.add("\""+key+"\": "+code));
+            copy.forEach((key,code)->payload.add("\""+key+"\": "+code.replaceAll("[\\r\\n]+"," ")));
             return new Dispatch(type,ids,payload.toString());
         } catch(RuntimeException unavailable) { return null; }
     }

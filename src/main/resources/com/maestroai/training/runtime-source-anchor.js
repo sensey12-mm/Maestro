@@ -49,6 +49,13 @@
   for(const id of Object.keys(dex.dataCache.Abilities)) conditionIds.add('ability:'+id);
   for(const id of Object.keys(dex.dataCache.Items)) conditionIds.add('item:'+id);
   for(const id of conditionIds) dex.conditions.getByID(id);
+  // The pinned Battle.runAction('start') lifecycle asks for a species-ID
+  // condition even when none exists. These negative lookups are cached only
+  // once actors enter, so a boot-only inventory cannot enumerate them all.
+  // Retain the exact native constructor/freeze identities, never an external
+  // callback, and compare the entire frozen result before accepting a miss.
+  const EmptyCondition = Object.getPrototypeOf(dex.conditions.getByID('none')).constructor;
+  const freezeCondition = modules.Utils.deepFreeze;
   cachePins.set('conditions',{name:'conditionCache',values:new Map(dex.conditions.conditionCache)});
   // Snapshot fields by value/callback identity as well as reference. Some native
   // cache entries are frozen; mutable entries still require a recursive guard.
@@ -82,6 +89,16 @@
       const d=Object.getOwnPropertyDescriptor(b,k);
       return d && !d.get && !d.set && entryEqual(a[k],d.value,budget);
     })());
+  };
+  const nativeConditionMiss = (id,value) => {
+    if(typeof id!=='string' || !/^[a-z0-9]{1,128}$/.test(id) || conditionIds.has(id)
+        || !value || Object.getPrototypeOf(value)!==EmptyCondition.prototype) return false;
+    const expected=freezeCondition(new EmptyCondition({name:id,exists:false}));
+    const before=Object.getOwnPropertyDescriptors(expected),after=Object.getOwnPropertyDescriptors(value);
+    const keys=Reflect.ownKeys(before);
+    if(Reflect.ownKeys(after).length!==keys.length || keys.some(k=>!after[k] ||
+        ['get','set','enumerable','writable','configurable'].some(flag=>!Object.is(before[k][flag],after[k][flag])))) return false;
+    return entryEqual(expected,value,{n:20000});
   };
   const callbacks = new Map(), methodPins = new Map();
   const tableCallbacks = (value, path, collect) => {
@@ -134,6 +151,9 @@
           throw Error('unverified public definition cache');
         for(const [id,value] of map) {
           const expected=values.get(id);
+          // An exact cached miss has no effect or callback and grants no actor,
+          // move, item or ability evidence. Unsupported operations stay UNKNOWN.
+          if(!expected && group==='conditions' && nativeConditionMiss(id,value)) continue;
           // Native dex invalidation may reconstruct an equal Effect instance.
           // Exact fields, source callbacks and prototype remain mandatory;
           // equal function source text is never an identity substitute.

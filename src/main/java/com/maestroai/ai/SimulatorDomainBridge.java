@@ -21,11 +21,18 @@ public final class SimulatorDomainBridge {
     private SimulatorDomainBridge() {}
     private static final String ROOT = "/com/maestroai/training/";
     private static final Map<Object, State> STATES = new WeakHashMap<>();
+    private enum CaptureFailure {
+        INITIALIZED_PUBLIC_PROBE_UNAVAILABLE, OWN_CHOICE_EXPIRED, PUBLIC_CONTEXT_CHANGED,
+        PUBLIC_MODULE_LOOKUP_REJECTED, PUBLIC_BATTLE_LOOKUP_REJECTED,
+        PUBLIC_CONFIGURATION_REJECTED, PUBLIC_CONFIGURATION_LIMIT,
+        PUBLIC_CONFIGURATION_DECODE_REJECTED
+    }
     private static final class State {
         long epoch; boolean boot, source; int mutations; Object context, dispatcher;
         Value nativeFactories, sourceAnchor;
         boolean pack;
         RuntimeSourceAudit.Report packAudit;
+        CaptureFailure captureFailure = CaptureFailure.INITIALIZED_PUBLIC_PROBE_UNAVAILABLE;
         NativePending nativePending;
         RuntimeSourceAudit.Report audit = new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
     }
@@ -92,6 +99,7 @@ public final class SimulatorDomainBridge {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null; s.mutations = 0;
         s.nativeFactories = null; s.nativePending = null;
         s.pack = false; s.sourceAnchor = null; s.packAudit = null;
+        s.captureFailure = CaptureFailure.INITIALIZED_PUBLIC_PROBE_UNAVAILABLE;
         s.audit = verifySource(service, false);
         if (!s.audit.verified()) {
             var profile = verifySource(service, true);
@@ -195,7 +203,11 @@ public final class SimulatorDomainBridge {
         }
         if (!s.boot) return Set.of("SIMULATOR_CONTEXT_NOT_ATTESTED");
         if (s.mutations != 0) return Set.of("PUBLIC_REGISTRY_MUTATION_NOT_FINISHED");
-        return Set.of("INITIALIZED_PUBLIC_PROBE_UNAVAILABLE");
+        return Set.of(s.captureFailure.name());
+    }
+    private static synchronized RuntimeDomain failed(GraalShowdownService service, CaptureFailure reason) {
+        state(service).captureFailure=reason;
+        return null;
     }
     private static synchronized boolean current(GraalShowdownService service, Object context, long epoch) {
         State s = STATES.get(service);
@@ -203,25 +215,32 @@ public final class SimulatorDomainBridge {
                 && s.dispatcher == service.getSendBattleMessageFunction();
     }
     public static RuntimeDomain capture(GraalShowdownService service, UUID battleId, BooleanSupplier choiceCurrent) {
+        CaptureFailure stage=CaptureFailure.OWN_CHOICE_EXPIRED;
         try {
-            if (!choiceCurrent.getAsBoolean()) return null;
+            if (!choiceCurrent.getAsBoolean()) return failed(service,stage);
             Object context; long epoch; Value nativeFactories, sourceAnchor; boolean pack;
             synchronized (SimulatorDomainBridge.class) {
                 var s = STATES.get(service);
                 if (s == null || !s.boot || s.mutations != 0) return null;
                 context = s.context; epoch = s.epoch; nativeFactories=s.nativeFactories; sourceAnchor=s.sourceAnchor; pack=s.pack;
             }
-            if (sourceAnchor == null || !current(service, context, epoch)) return null;
+            if (sourceAnchor == null || !current(service, context, epoch)) return failed(service,CaptureFailure.PUBLIC_CONTEXT_CHANGED);
             // battleMap is the source-audited index.js lexical binding. Only the
             // public configuration fields named in the probe may be inspected.
+            stage=CaptureFailure.PUBLIC_MODULE_LOOKUP_REJECTED;
             String modules = publicModules();
             String function = resource("runtime-domain-probe.js");
             Value probe=service.getContext().eval("js",function);
             Value publicModules=service.getContext().eval("js","("+modules+")");
+            stage=CaptureFailure.PUBLIC_BATTLE_LOOKUP_REJECTED;
             Value publicBattle=service.getContext().eval("js","battleMap.get('"+battleId+"').battle");
+            stage=CaptureFailure.PUBLIC_CONFIGURATION_REJECTED;
             Value captured = probe.execute(publicBattle,publicModules,false,nativeFactories,sourceAnchor,true);
             String json = captured.getMember("json").asString();
-            if (json.length() > 12_000_000 || !current(service, context, epoch)) return null;
+            if (json.length() > 12_000_000) return failed(service,CaptureFailure.PUBLIC_CONFIGURATION_LIMIT);
+            if (!current(service, context, epoch)) return failed(service,CaptureFailure.PUBLIC_CONTEXT_CHANGED);
+            if (!choiceCurrent.getAsBoolean()) return failed(service,CaptureFailure.OWN_CHOICE_EXPIRED);
+            stage=CaptureFailure.PUBLIC_CONFIGURATION_DECODE_REJECTED;
             JsonObject raw = JsonParser.parseString(json).getAsJsonObject();
             var components = new TreeMap<String,String>();
             for (var entry : raw.getAsJsonObject("components").entrySet())
@@ -230,7 +249,8 @@ public final class SimulatorDomainBridge {
             // including serialized callbacks. Exact callback identity is
             // checked inside the live initialized JS probe BEFORE serialization.
             String registry = raw.get("registryReceipt").getAsString();
-            if (registry.length() > 4_000_000 || raw.get("registryCount").getAsInt() > 8192) return null;
+            if (registry.length() > 4_000_000 || raw.get("registryCount").getAsInt() > 8192)
+                return failed(service,CaptureFailure.PUBLIC_CONFIGURATION_LIMIT);
             components.put("registryReceipt", hash(registry.getBytes(StandardCharsets.UTF_8)));
             BooleanSupplier lifecycle = () -> choiceCurrent.getAsBoolean() && current(service, context, epoch);
             Value configurationLease = captured.getMember("current");
@@ -243,6 +263,6 @@ public final class SimulatorDomainBridge {
                     raw.get("overrides").getAsBoolean(),
                     raw.get("registryEquivalent").getAsBoolean(), raw.get("scopedRegistryEquivalent").getAsBoolean(), components), expected, true,
                     registryLease);
-        } catch (IOException | RuntimeException unavailable) { return null; }
+        } catch (IOException | RuntimeException unavailable) { return failed(service,stage); }
     }
 }

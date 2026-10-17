@@ -239,6 +239,7 @@ def main():
             safe_entries(archive); archive.extractall(simulator_root)
         from pack_loader_oracle import run_installer
         run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
+        subprocess.run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['node', 'verification/source_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                         'sourceVerification', '-PverificationSource=' + str(simulator_root),

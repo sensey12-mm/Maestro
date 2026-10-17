@@ -26,6 +26,8 @@ Verification classes are excluded from the mod JAR. CI checks Java21 classes, ex
 
 The pinned pack-source check also executes the published MegaShowdown installer in a disposable Java host. Its exact version-marker bytes are allowed alongside the individually verified assets; a matching version string alone grants no source or operation scope. Altered markers, unlisted source files and unsupported runtime effects remain unverified.
 
+Runtime verification also exercises Cobblemon's original Java boot and registry serialization with a relocated engine and synthetic actors. Exact native empty-condition cache entries may be reconstructed after actor entry; modified entries and callbacks remain rejected. Original factory bytes and the actual normalized transport are verified separately. These integration checks do not attest an installed Minecraft instance.
+
 ## Runtime acceptance
 
 Actual Minecraft/server and installed external RCT datapack compatibility is **not yet accepted**. In particular, dependency loading, the `maestro` selector, trainer/datapack identity and references, battle initiation and turns, forced-switch legality and final battle handling require controlled runtime testing. Source/build checks cannot substitute for those tests. Back up an existing installation before an independently authorized test; do not treat this repository as a verified drop-in deployment.

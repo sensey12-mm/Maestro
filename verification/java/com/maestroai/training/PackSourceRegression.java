@@ -25,6 +25,11 @@ final class PackSourceRegression {
                     "-cp",System.getProperty("java.class.path"),BootProfileRegression.class.getName(),dependency.toString())
                     .directory(simulator.getParent().toFile()).inheritIO().start();
             check(child.waitFor()==0,"production boot profile child failed");
+            var runtime=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
+                    "-cp",dependency+java.io.File.pathSeparator+System.getProperty("java.class.path"),
+                    RuntimeCaptureRegression.class.getName())
+                    .directory(simulator.getParent().toFile()).inheritIO().start();
+            check(runtime.waitFor()==0,"native runtime capture child failed");
         }
         Path resources=Path.of("src/main/resources/com/maestroai/training");
         var files=new TreeMap<String,Set<String>>();
