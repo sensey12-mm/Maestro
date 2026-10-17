@@ -208,6 +208,7 @@ public class MaestroBattleAI extends RCTBattleAI {
      */
     private final Map<UUID, ElementalType> activeTeraTypes = new HashMap<>();
     private UUID currentBattleId = null;
+    private final OwnChoiceRecovery choiceRecovery = new OwnChoiceRecovery();
     private UUID lastSwitchDestination = null;
     private int lastSwitchTurn = -100;
     private final com.maestroai.training.OwnRequestTransport ownTransport = new com.maestroai.training.OwnRequestTransport();
@@ -244,6 +245,33 @@ public class MaestroBattleAI extends RCTBattleAI {
 
     public void ownTransportUnavailable() { ownTransport.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE"); }
 
+    /** Error-return is a second readiness notification, never a payload source.
+     * If a corrected request arrived first, upstream now restored mustChoose.
+     */
+    public void ownChoiceRejected(PokemonBattle battle,
+            com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor) {
+        ownRequestCorrected(battle, actor, actor.getRequest());
+    }
+
+    public void ownRequestCorrected(PokemonBattle battle,
+            com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor,
+            com.cobblemon.mod.common.battles.ShowdownActionRequest request) {
+        if (!ownTransportVersionSupported() || actor.getBattleAI() != this || actor.getBattle() != battle
+                || battle.getActor(actor.getShowdownId()) != actor || battle.getEnded()
+                || request == null || actor.getRequest() != request || actor.getActivePokemon().size() != 1
+                || !actor.getResponses().isEmpty()) return;
+        var active = actor.getActivePokemon().getFirst().getBattlePokemon();
+        var moves = request.getActive();
+        boolean ordinary = !request.getWait() && !request.getForceSwitch().contains(true)
+                && moves != null && moves.size() == 1 && moves.getFirst() != null;
+        if (active != null && choiceRecovery.corrected(battle, actor, request,
+                ownTransport.dispatchedTurn(battle, actor, battle.getTurn()), active.getUuid(),
+                actor.getMustChoose(), ordinary && moves.getFirst().getTrapped(), ordinary)) {
+            System.out.println("[MaestroAI] Retrying corrected own trapped-switch request");
+            actor.onChoiceRequested();
+        }
+    }
+
     public void ownTurnFinished(PokemonBattle battle,
             com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor, int turn) {
         if (actor.getBattleAI() == this && actor.getBattle() == battle) ownTransport.turnFinished(battle, turn);
@@ -277,12 +305,29 @@ public class MaestroBattleAI extends RCTBattleAI {
             } catch (RuntimeException unavailable) {
                 ownTransportUnavailable(); ownChoiceLease = null;
             }
-            return LivePromotionGate.choose(
+            ShowdownActionResponse response = LivePromotionGate.choose(
                 () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
                 null, null, false);
+            recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            return response;
         } finally {
             ownTransport.endChoice(); ownChoiceLease = null;
         }
+    }
+
+    private void recordOwnChoice(PokemonBattle battle, ActiveBattlePokemon activePokemon,
+            ShowdownMoveset moveset, boolean forceSwitch, ShowdownActionResponse response) {
+            if (activePokemon != null && activePokemon.getActor() != null && activePokemon.getBattlePokemon() != null) {
+                var actor = activePokemon.getActor();
+                int choiceTurn = ownTransport.dispatchedTurn(battle, actor, battle.getTurn());
+                choiceRecovery.submitted(battle, actor, actor.getRequest(), choiceTurn,
+                        activePokemon.getBattlePokemon().getUuid(), choiceTurn > 0 && !forceSwitch && response instanceof SwitchActionResponse
+                                && actor.getRequest() != null && !actor.getRequest().getWait()
+                                && !actor.getRequest().getForceSwitch().contains(true)
+                                && actor.getRequest().getActive() != null
+                                && actor.getRequest().getActive().size() == 1
+                                && moveset != null && !moveset.getTrapped());
+            }
     }
 
     private ShowdownActionResponse chooseLegacy(
@@ -5840,7 +5885,9 @@ public class MaestroBattleAI extends RCTBattleAI {
             var execution = fieldCapture == null ? null : new com.maestroai.training.ScopedExecution(fieldCapture, executionBindings,
                     domainScopes);
             List<String> revealedOpponentMoves = publicOpponent.revealedMoves();
-            Map<String, Integer> publicStages = publicOpponent.knownBoosts();
+            Map<String, Integer> publicStages = fieldCapture == null ? Map.of()
+                    : fieldCapture.stages(opponentObservation, runtimeDomain == null
+                        ? PublicTransitionState.Known.unknown() : runtimeDomain.effectiveState());
             String publicItem = publicOpponent.revealedItem();
             String publicLastSeenItem = publicIdentity == null ? null
                     : publicProtocolObserver.revealedItem(publicIdentity);
@@ -5849,8 +5896,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             boolean publicTransformed = publicIdentity != null
                     && publicProtocolObserver.transformed(publicIdentity);
             String publicAbility = publicOpponent.revealedAbility();
-            boolean uncertainStages = publicIdentity == null
-                    || publicProtocolObserver.stagesUncertain(publicIdentity);
+            boolean uncertainStages = publicStages.isEmpty();
             PublicInteractionModel.Interaction itemRule =
                     PublicInteractionModel.item(publicItem);
             PublicInteractionModel.Interaction abilityRule =
@@ -5916,9 +5962,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                                     : PublicTransitionState.Kind.UNKNOWN);
                 }
                 Map<String, PublicTransitionState.SwitchTarget> targets = new java.util.TreeMap<>();
-                var ownHazards = publicProtocolEvidence.sideHazards(
-                        activePokemon.getPNX() == null || activePokemon.getPNX().length() < 2
-                                ? "" : activePokemon.getPNX().substring(0, 2));
+                String ownSide = activePokemon.getPNX() == null || activePokemon.getPNX().length() < 2
+                        ? "" : activePokemon.getPNX().substring(0, 2);
+                var domainEffective = runtimeDomain == null ? PublicTransitionState.Known.<Boolean>unknown()
+                        : runtimeDomain.effectiveState();
+                var ownHazards = fieldCapture == null ? publicProtocolEvidence.sideHazards(ownSide)
+                        : fieldCapture.hazards(ownSide, domainEffective);
                 for (int i = 0; i < legalSwitches.size(); i++) {
                     String id = legalSwitches.get(i);
                     // Own max HP is allowed. Groundedness, immunity, effective typing and
@@ -5941,9 +5990,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         ownedProfiles.get("self").observation().status(),
                         opponentObservation == null ? PublicTransitionState.Known.unknown() : opponentObservation.status(),
                         ownHazards,
-                        publicProtocolEvidence.sideHazards(
-                                opponentSlot == null || opponentSlot.length() < 2
-                                        ? "" : opponentSlot.substring(0, 2)), targets, intents,
+                        fieldCapture == null ? publicProtocolEvidence.sideHazards(
+                                opponentSlot == null || opponentSlot.length() < 2 ? "" : opponentSlot.substring(0, 2))
+                                : fieldCapture.hazards(opponentSlot == null || opponentSlot.length() < 2
+                                        ? "" : opponentSlot.substring(0, 2), domainEffective), targets, intents,
                         publicTransformed ? java.util.Set.of("APPEARANCE_ONLY", "TRANSFORMED")
                                 : java.util.Set.of("APPEARANCE_ONLY"));
                 var transitionEvidence = new PublicTransitionState.Evidence(context, Map.of(), Map.of());
@@ -6166,8 +6216,9 @@ public class MaestroBattleAI extends RCTBattleAI {
         var types = new ArrayList<String>();
         for (var type : species.getTypes()) types.add(type.getName().toLowerCase(java.util.Locale.ROOT));
         try {
-            return new PublicMechanicsEvidence.Species(stats, types,
-                    publicName.equals("shedinja") && stats.get("hp") == 1 ? 1 : null);
+            return com.maestroai.training.PublicSpeciesCatalog.verified(publicName,
+                    new PublicMechanicsEvidence.Species(stats, types,
+                    publicName.equals("shedinja") && stats.get("hp") == 1 ? 1 : null));
         } catch (IllegalArgumentException outsideDomain) { return null; }
     }
 

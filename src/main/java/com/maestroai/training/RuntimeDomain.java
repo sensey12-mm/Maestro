@@ -11,11 +11,15 @@ import static com.maestroai.training.ExecutionCoverage.*;
 public final class RuntimeDomain {
     public static final String SOURCE = "cobblemon-7553235:initialized-domain-v1";
     public record Snapshot(boolean format, boolean extraEvents, boolean overrides,
-                           boolean exactRegistryOverlay, Map<String,String> components) {
+                           boolean exactRegistryOverlay, boolean scopedRegistryOverlay, Map<String,String> components) {
         public Snapshot { components = Map.copyOf(components); }
+        public Snapshot(boolean format, boolean extraEvents, boolean overrides, boolean exactRegistryOverlay,
+                        Map<String,String> components) {
+            this(format, extraEvents, overrides, exactRegistryOverlay, false, components);
+        }
         /** Prior synthetic fixtures may construct a conservative unknown override. */
         public Snapshot(boolean format, boolean extraEvents, boolean overrides, Map<String,String> components) {
-            this(format, extraEvents, overrides, false, components);
+            this(format, extraEvents, overrides, false, false, components);
         }
     }
     private final Snapshot snapshot;
@@ -36,27 +40,34 @@ public final class RuntimeDomain {
         return digest != null && digest.matches("[0-9a-f]{64}");
     }
     public Set<String> missing() {
-        var reasons = new TreeSet<String>();
+        var reasons = new TreeSet<>(sourceMissing());
         if (!current()) reasons.add("RUNTIME_DOMAIN_RECEIPT_EXPIRED");
+        return Set.copyOf(reasons);
+    }
+    private Set<String> sourceMissing() {
+        var reasons = new TreeSet<String>();
         if (!sourceFiles) reasons.add("LOADED_SIMULATOR_SOURCE_UNVERIFIED");
         if (!snapshot.format()) reasons.add("INITIALIZED_FORMAT_OR_DEX_UNSUPPORTED");
         if (snapshot.extraEvents()) reasons.add("DYNAMIC_FORMAT_HOOKS_UNVERIFIED");
-        // A nonempty public registry is permitted only when its complete
-        // data fields AND live callback object identities equal the exact
-        // initialized pinned dex definitions, under a current receipt.
-        if (snapshot.overrides() && (!snapshot.exactRegistryOverlay()
+        // A complete overlay can retain the original full-table receipt. The
+        // narrower path verifies every supported ID, its exact source callback
+        // position and all global hooks, then relies on per-actor/action checks.
+        // Unsupported IDs never acquire permission merely by coexisting.
+        if (snapshot.overrides() && (!(snapshot.exactRegistryOverlay() || snapshot.scopedRegistryOverlay())
                 || !validRegistryReceipt()))
             reasons.add("REGISTRY_CALLBACK_OR_FIELD_OVERLAY_UNVERIFIED");
-        for (String component : List.of("core", "tables", "speciesHooks"))
+        for (String component : List.of("core", snapshot.scopedRegistryOverlay() ? "operationTables" : "tables", "speciesHooks"))
             if (!matches(component)) reasons.add("INITIALIZED_" + component.toUpperCase(Locale.ROOT) + "_UNVERIFIED");
         return Set.copyOf(reasons);
     }
+    /** Scoped overlays certify only the fixed operations checked by ScopedExecution.
+     * Unknown registry IDs never become supported actor modifiers or moves. */
     public Known<Boolean> effectiveState() {
         return missing().isEmpty() ? Known.of(true, SOURCE + ":effective-state") : Known.unknown();
     }
     public Scopes scopes() {
         return Scopes.receipt(op -> {
-            if (!missing().isEmpty()) return Known.unknown();
+            if (!sourceMissing().isEmpty()) return Known.unknown();
             // Numeric opponent bounds need separately matching PUBLIC catalog data.
             if (Set.of(Operation.DAMAGE, Operation.SPEED, Operation.ORDER).contains(op) && !matches("catalog"))
                 return Known.unknown();

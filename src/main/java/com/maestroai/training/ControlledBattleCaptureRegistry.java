@@ -26,6 +26,7 @@ public final class ControlledBattleCaptureRegistry {
 
     public static void install() {
         if (!ENABLED) return;
+        System.out.println(InstalledArtifactReceipt.capture());
         // Consumer overload is explicit; no Kotlin implementation classes leak.
         CobblemonEvents.BATTLE_VICTORY.subscribe(
                 (Consumer<BattleVictoryEvent>) event -> onVictory(event.getBattle()));

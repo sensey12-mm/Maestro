@@ -39,6 +39,13 @@ public final class ScopedExecution {
     }
     public PublicFieldEvidence.Capture field() { return field; }
     ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes); }
+    ScopedExecution calculationFrame() { return withScopes(scopes.calculationFrame()); }
+    boolean sourceCurrent() {
+        try { field.requireCurrent(field.turn()); }
+        catch(IllegalArgumentException stale) { return false; }
+        return scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
+                .allMatch(b->b.lease().current());
+    }
     public void requireCurrent(int turn) { field.requireCurrent(turn); }
     public Set<String> unresolved() {
         Set<String> reasons = new TreeSet<>(field.unknown());
@@ -69,8 +76,13 @@ public final class ScopedExecution {
                 need(role + ":OWN_TRANSPORT_FRESHNESS", yes(b.ownTransportCurrent()) && (b.lease() == null || b.lease().turn() == field.turn()));
                 if (b.lease() != null) leases.add(b.lease());
             }
-            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail").contains(b.item().value()));
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "levitate", "prankster", "stall").contains(b.ability().value()));
+            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers").contains(b.item().value()));
+            // Pressure affects PP consumption, not the outcome of one already
+            // legal, successful action. Future PP/requests are not certified.
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura").contains(b.ability().value()));
+            // Download's witnessed active boosts are already in the public stage
+            // vector. A reserve's future Download boost needs a separate entry model.
+            need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !b.ability().value().equals("download"));
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
             else {
                 var a = field.actor(b.observation());
@@ -108,7 +120,8 @@ public final class ScopedExecution {
                     int d = m.type().equals("fire") && !field.weather().value().equals("none") ? 2 : 1;
                     // Certify the full supported critical domain, refusing zero-stat
                     // and engine-wrap domains before issuing a usable certificate.
-                    var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t, Critical.BOTH, n, d);
+                    var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t, Critical.BOTH, n, d, ability(a.id()).equals("technician") && m.power() <= 60 ? 3 : 1,
+                            ability(a.id()).equals("technician") && m.power() <= 60 ? 2 : 1);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -120,6 +133,8 @@ public final class ScopedExecution {
         bound(p, a); var c = new Check(Operation.SETUP); c.actor(a.id(), reserve(a.id()));
         Move m = move(moveId); c.need("SUPPORTED_SETUP_MOVE", m != null && m.power() == 0);
         c.need(a.id() + ":STATUS", a.status().known() && a.status().value().equals("none"));
+        if (m != null && m.id().equals("recover")) c.need(a.id() + ":EXACT_RECOVERY_MAX_HP",
+                p.maxHp().known() && p.maxHp().value().low() == p.maxHp().value().high());
         if (m != null) m.boosts().keySet().forEach(stat -> c.need(a.id() + ":STAGE_" + stat, a.stages().containsKey(stat)));
         return c.finish();
     }
@@ -199,7 +214,11 @@ public final class ScopedExecution {
             if (field.weather().value().equals("sunnyday")) { n = 3; d = 2; }
             else if (field.weather().value().equals("raindance")) { n = 1; d = 2; }
         }
-        return CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t, critical, n, d);
+        // Technician modifies base power before the level/stat formula. Never
+        // multiply a final damage interval; the engine rounds at each stage.
+        int powerN = ability(a.id()).equals("technician") && m.power() <= 60 ? 3 : 1;
+        int powerD = powerN == 3 ? 2 : 1;
+        return CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t, critical, n, d, powerN, powerD);
     }
     private static Damage zero(String why) {
         return new Damage(Known.unknown(), Known.of(new Interval(0, 0), PublicFieldEvidence.SOURCE + ":" + why), Set.of(), PublicFieldEvidence.SOURCE);

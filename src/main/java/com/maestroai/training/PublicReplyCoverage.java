@@ -18,6 +18,7 @@ public final class PublicReplyCoverage {
             "NO_CURRENT_PUBLIC_REPLIES", "REPLY_BUDGET_EXCEEDED",
             "NO_LEGAL_CANDIDATES", "FORCED_ACTION_UNSUPPORTED",
             "NO_CURRENT_FIELD_CERTIFICATE", "UNSUPPORTED_COMPARISON",
+            "PUBLIC_TURN_MISMATCH", "LEGAL_ROOT_UNVERIFIED", "CANDIDATE_COVERAGE_UNVERIFIED",
             "OUTCOME_PREREQUISITES_UNKNOWN", "INTERVALS_OVERLAP_OR_TIE");
     public record Audit(int candidateCount, int replyCount, boolean allCandidates,
                         boolean compared, boolean conditionalPreference,
@@ -63,6 +64,11 @@ public final class PublicReplyCoverage {
             if (!eventSlot.equals(slot)) continue;
             if (event.equals("switch") || event.equals("drag")) {
                 seen.clear(); current = true; ambiguous = false;
+            } else if (event.equals("faint")) {
+                // A witnessed faint ends this active appearance. Its formerly
+                // revealed moves cannot be presented as presently executable
+                // replies while a replacement is still pending.
+                seen.clear(); current = false; ambiguous = false;
             } else if (event.equals("replace") || event.equals("-transform") || event.equals("-formechange")
                     || event.equals("detailschange")) {
                 seen.clear(); ambiguous = true;
@@ -84,7 +90,7 @@ public final class PublicReplyCoverage {
         // Never compensate for missing legal actions using a guessed bench/move.
         Projection projected;
         try { projected = project(snapshot,mechanics); }
-        catch (IllegalArgumentException invalid) { return withheld(0,0,"NO_LEGAL_CANDIDATES"); }
+        catch (IllegalArgumentException invalid) { return withheld(0,0,"LEGAL_ROOT_UNVERIFIED"); }
         State root = projected.states().get("root");
         int candidates = root.legalMoves().size()+root.legalSwitches().size();
         if (candidates == 0) return withheld(0,0,"NO_LEGAL_CANDIDATES");
@@ -95,6 +101,8 @@ public final class PublicReplyCoverage {
             return withheld(candidates,0,"PUBLIC_HISTORY_NOT_ATTESTED");
         if (publicHistory.reentryAmbiguous(opponentSlot))
             return withheld(candidates,0,"PUBLIC_REPLY_IDENTITY_AMBIGUOUS");
+        if (publicHistory.publicTurn() != snapshot.turn())
+            return withheld(candidates,0,"PUBLIC_TURN_MISMATCH");
         List<String> publicReplies = currentReplies(publicHistory,opponentSlot);
         if (publicReplies.isEmpty()) return withheld(candidates,0,"NO_CURRENT_PUBLIC_REPLIES");
         if (publicReplies.size()>MAX_PUBLIC_REPLIES)
@@ -117,9 +125,11 @@ public final class PublicReplyCoverage {
             var comparison = ShadowMechanicsEvaluation.compare(snapshot,mechanics,profiles,plans,
                     trickRoom,critical,null,execution);
             boolean allBounded=comparison.rankings().stream().allMatch(rank->rank.utility().known());
-            Set<String> blockers=allBounded
-                    ? comparison.preferredConditional()==null ? Set.of("INTERVALS_OVERLAP_OR_TIE") : Set.of()
-                    : Set.of("OUTCOME_PREREQUISITES_UNKNOWN");
+            Set<String> blockers=!comparison.candidateCoverageComplete()
+                    ? Set.of("CANDIDATE_COVERAGE_UNVERIFIED")
+                    : allBounded
+                        ? comparison.preferredConditional()==null ? Set.of("INTERVALS_OVERLAP_OR_TIE") : Set.of()
+                        : Set.of("OUTCOME_PREREQUISITES_UNKNOWN");
             return new Audit(candidates,publicReplies.size(),comparison.candidateCoverageComplete(),true,
                     comparison.preferredConditional()!=null,blockers,comparison);
         } catch (RuntimeException rejected) {
