@@ -274,3 +274,7 @@ for (const [maxHp,hp,expected] of [[381,100,291],[381,300,381],[381,381,381],[1,
   assert.equal(own.hp,expected,'source Recover rounding/cap '+maxHp+'/'+hp);
 }
 console.log('Recover source oracle PASS: four exact rounding/capping cases');
+
+const policyOutcomes=require('./policy_oracle.cjs').run(Battle);
+assert.equal(policyOutcomes.length,8);
+console.log('Independent policy outcome oracle PASS: 8 jointly legal source-executed exchanges before residuals');

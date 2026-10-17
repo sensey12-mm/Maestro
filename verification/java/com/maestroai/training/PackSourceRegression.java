@@ -51,6 +51,7 @@ final class PackSourceRegression {
             var modules=engine.eval("js","("+moduleExpression+")");
             var anchor=engine.eval("js",Files.readString(resources.resolve("runtime-source-anchor.js"))).execute(modules);
             var damageOracle=layoutOnly?null:ModifierTacticalRegression.oracle(engine);
+            var policyOracle=layoutOnly?null:ModifierTacticalRegression.policyOracle(engine);
             if (!layoutOnly) SourceVerification.verifyNativeRecovery(engine);
             engine.eval("js","var verificationStream=new BS.BattleStream();"
                     +"verificationStream.write('>start '+JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,"
@@ -83,6 +84,7 @@ final class PackSourceRegression {
             PublicPipelineRegression.run(domain);
             NaturalAcceptanceRegression.run(domain);
             ModifierTacticalRegression.run(domain,damageOracle);
+            ModifierTacticalRegression.policyComparisons(domain,policyOracle);
             System.out.println("Public configuration rechecks="+timing[0]+" totalMs="+timing[1]/1_000_000
                     +" providerMatrixMs="+(System.nanoTime()-comparisonStart)/1_000_000);
             engine.eval("js","['p1','p2','sides','log','inputLog','activePokemon','activeTarget'].forEach(key=>Object.defineProperty(verificationStream.battle,key,{get(){throw Error('private state touched');}}));");
