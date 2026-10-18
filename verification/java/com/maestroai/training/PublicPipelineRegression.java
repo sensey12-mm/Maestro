@@ -79,12 +79,19 @@ final class PublicPipelineRegression {
         var profiles=Map.of("self",self.evidence().profile(),"reserve",reserve.evidence().profile(),"opponent",foe.profile());
         // Source-known post-boot definitions do not imply this limited tactical
         // model supports the selected actor's item or its effects.
-        for(String unsupported:List.of("eviolite","legendplate","pikaniumz","pikashuniumz")) {
+        for(String unsupported:List.of("eviolite","legendplate","pikaniumz","pikashuniumz","zygardite","tatsugirinite","ange")) {
             var limited=new ScopedExecution(field,Map.of("self",new ScopedExecution.Binding(selfSeen,
                     Known.of(unsupported,"explicit own item fixture"),self.evidence().ability(),self.evidence().fresh(),lease)),domain.scopes());
             var ownState=PublicStateSearchAdapter.project(snapshot,mechanics).states().get("root").self();
             var certificate=limited.setupCoverage(self.evidence().profile(),ownState,"swordsdance");
             check(!certificate.supported()&&certificate.missing().contains("self:CURRENT_ITEM"),"source-known unsupported item gained tactical scope: "+unsupported);
+        }
+        for(String unsupported:List.of("megasol","dragonize","piercingdrill","powerconstruct","spicyspray")){
+            var limited=new ScopedExecution(field,Map.of("self",new ScopedExecution.Binding(selfSeen,
+                    self.evidence().item(),Known.of(unsupported,"explicit own ability fixture"),self.evidence().fresh(),lease)),domain.scopes());
+            var ownState=PublicStateSearchAdapter.project(snapshot,mechanics).states().get("root").self();
+            var certificate=limited.setupCoverage(self.evidence().profile(),ownState,"swordsdance");
+            check(!certificate.supported()&&certificate.missing().contains("self:CURRENT_ABILITY"),"source-known unsupported ability gained tactical scope: "+unsupported);
         }
         var audit=PublicReplyCoverage.evaluate(snapshot,mechanics,profiles,execution,protocol,"p2a",field.trickRoom(),Critical.BOTH);
         check(audit.compared() && audit.allCandidates() && audit.replyCount()==2,"production reply coverage not reached: "+audit.reasons());

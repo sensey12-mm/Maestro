@@ -114,6 +114,7 @@ public final class RuntimeCaptureRegression {
             check(domain!=null&&domain.effectiveState().known(),"post-boot native item reload rejected: "
                     +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
             PublicPipelineRegression.run(domain);
+            domain=AddonReloadRegression.run(service,engine,id,choice,domain);
             engine.eval("js","globalThis.verificationDamage=BS.BattleStream?verificationStream.battle.actions.getDamage:null;"
                     +"const ap=Object.getPrototypeOf(verificationStream.battle.actions);ap.getDamage=eval('({'+ap.getDamage.toString()+'}).getDamage');");
             String priorProperty=System.getProperty("maestroai.envelopeCapture");

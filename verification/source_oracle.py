@@ -240,6 +240,10 @@ def main():
         from pack_loader_oracle import run_installer
         scripts=run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
         (Path(folder)/'pack-item-fixtures.json').write_text(json.dumps(scripts))
+        from addon_reload_oracle import addon_sources
+        addon=addon_sources(home, Path('src/main/resources/com/maestroai/training'))
+        (Path(folder)/'za-definition-fixtures.json').write_text(json.dumps(addon))
+        subprocess.run(['node','verification/addon_reload_oracle.cjs',str(simulator_root)],check=True)
         subprocess.run(['node','verification/pack_item_reload_oracle.cjs',str(simulator_root)],check=True)
         subprocess.run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['node', 'verification/method_provenance_oracle.cjs', str(simulator_root)], check=True)

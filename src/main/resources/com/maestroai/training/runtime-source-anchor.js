@@ -129,6 +129,31 @@
     if (methods.size) methodPins.set(value,methods);
   }
   const scripts = {...dex.dataCache.Scripts,actions:{...dex.dataCache.Scripts.actions},pokemon:{...dex.dataCache.Scripts.pokemon}};
+  const scriptVersions=new Map();
+  const reloadedDefinitions=new Map();
+  // Cache text is public source data. Snapshot it after native warm-up, without
+  // changing live caches during a later proof. Native getByID adds these exact
+  // description fields before constructing an effect.
+  const sourceDescriptions=copyEntry(dex.loadTextData(),{n:500000});
+  const definitionTables={ability:'Abilities',heldItem:'Items',move:'Moves',condition:'Conditions'};
+  const definitionConstructors={ability:modules.Ability,heldItem:modules.Item,move:modules.DataMove,condition:EmptyCondition};
+  const reloadCacheMatch=(group,id,value)=>{
+    let kind={abilities:'ability',items:'heldItem',moves:'move',conditions:'condition'}[group],key=id;
+    let prefix='';
+    if(group==='conditions' && /^(ability|item):/.test(id)) {
+      [prefix,key]=id.split(':');kind=prefix==='item'?'heldItem':'ability';
+    }
+    const definition=reloadedDefinitions.get(kind+'/'+key);
+    if(!definition)return false;
+    const table=definitionTables[kind],entry=sourceDescriptions[table]?.[key];
+    const descriptions=kind==='condition'?{}:definition.shortDesc
+      ?{desc:definition.desc,shortDesc:definition.shortDesc}
+      :entry?{desc:entry.desc||entry.shortDesc||'',shortDesc:entry.shortDesc||''}:{};
+    let expected=new definitionConstructors[kind]({name:key,...definition,...descriptions});
+    if(kind!=='condition' && expected.gen>9)expected.isNonstandard='Future';
+    if(prefix)expected={...expected,id:prefix+':'+expected.id};
+    return Object.getPrototypeOf(value)===Object.getPrototypeOf(expected) && entryEqual(expected,value,{n:500000});
+  };
   const helpers = {toID:dex.toID,trunc:dex.trunc,clampIntRange:modules.Utils.clampIntRange};
   const speciesPrototype=Object.getPrototypeOf(dex.species.getByID('mew'));
   const hasMethod = (prototype,name,fn) => {
@@ -137,6 +162,8 @@
       if (prototype === modules.Battle.prototype && scripts[name] === fn) return true;
       if (prototype === modules.BattleActions.prototype && scripts.actions?.[name] === fn) return true;
       if (prototype === modules.Pokemon.prototype && scripts.pokemon?.[name] === fn) return true;
+      if (prototype === modules.BattleActions.prototype && scriptVersions.get('actions/'+name)?.has(fn)) return true;
+      if (prototype === modules.Pokemon.prototype && scriptVersions.get('pokemon/'+name)?.has(fn)) return true;
       return false;
   };
   // Fixed public roles and slot names are captured from source-verified boot.
@@ -200,11 +227,14 @@
         if(!registryRootCurrent){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/IDENTITY');continue;}
         const slot=resolve(registryRoot,spec.key);
         instance=slot&&!slot.d.get&&!slot.d.set?slot.d.value:null;
-      } else if(actualDex===dex) {
+      } else if(spec.role.startsWith('DEX_') && actualDex) {
         const slot=spec.key==='dex'?null:resolve(actualDex,spec.key);
         instance=spec.key==='dex'?actualDex:slot&&!slot.d.get&&!slot.d.set?slot.d.value:null;
       }
-      if(!spec.ctor && instance!==spec.instance){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/IDENTITY');continue;}
+      // afterSpeciesInit replaces dex instances. Audit the effective named
+      // methods against the pinned prototypes; instance inequality alone is
+      // not a method override and never grants a configuration certificate.
+      if(!spec.ctor && !spec.role.startsWith('DEX_') && instance!==spec.instance){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/IDENTITY');continue;}
       if(!spec.ctor)proto=instance?Object.getPrototypeOf(instance):null;
       if(proto!==spec.proto){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/PROTOTYPE');continue;}
       const added=Object.getOwnPropertyNames(proto).some(n=>n!=='constructor'&&!spec.names.includes(n)
@@ -219,7 +249,7 @@
       }
     }
     for(const [key,expected] of Object.entries(normalizationHelpers)){
-      const slot=actualDex===dex?resolve(actualDex,key):null;
+      const slot=actualDex?resolve(actualDex,key):null;
       if(!slot || slot.d.get || slot.d.set || slot.d.value!==expected)failures.push('HELPER/'+key+'/IDENTITY');
     }
     if(battle)for(const key of ['toID','trunc','clampIntRange']){
@@ -230,6 +260,43 @@
       failures:[...new Set(failures)].slice(0,8),truncated:failures.length>8,actualBattle:!!battle});
   };
   return Object.freeze({has: fn => trusted.has(fn), auditMethods, diagnosticAllowed:code=>diagnosticTokens.has(code),
+    // Only the exact-wire observer owns this capability. The source-pinned
+    // receiver has already assigned these public definitions; no actor or
+    // callback is evaluated here and the live caches are never modified.
+    observeDefinition:(kind,id,value)=>{
+      const table=kind==='script'?'Scripts':definitionTables[kind];
+      if(!table || !value || Object.getPrototypeOf(value)!==Object.prototype
+          || value!==dex.dataCache[table][id])throw Error('unverified public definition target');
+      const collect=x=>{
+        if(typeof x==='function'){trusted.add(x);return;}
+        if(!x || typeof x!=='object')return;
+        if(Object.getOwnPropertySymbols(x).length || ![Object.prototype,Array.prototype,null].includes(Object.getPrototypeOf(x)))
+          throw Error('unverified public definition structure');
+        for(const key of Object.getOwnPropertyNames(x)){
+          const d=Object.getOwnPropertyDescriptor(x,key);
+          if(d.get||d.set)throw Error('unverified public definition accessor');
+          collect(d.value);
+        }
+      };
+      if(kind==='script'){
+        const slots=id==='actions'?['canMegaEvo','runMegaEvo']:id==='pokemon'?['effectiveWeather']:[];
+        if(!slots.length)throw Error('unsupported public script group');
+        // Object.assign can retain unrelated fields. Trust only the named
+        // factory-owned slots, never every callback in the merged target.
+        for(const key of slots){
+          const d=Object.getOwnPropertyDescriptor(value,key);
+          if(!d || d.get || d.set || typeof d.value!=='function')throw Error('unverified script slot');
+          trusted.add(d.value);callbacks.set(JSON.stringify(['Scripts',id,key]),d.value);scripts[id][key]=d.value;
+          const position=id+'/'+key;
+          if(!scriptVersions.has(position))scriptVersions.set(position,new Set());
+          scriptVersions.get(position).add(d.value);
+        }
+      }else{
+        collect(value);tableCallbacks(value,[table,id],true);
+        reloadedDefinitions.set(kind+'/'+id,copyEntry(value,{n:20000}));
+        if(originalEntries[table])originalEntries[table][id]=copyEntry(value,{n:20000});
+      }
+    },
     // Called only by the observer-owned exact-wire boundary, never by a public
     // registry entry. No actor/request/closure text is accepted as provenance.
     observeItem: (id, value) => {
@@ -271,6 +338,7 @@
           throw Error('unverified public definition cache');
         for(const [id,value] of map) {
           const expected=values.get(id);
+          if(reloadCacheMatch(group,id,value))continue;
           // An exact cached miss has no effect or callback and grants no actor,
           // move, item or ability evidence. Unsupported operations stay UNKNOWN.
           if(!expected && group==='conditions' && nativeConditionMiss(id,value)) continue;
