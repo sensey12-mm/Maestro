@@ -105,6 +105,21 @@ final class PublicPipelineRegression {
                     && rank.utility().value().high()==246.0/310,"Shadow Claw source-oracle extrema");
         }
         check("move:shadowclaw".equals(audit.result().preferredConditional()),"source-bounded immediate exchange should dominate scratch, setup and switch");
+        for(String condition:List.of("cheerattack","cheerdefense","raidboss","shield")){
+            var raidProtocol=new PublicProtocolEvidence();
+            raidProtocol.update(List.of(start+"\n|-start|p1a: "+OWN+"|"+condition));
+            var raidProvider=new PublicMechanicsEvidence(id->id.equals("mew")
+                    ? new PublicMechanicsEvidence.Species(Map.of("hp",100,"atk",100,"def",100,"spa",100,"spd",100,"spe",100),List.of("psychic"),null) : null);
+            raidProvider.update(raidProtocol);
+            var raidField=new PublicFieldEvidence().update(raidProtocol,raidProvider);
+            var raidSeen=raidProvider.observation("p1a");
+            check(!raidField.actor(raidSeen).covered(),"public raid effect became ordinary actor evidence: "+condition);
+            var limited=new ScopedExecution(raidField,Map.of("self",new ScopedExecution.Binding(raidSeen,
+                    self.evidence().item(),self.evidence().ability(),self.evidence().fresh(),lease)),domain.scopes());
+            var ownState=PublicStateSearchAdapter.project(snapshot,mechanics).states().get("root").self();
+            check(!limited.setupCoverage(self.evidence().profile(),ownState,"swordsdance").supported(),
+                    "source provenance incorrectly enabled raid tactics: "+condition);
+        }
         var plans=audit.result().rankings().stream().map(r->new ShadowMechanicsEvaluation.Plan(r.action(),
                 List.of(List.of(new ShadowMechanicsEvaluation.Turn(r.action(),"tackle",null)),
                         List.of(new ShadowMechanicsEvaluation.Turn(r.action(),"quickattack",null))),"paired public fixture")).toList();

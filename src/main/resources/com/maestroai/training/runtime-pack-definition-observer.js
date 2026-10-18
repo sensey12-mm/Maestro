@@ -15,6 +15,7 @@
   // index.js declares these API functions globally. Captured boot identities
   // and the exact index.js source pin remain necessary throughout the lease.
   const seen=new Set();
+  const raidIds=new Set(['cheerattack','cheerdefense','raidboss','shield']);
   const invalid=new Set();let overflow=false;
   const tableCurrent=s=>{
     const d=Object.getOwnPropertyDescriptor(s.source,s.key);
@@ -68,5 +69,6 @@
   }
   return Object.freeze({current:()=>!overflow && invalid.size===0 && globalValue('eval')===originalEval
       && specs.every(s=>globalValue(s.name)===s.receiver&&tableCurrent(s)),
-    complete:()=>seen.size===12});
+    complete:()=>[...seen].filter(k=>!k.startsWith('condition/')||!raidIds.has(k.slice(10))).length===12,
+    raidComplete:()=>[...raidIds].every(id=>seen.has('condition/'+id))});
 })

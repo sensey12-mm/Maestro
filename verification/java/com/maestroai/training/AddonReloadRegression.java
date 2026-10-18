@@ -35,6 +35,12 @@ final class AddonReloadRegression {
                 +"verificationStream.battle.setPlayer('p1',{team:[fixture('Mewtwo','pressure',['swift','recover'])]});"
                 +"verificationStream.battle.setPlayer('p2',{team:[fixture('Genesect','download',['ironhead','icebeam'])]});");
         var dex=engine.eval("js","verificationStream.battle.dex");
+        // Species initialization replaces the dex. These four original pack
+        // items must also admit newly constructed native caches after reload.
+        for(String item:List.of("eviolite","legendplate","pikaniumz","pikashuniumz")){
+            dex.getMember("items").invokeMember("getByID",item);
+            dex.getMember("conditions").invokeMember("getByID","item:"+item);
+        }
         var caches=Map.of("ability","abilities","heldItem","items","move","moves","condition","conditions");
         for(var key:fixtures.keySet()){
             var parts=key.split("/");

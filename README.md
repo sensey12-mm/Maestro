@@ -40,6 +40,8 @@ See `LICENSE` for the scoped All Rights Reserved notice. Public source visibilit
 
 This project is not affiliated with or endorsed by Mojang, Microsoft, Nintendo, Game Freak, The Pokémon Company, Cobblemon or RCT maintainers.
 
+The finite compatibility checks also verify the four public condition factories from the pinned Raid Dens 0.11.3 artifact, their original LF-preserving dispatch, and five native bag-item initializers from the pinned pack addons. This establishes source provenance, not tactical support for raid effects or bag actions. Raid membership must pass the source-pinned public mode API; missing announcements cannot establish ordinary mode. Active raid conditions remain unsupported, and native item caches must retain verified fields and callback identities after a dex reload.
+
 ## Reports and contributions
 
 GitHub Issues and Discussions are disabled; this repository currently provides no general bug-report intake. Keep any reproduction notes minimal and synthetic. Do not post credentials, personal/player identities, private battle packets or raw server logs in pull requests or other public channels. For a sensitive security issue, use GitHub's private vulnerability reporting feature **only if it is enabled**. If no private reporting route is available, do not disclose sensitive details publicly.

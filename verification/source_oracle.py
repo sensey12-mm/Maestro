@@ -243,7 +243,12 @@ def main():
         from addon_reload_oracle import addon_sources
         addon=addon_sources(home, Path('src/main/resources/com/maestroai/training'))
         (Path(folder)/'za-definition-fixtures.json').write_text(json.dumps(addon))
+        from raid_condition_oracle import raid_sources, pack_native_sources
+        raid=raid_sources(home, Path('src/main/resources/com/maestroai/training'))
+        (Path(folder)/'raid-condition-fixtures.json').write_text(json.dumps(raid))
+        (Path(folder)/'pack-native-fixtures.json').write_text(json.dumps(pack_native_sources(home, Path('src/main/resources/com/maestroai/training'))))
         subprocess.run(['node','verification/addon_reload_oracle.cjs',str(simulator_root)],check=True)
+        subprocess.run(['node','verification/raid_condition_oracle.cjs',str(simulator_root)],check=True)
         subprocess.run(['node','verification/pack_item_reload_oracle.cjs',str(simulator_root)],check=True)
         subprocess.run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['node', 'verification/method_provenance_oracle.cjs', str(simulator_root)], check=True)

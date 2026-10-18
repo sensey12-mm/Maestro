@@ -134,6 +134,7 @@ public final class SimulatorDomainBridge {
             if(s.pack) {
                 var wires=pins("runtime-pack-item-wires.tsv");
                 var addon=pins("runtime-pack-definition-wires.tsv");
+                addon.putAll(pins("runtime-pack-raid-wires.tsv"));
                 addon.forEach((key,value)->{if(key.startsWith("heldItem/"))wires.put(key.substring(9),value);});
                 ProxyExecutable permitted=values->{
                     if(values.length!=2 || !values[0].isString() || !values[1].isString()) return false;
@@ -225,7 +226,9 @@ public final class SimulatorDomainBridge {
             if(s.nativeFactories==null) s.nativeFactories=service.getContext().eval("js","Object.create(null)");
             if(Set.of("bagItem","heldItem").contains(type)) s.nativeFactories.removeMember(type);
             if(s.mutations!=1) return;
-            var dispatch=NativeRegistryEvidence.dispatch(type,data,pins("runtime-native-factories.tsv"));
+            var nativePins=pins("runtime-native-factories.tsv");
+            if(s.pack)nativePins.putAll(pins("runtime-pack-native-factories.tsv"));
+            var dispatch=NativeRegistryEvidence.dispatch(type,data,nativePins);
             if(dispatch!=null) s.nativePending=new NativePending(dispatch,s.epoch,false);
         } catch(IOException | RuntimeException unavailable) { s.nativeFactories=null; }
     }
@@ -345,7 +348,8 @@ public final class SimulatorDomainBridge {
             boolean reloaded=pack && itemObserver!=null && itemObserver.getMember("complete").execute().asBoolean();
             boolean addon=reloaded && itemObserver.getMember("addonComplete").execute().asBoolean()
                     && definitionObserver!=null && definitionObserver.getMember("complete").execute().asBoolean();
-            var expected = pins(addon ? "runtime-pack-za-components.tsv" : reloaded ? "runtime-pack-reload-components.tsv" : pack ? "runtime-pack-components.tsv" : "runtime-domain-components.tsv");
+            boolean raid=addon && definitionObserver.getMember("raidComplete").execute().asBoolean();
+            var expected = pins(raid ? "runtime-pack-za-raid-components.tsv" : addon ? "runtime-pack-za-components.tsv" : reloaded ? "runtime-pack-reload-components.tsv" : pack ? "runtime-pack-components.tsv" : "runtime-domain-components.tsv");
             boolean format = raw.get("mod").getAsString().equals("cobblemon") && raw.get("gen").getAsInt() == 9
                     && raw.get("gameType").getAsString().equals("singles") && Objects.equals(components.get("format"), expected.get("format"));
             return new RuntimeDomain(new RuntimeDomain.Snapshot(format, raw.get("extraEvents").getAsBoolean(),

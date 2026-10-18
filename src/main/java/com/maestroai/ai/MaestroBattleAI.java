@@ -5801,8 +5801,11 @@ public class MaestroBattleAI extends RCTBattleAI {
                     && com.cobblemon.mod.common.battles.runner.ShowdownService.Companion.getService()
                     instanceof com.cobblemon.mod.common.battles.runner.graal.GraalShowdownService service) {
                 var lease = ownChoiceLease;
-                runtimeDomain = SimulatorDomainBridge.capture(service, battle.getBattleId(), lease::current);
-                domainUnavailable = SimulatorDomainBridge.unavailable(service);
+                if(RuntimeBattleMode.ordinary(battle)){
+                    runtimeDomain = SimulatorDomainBridge.capture(service, battle.getBattleId(),
+                            ()->lease.current() && RuntimeBattleMode.ordinary(battle));
+                    domainUnavailable = SimulatorDomainBridge.unavailable(service);
+                }else domainUnavailable=java.util.Set.of("PUBLIC_BATTLE_MODE_UNSUPPORTED_OR_UNVERIFIED");
             }
             System.out.println("[MaestroAI] Shadow initialized domain receipt=" + (runtimeDomain != null)
                     + " supported=" + (runtimeDomain != null && runtimeDomain.effectiveState().known())

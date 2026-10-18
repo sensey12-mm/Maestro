@@ -315,6 +315,7 @@
         }
       };
       collect(value);tableCallbacks(value,['Items',id],true);
+      reloadedDefinitions.set('heldItem/'+id,copyEntry(value,{n:20000}));
       originalEntries.Items[id]=copyEntry(value,{n:20000});reloadedItems.add(id);
     },
     itemsReloaded: () => reloadedItems.size===4,
