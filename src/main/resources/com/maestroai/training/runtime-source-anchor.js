@@ -131,7 +131,105 @@
   const scripts = {...dex.dataCache.Scripts,actions:{...dex.dataCache.Scripts.actions},pokemon:{...dex.dataCache.Scripts.pokemon}};
   const helpers = {toID:dex.toID,trunc:dex.trunc,clampIntRange:modules.Utils.clampIntRange};
   const speciesPrototype=Object.getPrototypeOf(dex.species.getByID('mew'));
-  return Object.freeze({has: fn => trusted.has(fn),
+  const hasMethod = (prototype,name,fn) => {
+      if (methodPins.get(prototype)?.get(name) === fn) return true;
+      // These exact script override slots are installed by the pinned constructors.
+      if (prototype === modules.Battle.prototype && scripts[name] === fn) return true;
+      if (prototype === modules.BattleActions.prototype && scripts.actions?.[name] === fn) return true;
+      if (prototype === modules.Pokemon.prototype && scripts.pokemon?.[name] === fn) return true;
+      return false;
+  };
+  // Fixed public roles and slot names are captured from source-verified boot.
+  // Later diagnostics never print arbitrary added names, function bodies,
+  // exception messages, actor data or a source-text substitute for identity.
+  const roleSpecs = [
+    ['BATTLE','Battle',null],['ACTIONS','BattleActions',null],['QUEUE','BattleQueue',null],['BASIC_EFFECT','BasicEffect',null],
+    ['FIELD','Field',null],['POKEMON','Pokemon',null],['REGISTRY_BASE','REGISTRY_BASE',null],
+    ...['ability','heldItem','move','bagItem','species'].map(k=>['REGISTRY_'+k.toUpperCase(),null,k]),
+    ...['dex','moves','items','abilities','species','conditions','formats'].map(k=>['DEX_'+k.toUpperCase(),null,k])
+  ].map(([role,ctor,key])=>{
+    const instance=role.startsWith('REGISTRY_') ? modules.Cobblemon.registries[key]
+      : role.startsWith('DEX_') ? key==='dex'?dex:dex[key] : null;
+    const proto=ctor==='REGISTRY_BASE'?modules.Registries.CobbleRegistry.prototype:ctor?modules[ctor].prototype:Object.getPrototypeOf(instance);
+    return {role,ctor,key,proto,instance,names:Object.getOwnPropertyNames(proto).filter(n=>n!=='constructor'
+      && typeof Object.getOwnPropertyDescriptor(proto,n).value==='function').sort()};
+  });
+  const registryRoot=modules.Cobblemon.registries;
+  const sourceConstructors=Object.fromEntries(['Battle','BattleActions','BattleQueue','Field','Pokemon',
+    'Ability','Item','DataMove','BasicEffect'].map(k=>[k,modules[k]]));
+  const normalizationHelpers={deepClone:dex.deepClone,deepFreeze:dex.deepFreeze};
+  const diagnosticTokens=new Set();
+  for(const key of Object.keys(modules.Registries))diagnosticTokens.add('CONSTRUCTOR/REGISTRY_'+key+'/IDENTITY');
+  const registryConstructors={...modules.Registries};
+  for(const spec of roleSpecs) for(const name of [...spec.names,'UNLISTED_PUBLIC_SLOT'])
+    for(const reason of ['ACCESSOR','IDENTITY','CALLBACK','PROTOTYPE','MISSING'])
+      diagnosticTokens.add(spec.role+'/'+name+'/'+reason);
+  for(const k of Object.keys(sourceConstructors))diagnosticTokens.add('CONSTRUCTOR/'+k+'/IDENTITY');
+  for(const k of ['toID','trunc','clampIntRange','deepClone','deepFreeze'])diagnosticTokens.add('HELPER/'+k+'/IDENTITY');
+  const resolve=(object,key)=>{
+    for(let o=object;o;o=Object.getPrototypeOf(o)) {
+      const d=Object.getOwnPropertyDescriptor(o,key);if(d)return {d,owner:o};
+    }
+    return null;
+  };
+  const auditMethods=(fresh,battle)=>{
+    const failures=[];
+    for(const [key,expected] of Object.entries(sourceConstructors))
+      if(fresh[key]!==expected)failures.push('CONSTRUCTOR/'+key+'/IDENTITY');
+    const dexSlot=battle?resolve(battle,'dex'):null;
+    for(const [key,expected] of Object.entries(registryConstructors))
+      if(fresh.Registries[key]!==expected)failures.push('CONSTRUCTOR/REGISTRY_'+key+'/IDENTITY');
+    const rootSlot=fresh.Cobblemon===modules.Cobblemon?Object.getOwnPropertyDescriptor(fresh.Cobblemon,'registries'):null;
+    const registryRootCurrent=rootSlot&&!rootSlot.get&&!rootSlot.set&&rootSlot.value===registryRoot;
+    const actualDex=battle?(dexSlot && !dexSlot.d.get && !dexSlot.d.set?dexSlot.d.value:null):dex;
+    for(const spec of roleSpecs) {
+      let instance=null,proto=spec.proto;
+      if(spec.ctor==='REGISTRY_BASE'){
+        if(fresh.Registries.CobbleRegistry!==registryConstructors.CobbleRegistry)continue;
+        proto=fresh.Registries.CobbleRegistry.prototype;
+      } else if(spec.ctor){
+        if(fresh[spec.ctor]!==sourceConstructors[spec.ctor])continue;
+        proto=fresh[spec.ctor].prototype;
+        if(battle && ['BATTLE','ACTIONS','QUEUE','FIELD'].includes(spec.role)) {
+          const key={BATTLE:null,ACTIONS:'actions',QUEUE:'queue',FIELD:'field'}[spec.role];
+          const slot=key?resolve(battle,key):null;
+          instance=key?(slot&&!slot.d.get&&!slot.d.set?slot.d.value:null):battle;
+          if(!instance){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/MISSING');continue;}
+        }
+      } else if(spec.role.startsWith('REGISTRY_')) {
+        if(!registryRootCurrent){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/IDENTITY');continue;}
+        const slot=resolve(registryRoot,spec.key);
+        instance=slot&&!slot.d.get&&!slot.d.set?slot.d.value:null;
+      } else if(actualDex===dex) {
+        const slot=spec.key==='dex'?null:resolve(actualDex,spec.key);
+        instance=spec.key==='dex'?actualDex:slot&&!slot.d.get&&!slot.d.set?slot.d.value:null;
+      }
+      if(!spec.ctor && instance!==spec.instance){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/IDENTITY');continue;}
+      if(!spec.ctor)proto=instance?Object.getPrototypeOf(instance):null;
+      if(proto!==spec.proto){failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/PROTOTYPE');continue;}
+      const added=Object.getOwnPropertyNames(proto).some(n=>n!=='constructor'&&!spec.names.includes(n)
+        && typeof Object.getOwnPropertyDescriptor(proto,n).value==='function');
+      if(added)failures.push(spec.role+'/UNLISTED_PUBLIC_SLOT/IDENTITY');
+      for(const name of spec.names){
+        const entry=resolve(instance||proto,name),base=spec.role+'/'+name+'/';
+        if(!entry){failures.push(base+'MISSING');continue;}
+        if(entry.d.get||entry.d.set){failures.push(base+'ACCESSOR');continue;}
+        if(!hasMethod(entry.owner,name,entry.d.value)&&!hasMethod(proto,name,entry.d.value))failures.push(base+'IDENTITY');
+        else if(!trusted.has(entry.d.value))failures.push(base+'CALLBACK');
+      }
+    }
+    for(const [key,expected] of Object.entries(normalizationHelpers)){
+      const slot=actualDex===dex?resolve(actualDex,key):null;
+      if(!slot || slot.d.get || slot.d.set || slot.d.value!==expected)failures.push('HELPER/'+key+'/IDENTITY');
+    }
+    if(battle)for(const key of ['toID','trunc','clampIntRange']){
+      const slot=resolve(battle,key);
+      if(!slot || slot.d.get || slot.d.set || slot.d.value!==helpers[key])failures.push('HELPER/'+key+'/IDENTITY');
+    }
+    return JSON.stringify({scope:battle?'PUBLIC_BATTLE_METHODS':'PUBLIC_MODULES_AND_BOOT_DEX',
+      failures:[...new Set(failures)].slice(0,8),truncated:failures.length>8,actualBattle:!!battle});
+  };
+  return Object.freeze({has: fn => trusted.has(fn), auditMethods, diagnosticAllowed:code=>diagnosticTokens.has(code),
     // Called only by the observer-owned exact-wire boundary, never by a public
     // registry entry. No actor/request/closure text is accepted as provenance.
     observeItem: (id, value) => {
@@ -186,14 +284,7 @@
       }
     },
     checkTables: tables => { for (const key of Object.keys(tables)) tableCallbacks(tables[key],[key],false); },
-    hasMethod: (prototype,name,fn) => {
-      if (methodPins.get(prototype)?.get(name) === fn) return true;
-      // These exact script override slots are installed by the pinned constructors.
-      if (prototype === modules.Battle.prototype && scripts[name] === fn) return true;
-      if (prototype === modules.BattleActions.prototype && scripts.actions?.[name] === fn) return true;
-      if (prototype === modules.Pokemon.prototype && scripts.pokemon?.[name] === fn) return true;
-      return false;
-    },
+    hasMethod,
     hasHelper: (name,fn) => helpers[name] === fn
   });
 })

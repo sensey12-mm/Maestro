@@ -77,7 +77,7 @@ SELECTORS = {
     "com/cobblemon/mod/common/battles/interpreter/instructions/TurnInstruction.class":
         {"invoke$lambda$0"},
     "com/cobblemon/mod/common/battles/runner/graal/GraalShowdownService.class":
-        {"boot", "sendRegistryData", "sendRegistryEntry", "resetRegistryData",
+        {"boot", "createContext", "sendRegistryData", "sendRegistryEntry", "resetRegistryData",
          "resetAllRegistries", "indicateSpeciesInitialized"},
 }
 

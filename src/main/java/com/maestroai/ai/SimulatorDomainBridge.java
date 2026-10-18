@@ -7,6 +7,7 @@ import com.maestroai.training.RuntimeRegistryLease;
 import com.maestroai.training.RuntimeSourceAudit;
 import com.maestroai.training.NativeRegistryEvidence;
 import com.cobblemon.mod.relocations.graalvm.polyglot.Value;
+import com.cobblemon.mod.relocations.graalvm.polyglot.PolyglotException;
 import com.cobblemon.mod.relocations.graalvm.polyglot.proxy.ProxyExecutable;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,10 @@ import java.util.function.BooleanSupplier;
 public final class SimulatorDomainBridge {
     private SimulatorDomainBridge() {}
     private static final String ROOT = "/com/maestroai/training/";
+    private static final Set<String> METHOD_GROUPS=Set.of("REGISTRY_CONSTRUCTORS","REGISTRY_IMPLEMENTATION",
+            "NORMALIZATION_HELPERS","REGISTRY_SERIALIZATION","ENGINE_HELPERS","ENGINE_CONSTRUCTORS",
+            "BATTLE","ACTIONS","QUEUE","FIELD","POKEMON","DEX","DEX_MOVES","DEX_ITEMS","DEX_ABILITIES",
+            "DEX_SPECIES","DEX_CONDITIONS","DEX_FORMATS");
     private static final Map<Object, State> STATES = new WeakHashMap<>();
     private enum CaptureFailure {
         INITIALIZED_PUBLIC_PROBE_UNAVAILABLE, OWN_CHOICE_EXPIRED, PUBLIC_CONTEXT_CHANGED,
@@ -38,6 +43,8 @@ public final class SimulatorDomainBridge {
         RuntimeSourceAudit.Report packAudit;
         CaptureFailure captureFailure = CaptureFailure.INITIALIZED_PUBLIC_PROBE_UNAVAILABLE;
         NativePending nativePending;
+        String lastMethodAudit, methodGroup, methodFailureKind;
+        Set<String> methodFailures=Set.of();
         RuntimeSourceAudit.Report audit = new RuntimeSourceAudit.Report(RuntimeSourceAudit.Reason.AUDIT_UNAVAILABLE, "");
     }
     private record NativePending(NativeRegistryEvidence.Dispatch dispatch, long epoch, boolean payloadMatched) {}
@@ -104,6 +111,7 @@ public final class SimulatorDomainBridge {
         s.nativeFactories = null; s.nativePending = null;
         s.pack = false; s.sourceAnchor = null; s.itemObserver = null; s.packAudit = null;
         s.captureFailure = CaptureFailure.INITIALIZED_PUBLIC_PROBE_UNAVAILABLE;
+        s.lastMethodAudit=null; s.methodFailures=Set.of();
         s.audit = verifySource(service, false);
         if (!s.audit.verified()) {
             var profile = verifySource(service, true);
@@ -139,6 +147,7 @@ public final class SimulatorDomainBridge {
             }
         } catch (IOException | RuntimeException unavailable) { s.boot = false; }
         logSourceFingerprints(service);
+        reportPublicMethods(service);
     }
     private static void logSourceFingerprints(Object service) {
         if(!Boolean.getBoolean("maestroai.envelopeCapture")) return;
@@ -158,7 +167,44 @@ public final class SimulatorDomainBridge {
         s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null; s.itemObserver = null;
     }
     public static synchronized void mutationStarting(Object service) { var s = state(service); s.epoch++; s.mutations++; }
-    public static synchronized void mutationFinished(Object service) { var s = state(service); s.epoch++; s.mutations = Math.max(0, s.mutations - 1); }
+    public static synchronized void mutationFinished(Object service) {
+        var s = state(service); s.epoch++; s.mutations = Math.max(0, s.mutations - 1);
+        if(s.mutations==0 && service instanceof GraalShowdownService nativeService) reportPublicMethods(nativeService);
+    }
+    private record MethodAudit(boolean actualBattle, List<String> failures, boolean truncated) {
+        private MethodAudit { failures=List.copyOf(failures); }
+        String safeSummary() { return "scope="+(actualBattle?"PUBLIC_BATTLE_METHODS":"PUBLIC_MODULES_AND_BOOT_DEX")
+                +" failures="+failures+" truncated="+truncated+" actualBattle="+(actualBattle?"INSPECTED_PUBLIC_METHODS_ONLY":"NOT_INSPECTED"); }
+    }
+    private static MethodAudit methodAudit(State s, Value modules, Value battle) {
+        String json=(battle==null?s.sourceAnchor.getMember("auditMethods").execute(modules)
+                :s.sourceAnchor.getMember("auditMethods").execute(modules,battle)).asString();
+        if(json.length()>4096)throw new IllegalArgumentException("bounded public audit");
+        var raw=JsonParser.parseString(json).getAsJsonObject();
+        var failures=new ArrayList<String>();
+        for(var value:raw.getAsJsonArray("failures")) {
+            String code=value.getAsString();
+            if(failures.size()>=8 || !s.sourceAnchor.getMember("diagnosticAllowed").execute(code).asBoolean())
+                throw new IllegalArgumentException("unreviewed public diagnostic");
+            failures.add(code);
+        }
+        return new MethodAudit(battle!=null,failures,raw.get("truncated").getAsBoolean());
+    }
+    /** Source-known module/prototype/boot-dex slots only. No battle, actor,
+     * request, callback execution or constructor is used by this startup check.
+     * Its result never grants or changes a runtime domain. */
+    private static synchronized void reportPublicMethods(GraalShowdownService service) {
+        if(!Boolean.getBoolean("maestroai.envelopeCapture"))return;
+        var s=state(service);
+        if(!s.boot || s.sourceAnchor==null || s.mutations!=0 || s.context!=service.getContext())return;
+        String summary;
+        try { summary=methodAudit(s,service.getContext().eval("js","("+publicModules()+")"),null).safeSummary(); }
+        catch(RuntimeException unavailable){summary="status=UNAVAILABLE actualBattle=NOT_INSPECTED";}
+        if(!summary.equals(s.lastMethodAudit)) {
+            s.lastMethodAudit=summary;
+            System.out.println("[MaestroAI] PUBLIC_METHOD_AUDIT "+summary+" grantsScope=false");
+        }
+    }
     /** Public registry API only. Never receives simulator message/team/request data.
      * A whole map must match pinned native factory bytes before any result is
      * attested. A partial known subset cannot bless unknown initializer code.
@@ -221,7 +267,13 @@ public final class SimulatorDomainBridge {
         }
         if (!s.boot) return Set.of("SIMULATOR_CONTEXT_NOT_ATTESTED");
         if (s.mutations != 0) return Set.of("PUBLIC_REGISTRY_MUTATION_NOT_FINISHED");
-        return Set.of(s.captureFailure.name());
+        var reasons=new TreeSet<String>();reasons.add(s.captureFailure.name());
+        s.methodFailures.forEach(code->reasons.add("METHOD_CHECK:"+code));
+        if(s.captureFailure==CaptureFailure.PUBLIC_CONFIGURATION_METHODS_REJECTED) {
+            if(s.methodGroup!=null)reasons.add("METHOD_GROUP:"+s.methodGroup);
+            if(s.methodFailureKind!=null)reasons.add("METHOD_FAILURE_KIND:"+s.methodFailureKind);
+        }
+        return Set.copyOf(reasons);
     }
     private static synchronized RuntimeDomain failed(GraalShowdownService service, CaptureFailure reason) {
         state(service).captureFailure=reason;
@@ -234,7 +286,8 @@ public final class SimulatorDomainBridge {
     }
     public static RuntimeDomain capture(GraalShowdownService service, UUID battleId, BooleanSupplier choiceCurrent) {
         CaptureFailure stage=CaptureFailure.OWN_CHOICE_EXPIRED;
-        Value progress=null;
+        Value progress=null, auditedModules=null, auditedBattle=null;
+        synchronized(SimulatorDomainBridge.class){var s=state(service);s.methodFailures=Set.of();s.methodGroup=null;s.methodFailureKind=null;}
         try {
             if (!choiceCurrent.getAsBoolean()) return failed(service,stage);
             Object context; long epoch; Value nativeFactories, sourceAnchor, itemObserver; boolean pack;
@@ -250,12 +303,12 @@ public final class SimulatorDomainBridge {
             String modules = publicModules();
             String function = resource("runtime-domain-probe.js");
             Value probe=service.getContext().eval("js",function);
-            Value publicModules=service.getContext().eval("js","("+modules+")");
+            Value publicModules=service.getContext().eval("js","("+modules+")");auditedModules=publicModules;
             stage=CaptureFailure.PUBLIC_BATTLE_LOOKUP_REJECTED;
-            Value publicBattle=service.getContext().eval("js","battleMap.get('"+battleId+"').battle");
+            Value publicBattle=service.getContext().eval("js","battleMap.get('"+battleId+"').battle");auditedBattle=publicBattle;
             stage=CaptureFailure.PUBLIC_CONFIGURATION_REJECTED;
             if(itemObserver!=null && !itemObserver.getMember("current").execute().asBoolean()) return failed(service,stage);
-            progress=service.getContext().eval("js","Object.seal({phase:'PUBLIC_CONFIGURATION_REJECTED'})");
+            progress=service.getContext().eval("js","Object.seal({phase:'PUBLIC_CONFIGURATION_REJECTED',methodGroup:'NONE'})");
             Value captured = probe.execute(publicBattle,publicModules,false,nativeFactories,sourceAnchor,true,progress);
             String json = captured.getMember("json").asString();
             if (json.length() > 12_000_000) return failed(service,CaptureFailure.PUBLIC_CONFIGURATION_LIMIT);
@@ -293,6 +346,17 @@ public final class SimulatorDomainBridge {
                 var reason=CaptureFailure.valueOf(progress.getMember("phase").asString());
                 if(reason.name().startsWith("PUBLIC_CONFIGURATION_")) stage=reason;
             } catch(RuntimeException ignored) { /* Retain the fixed fallback. */ }
+            if(stage==CaptureFailure.PUBLIC_CONFIGURATION_METHODS_REJECTED && auditedModules!=null && auditedBattle!=null) try {
+                synchronized(SimulatorDomainBridge.class) {
+                    var s=state(service);
+                    String group=progress.getMember("methodGroup").asString();
+                    s.methodGroup=METHOD_GROUPS.contains(group)?group:"UNKNOWN_PUBLIC_GROUP";
+                    s.methodFailureKind=unavailable instanceof PolyglotException polyglot
+                            ? polyglot.isHostException()?"HOST_EXCEPTION":polyglot.isInternalError()?"ENGINE_INTERNAL_EXCEPTION":"GUEST_EXCEPTION"
+                            : unavailable instanceof IllegalStateException?"HOST_STATE_EXCEPTION":"OTHER_EXCEPTION";
+                    s.methodFailures=Set.copyOf(methodAudit(s,auditedModules,auditedBattle).failures());
+                }
+            } catch(RuntimeException ignored) { /* Fixed failure code remains; no exception text. */ }
             return failed(service,stage);
         }
     }

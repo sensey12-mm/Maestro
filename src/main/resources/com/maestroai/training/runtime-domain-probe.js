@@ -43,7 +43,9 @@
   };
   // Only method descriptors: getters are never invoked and instance state is
   // never enumerated. Resolve each public engine method's actual override.
-  const methods = (instance, prototype) => {
+  const tagged=(group,fn)=>{if(progress)progress.methodGroup=group;return fn();};
+  const methods = (instance, prototype, group='REGISTRY_IMPLEMENTATION') => {
+    if(progress)progress.methodGroup=group;
     const result = {};
     for (const name of Object.getOwnPropertyNames(prototype).sort()) {
       const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
@@ -198,33 +200,34 @@
   // so a cached-domain lease can recheck them without enumerating actor state.
   mark('PUBLIC_CONFIGURATION_METHODS_REJECTED');
   registryAudit.implementation = {
-    constructors: canonical({DataMove: modules.DataMove, Ability: modules.Ability,
-      Item: modules.Item, BasicEffect: modules.BasicEffect, Registries: modules.Registries}),
+    constructors: tagged('REGISTRY_CONSTRUCTORS',()=>canonical({DataMove: modules.DataMove, Ability: modules.Ability,
+      Item: modules.Item, BasicEffect: modules.BasicEffect, Registries: modules.Registries})),
     registries: Object.fromEntries(Object.entries(modules.Registries).map(([name, ctor]) =>
       [name, methods(null, ctor.prototype)])),
     effectiveRegistries: Object.fromEntries(['ability','heldItem','move','bagItem','species'].map(group =>
       [group, {...methods(registries[group], Object.getPrototypeOf(registries[group])),
                ...methods(registries[group], modules.Registries.CobbleRegistry.prototype)}])),
     basicEffect: methods(null, modules.BasicEffect.prototype),
-    normalizationHelpers: canonical({deepClone:dex.deepClone,deepFreeze:dex.deepFreeze})
+    normalizationHelpers: tagged('NORMALIZATION_HELPERS',()=>canonical({deepClone:dex.deepClone,deepFreeze:dex.deepFreeze}))
   };
-  const registryReceipt = JSON.stringify(canonical(registryAudit, false, false));
+  const registryReceipt = tagged('REGISTRY_SERIALIZATION',()=>JSON.stringify(canonical(registryAudit, false, false)));
   if (registryOnly === true) return JSON.stringify({registryEquivalent, scopedRegistryEquivalent, registryCount, registryReceipt});
+  if(progress)progress.methodGroup='ENGINE_HELPERS';
   if (sourceAnchor) for (const key of ['toID','trunc','clampIntRange'])
     if (!sourceAnchor.hasHelper(key,battle[key])) throw Error('unverified engine helper position');
   const core = {
-    constructors: canonical({Battle: modules.Battle, Pokemon: modules.Pokemon,
-      BattleActions: modules.BattleActions, BattleQueue: modules.BattleQueue, Field: modules.Field}),
+    constructors: tagged('ENGINE_CONSTRUCTORS',()=>canonical({Battle: modules.Battle, Pokemon: modules.Pokemon,
+      BattleActions: modules.BattleActions, BattleQueue: modules.BattleQueue, Field: modules.Field})),
     registryImplementation: registryAudit.implementation,
-    helpers: canonical({toID: battle.toID, trunc: battle.trunc, clampIntRange: battle.clampIntRange}),
-    battle: methods(battle, modules.Battle.prototype), actions: methods(battle.actions, modules.BattleActions.prototype),
-    queue: methods(battle.queue, modules.BattleQueue.prototype), field: methods(battle.field, modules.Field.prototype),
-    pokemon: methods(null, modules.Pokemon.prototype), dex: methods(dex, Object.getPrototypeOf(dex)),
-    moves: methods(dex.moves, Object.getPrototypeOf(dex.moves)), items: methods(dex.items, Object.getPrototypeOf(dex.items)),
-    abilities: methods(dex.abilities, Object.getPrototypeOf(dex.abilities)),
-    species: methods(dex.species, Object.getPrototypeOf(dex.species)),
-    conditions: methods(dex.conditions, Object.getPrototypeOf(dex.conditions)),
-    formats: methods(dex.formats, Object.getPrototypeOf(dex.formats))
+    helpers: tagged('ENGINE_HELPERS',()=>canonical({toID: battle.toID, trunc: battle.trunc, clampIntRange: battle.clampIntRange})),
+    battle: methods(battle, modules.Battle.prototype, 'BATTLE'), actions: methods(battle.actions, modules.BattleActions.prototype, 'ACTIONS'),
+    queue: methods(battle.queue, modules.BattleQueue.prototype, 'QUEUE'), field: methods(battle.field, modules.Field.prototype, 'FIELD'),
+    pokemon: methods(null, modules.Pokemon.prototype, 'POKEMON'), dex: methods(dex, Object.getPrototypeOf(dex), 'DEX'),
+    moves: methods(dex.moves, Object.getPrototypeOf(dex.moves), 'DEX_MOVES'), items: methods(dex.items, Object.getPrototypeOf(dex.items), 'DEX_ITEMS'),
+    abilities: methods(dex.abilities, Object.getPrototypeOf(dex.abilities), 'DEX_ABILITIES'),
+    species: methods(dex.species, Object.getPrototypeOf(dex.species), 'DEX_SPECIES'),
+    conditions: methods(dex.conditions, Object.getPrototypeOf(dex.conditions), 'DEX_CONDITIONS'),
+    formats: methods(dex.formats, Object.getPrototypeOf(dex.formats), 'DEX_FORMATS')
   };
   const tables = {};
   for (const key of ['Scripts','Moves','Abilities','Items','Conditions','TypeChart','Natures','Formats']) tables[key] = data[key];

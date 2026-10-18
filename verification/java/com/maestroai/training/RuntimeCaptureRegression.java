@@ -20,12 +20,10 @@ public final class RuntimeCaptureRegression {
     private static void check(boolean ok,String why){if(!ok)throw new AssertionError(why);}
     public static void main(String[] args) throws Exception {
         var service=new GraalShowdownService();
-        try(var engine=Context.newBuilder("js").allowIO(true).allowExperimentalOptions(true)
-                .allowHostAccess(HostAccess.newBuilder(HostAccess.EXPLICIT).allowArrayAccess(true)
-                        .allowIterableAccess(true).allowListAccess(true).allowMapAccess(true).build())
-                .option("engine.WarnInterpreterOnly","false").option("js.commonjs-require","true")
-                .option("js.commonjs-require-cwd",Path.of("showdown").toAbsolutePath().toString())
-                .option("js.commonjs-core-modules-replacements","buffer:buffer/,crypto:crypto-browserify,path:path-browserify").build()) {
+        // Execute the exact upstream constructor and restrictive module file
+        // system; a generic Context builder is not the native runtime path.
+        var create=GraalShowdownService.class.getDeclaredMethod("createContext");create.setAccessible(true);create.invoke(service);
+        try(var engine=service.getContext()) {
             SimulatorDomainBridge.invalidate(service);service.setContext(engine);
             engine.eval("js","globalThis.process={cwd:()=>''};");
             SimulatorDomainBridge.bootStarting(service);
@@ -116,6 +114,27 @@ public final class RuntimeCaptureRegression {
             check(domain!=null&&domain.effectiveState().known(),"post-boot native item reload rejected: "
                     +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
             PublicPipelineRegression.run(domain);
+            engine.eval("js","globalThis.verificationDamage=BS.BattleStream?verificationStream.battle.actions.getDamage:null;"
+                    +"const ap=Object.getPrototypeOf(verificationStream.battle.actions);ap.getDamage=eval('({'+ap.getDamage.toString()+'}).getDamage');");
+            String priorProperty=System.getProperty("maestroai.envelopeCapture");
+            var diagnosticBytes=new ByteArrayOutputStream();var originalOutput=System.out;
+            try {
+                System.setProperty("maestroai.envelopeCapture","true");System.setOut(new PrintStream(diagnosticBytes));
+                SimulatorDomainBridge.mutationStarting(service);SimulatorDomainBridge.mutationFinished(service);
+            } finally {
+                System.setOut(originalOutput);
+                if(priorProperty==null)System.clearProperty("maestroai.envelopeCapture");else System.setProperty("maestroai.envelopeCapture",priorProperty);
+            }
+            String diagnostic=diagnosticBytes.toString(StandardCharsets.UTF_8);
+            check(diagnostic.contains("PUBLIC_METHOD_AUDIT")&&diagnostic.contains("ACTIONS/getDamage/IDENTITY")
+                    &&diagnostic.contains("actualBattle=NOT_INSPECTED")&&diagnostic.contains("grantsScope=false"),"startup method diagnosis missing");
+            check(SimulatorDomainBridge.capture(service,id,choice::get)==null,"foreign method gained a domain");
+            var rejected=SimulatorDomainBridge.unavailable(service);
+            check(rejected.containsAll(Set.of("PUBLIC_CONFIGURATION_METHODS_REJECTED","METHOD_GROUP:ACTIONS",
+                    "METHOD_CHECK:ACTIONS/getDamage/IDENTITY","METHOD_FAILURE_KIND:GUEST_EXCEPTION")),"method rejection not independently localized: "+rejected);
+            engine.eval("js","Object.getPrototypeOf(verificationStream.battle.actions).getDamage=verificationDamage;delete globalThis.verificationDamage;");
+            check(!domain.current(),"method restoration revived consumed receipt");
+            domain=SimulatorDomainBridge.capture(service,id,choice::get);check(domain!=null&&domain.effectiveState().known(),"restored method blocked a fresh receipt");
             choice.set(false);check(!domain.current(),"own choice expiry retained domain");
             check(SimulatorDomainBridge.capture(service,id,choice::get)==null
                     &&SimulatorDomainBridge.unavailable(service).equals(Set.of("OWN_CHOICE_EXPIRED")),"own expiry diagnostic missing");
