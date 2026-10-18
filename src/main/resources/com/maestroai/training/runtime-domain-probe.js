@@ -1,7 +1,9 @@
 // Read only PUBLIC simulator configuration. Never enumerate a battle, side, team,
 // Pokemon, request, log, event handlers or a private payload. Caller supplies an
 // already initialized battle; this function never starts one or changes a rule.
-(function (battle, modules, registryOnly, nativeFactories, sourceAnchor, captureLease) {
+(function (battle, modules, registryOnly, nativeFactories, sourceAnchor, captureLease, progress) {
+  const mark=phase=>{if(progress)progress.phase=phase;};
+  mark('PUBLIC_CONFIGURATION_ASSOCIATION_REJECTED');
   if (!battle || !battle.dex || !battle.dex.dataCache) throw Error('domain not initialized');
   // Compile guards once while proving configuration. Later prerequisite checks
   // compare the same public references/values/functions; they do not rebuild
@@ -75,6 +77,7 @@
   };
   if(battle.actions.battle!==battle || battle.actions.dex!==dex || battle.field.battle!==battle || battle.queue.battle!==battle)
     throw Error('unverified engine association');
+  mark('PUBLIC_CONFIGURATION_SPECIES_REJECTED');
   track(data);track(data.Pokedex);track(registries.species);trackMap(registries.species.contents);
   const speciesHooks = {};
   for (const [id, species] of registries.species.contents) {
@@ -109,6 +112,7 @@
     }
     return true;
   };
+  mark('PUBLIC_CONFIGURATION_REGISTRY_REJECTED');
   let registryEquivalent = true, scopedRegistryEquivalent = true, registryCount = 0;
   // These IDs exactly match ScopedExecution's modifier/move slice. Unsupported
   // entries are not certified; a selected actor/action still has to pass every
@@ -192,6 +196,7 @@
   }
   // These exact public normalization/lookup functions are part of the receipt,
   // so a cached-domain lease can recheck them without enumerating actor state.
+  mark('PUBLIC_CONFIGURATION_METHODS_REJECTED');
   registryAudit.implementation = {
     constructors: canonical({DataMove: modules.DataMove, Ability: modules.Ability,
       Item: modules.Item, BasicEffect: modules.BasicEffect, Registries: modules.Registries}),
@@ -235,6 +240,7 @@
     // and aliases must therefore remain source-pinned, unlike unused moves.
     Abilities: data.Abilities, Items: data.Items, Conditions: data.Conditions, Aliases: data.Aliases
   };
+  mark('PUBLIC_CONFIGURATION_CACHE_REJECTED');
   if (sourceAnchor) {
     const cacheSeen=new Set();
     const guardCacheValue=value=>{
@@ -246,7 +252,9 @@
         guardCacheValue(d.value);
       }
     };
+    mark('PUBLIC_CONFIGURATION_TABLES_REJECTED');
     sourceAnchor.checkTables(operationTables);
+    mark('PUBLIC_CONFIGURATION_CACHE_REJECTED');
     sourceAnchor.checkCaches(dex);
     for(const [group,key] of [['moves','moveCache'],['abilities','abilityCache'],['items','itemCache'],
         ['species','speciesCache'],['conditions','conditionCache']]) {
@@ -260,6 +268,7 @@
   }
   // Species numbers belong to the separate catalog scope; all source hooks are
   // included even for species that have never appeared in this battle.
+  mark('PUBLIC_CONFIGURATION_SERIALIZATION_REJECTED');
   tables.speciesHooks = Object.fromEntries(Object.keys(data.Pokedex).sort().map(id => [id, hooks(data.Pokedex[id])]));
   if (registryOnly === 'identity') return {
     core, operationTables: canonical(operationTables), catalog: canonical(catalog),

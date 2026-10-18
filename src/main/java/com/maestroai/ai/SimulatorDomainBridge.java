@@ -7,6 +7,7 @@ import com.maestroai.training.RuntimeRegistryLease;
 import com.maestroai.training.RuntimeSourceAudit;
 import com.maestroai.training.NativeRegistryEvidence;
 import com.cobblemon.mod.relocations.graalvm.polyglot.Value;
+import com.cobblemon.mod.relocations.graalvm.polyglot.proxy.ProxyExecutable;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -25,11 +26,14 @@ public final class SimulatorDomainBridge {
         INITIALIZED_PUBLIC_PROBE_UNAVAILABLE, OWN_CHOICE_EXPIRED, PUBLIC_CONTEXT_CHANGED,
         PUBLIC_MODULE_LOOKUP_REJECTED, PUBLIC_BATTLE_LOOKUP_REJECTED,
         PUBLIC_CONFIGURATION_REJECTED, PUBLIC_CONFIGURATION_LIMIT,
+        PUBLIC_CONFIGURATION_ASSOCIATION_REJECTED, PUBLIC_CONFIGURATION_SPECIES_REJECTED,
+        PUBLIC_CONFIGURATION_REGISTRY_REJECTED, PUBLIC_CONFIGURATION_METHODS_REJECTED,
+        PUBLIC_CONFIGURATION_TABLES_REJECTED, PUBLIC_CONFIGURATION_CACHE_REJECTED, PUBLIC_CONFIGURATION_SERIALIZATION_REJECTED,
         PUBLIC_CONFIGURATION_DECODE_REJECTED
     }
     private static final class State {
         long epoch; boolean boot, source; int mutations; Object context, dispatcher;
-        Value nativeFactories, sourceAnchor;
+        Value nativeFactories, sourceAnchor, itemObserver;
         boolean pack;
         RuntimeSourceAudit.Report packAudit;
         CaptureFailure captureFailure = CaptureFailure.INITIALIZED_PUBLIC_PROBE_UNAVAILABLE;
@@ -98,7 +102,7 @@ public final class SimulatorDomainBridge {
     public static synchronized void bootStarting(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null; s.mutations = 0;
         s.nativeFactories = null; s.nativePending = null;
-        s.pack = false; s.sourceAnchor = null; s.packAudit = null;
+        s.pack = false; s.sourceAnchor = null; s.itemObserver = null; s.packAudit = null;
         s.captureFailure = CaptureFailure.INITIALIZED_PUBLIC_PROBE_UNAVAILABLE;
         s.audit = verifySource(service, false);
         if (!s.audit.verified()) {
@@ -115,10 +119,24 @@ public final class SimulatorDomainBridge {
         if (s.source || !finished.verified()) s.audit = finished;
         s.source &= finished.verified(); s.context = service.getContext(); s.dispatcher = service.getSendBattleMessageFunction();
         s.boot = s.source && s.context != null && s.dispatcher != null;
-        s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null;
+        s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null; s.itemObserver = null;
         if (s.boot) try {
             s.sourceAnchor = service.getContext().eval("js", resource("runtime-source-anchor.js"))
                     .execute(service.getContext().eval("js", "(" + publicModules() + ")"));
+            if(s.pack) {
+                var wires=pins("runtime-pack-item-wires.tsv");
+                ProxyExecutable permitted=values->{
+                    if(values.length!=2 || !values[0].isString() || !values[1].isString()) return false;
+                    String id=values[0].asString(), code=values[1].asString();
+                    return code.length()<=65536 && Objects.equals(wires.get(id),hash(code.getBytes(StandardCharsets.UTF_8)));
+                };
+                ProxyExecutable lifecycle=values->{
+                    if(values[0].asBoolean()) mutationStarting(service);else mutationFinished(service);
+                    return null;
+                };
+                s.itemObserver=service.getContext().eval("js",resource("runtime-pack-item-observer.js"))
+                        .execute(s.sourceAnchor,permitted,lifecycle);
+            }
         } catch (IOException | RuntimeException unavailable) { s.boot = false; }
         logSourceFingerprints(service);
     }
@@ -137,7 +155,7 @@ public final class SimulatorDomainBridge {
     }
     public static synchronized void invalidate(Object service) {
         var s = state(service); s.epoch++; s.boot = false; s.context = null; s.dispatcher = null;
-        s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null;
+        s.nativeFactories = null; s.nativePending = null; s.sourceAnchor = null; s.itemObserver = null;
     }
     public static synchronized void mutationStarting(Object service) { var s = state(service); s.epoch++; s.mutations++; }
     public static synchronized void mutationFinished(Object service) { var s = state(service); s.epoch++; s.mutations = Math.max(0, s.mutations - 1); }
@@ -216,13 +234,14 @@ public final class SimulatorDomainBridge {
     }
     public static RuntimeDomain capture(GraalShowdownService service, UUID battleId, BooleanSupplier choiceCurrent) {
         CaptureFailure stage=CaptureFailure.OWN_CHOICE_EXPIRED;
+        Value progress=null;
         try {
             if (!choiceCurrent.getAsBoolean()) return failed(service,stage);
-            Object context; long epoch; Value nativeFactories, sourceAnchor; boolean pack;
+            Object context; long epoch; Value nativeFactories, sourceAnchor, itemObserver; boolean pack;
             synchronized (SimulatorDomainBridge.class) {
                 var s = STATES.get(service);
                 if (s == null || !s.boot || s.mutations != 0) return null;
-                context = s.context; epoch = s.epoch; nativeFactories=s.nativeFactories; sourceAnchor=s.sourceAnchor; pack=s.pack;
+                context = s.context; epoch = s.epoch; nativeFactories=s.nativeFactories; sourceAnchor=s.sourceAnchor; itemObserver=s.itemObserver; pack=s.pack;
             }
             if (sourceAnchor == null || !current(service, context, epoch)) return failed(service,CaptureFailure.PUBLIC_CONTEXT_CHANGED);
             // battleMap is the source-audited index.js lexical binding. Only the
@@ -235,7 +254,9 @@ public final class SimulatorDomainBridge {
             stage=CaptureFailure.PUBLIC_BATTLE_LOOKUP_REJECTED;
             Value publicBattle=service.getContext().eval("js","battleMap.get('"+battleId+"').battle");
             stage=CaptureFailure.PUBLIC_CONFIGURATION_REJECTED;
-            Value captured = probe.execute(publicBattle,publicModules,false,nativeFactories,sourceAnchor,true);
+            if(itemObserver!=null && !itemObserver.getMember("current").execute().asBoolean()) return failed(service,stage);
+            progress=service.getContext().eval("js","Object.seal({phase:'PUBLIC_CONFIGURATION_REJECTED'})");
+            Value captured = probe.execute(publicBattle,publicModules,false,nativeFactories,sourceAnchor,true,progress);
             String json = captured.getMember("json").asString();
             if (json.length() > 12_000_000) return failed(service,CaptureFailure.PUBLIC_CONFIGURATION_LIMIT);
             if (!current(service, context, epoch)) return failed(service,CaptureFailure.PUBLIC_CONTEXT_CHANGED);
@@ -252,17 +273,27 @@ public final class SimulatorDomainBridge {
             if (registry.length() > 4_000_000 || raw.get("registryCount").getAsInt() > 8192)
                 return failed(service,CaptureFailure.PUBLIC_CONFIGURATION_LIMIT);
             components.put("registryReceipt", hash(registry.getBytes(StandardCharsets.UTF_8)));
-            BooleanSupplier lifecycle = () -> choiceCurrent.getAsBoolean() && current(service, context, epoch);
+            BooleanSupplier lifecycle = () -> choiceCurrent.getAsBoolean() && current(service, context, epoch)
+                    && (itemObserver==null || itemObserver.getMember("current").execute().asBoolean());
             Value configurationLease = captured.getMember("current");
             var registryLease = new RuntimeRegistryLease(components.get("registryReceipt"), lifecycle, () ->
                     configurationLease.execute().asBoolean() ? components.get("registryReceipt") : null);
-            var expected = pins(pack ? "runtime-pack-components.tsv" : "runtime-domain-components.tsv");
+            boolean reloaded=pack && itemObserver!=null && itemObserver.getMember("complete").execute().asBoolean();
+            var expected = pins(reloaded ? "runtime-pack-reload-components.tsv" : pack ? "runtime-pack-components.tsv" : "runtime-domain-components.tsv");
             boolean format = raw.get("mod").getAsString().equals("cobblemon") && raw.get("gen").getAsInt() == 9
                     && raw.get("gameType").getAsString().equals("singles") && Objects.equals(components.get("format"), expected.get("format"));
             return new RuntimeDomain(new RuntimeDomain.Snapshot(format, raw.get("extraEvents").getAsBoolean(),
                     raw.get("overrides").getAsBoolean(),
                     raw.get("registryEquivalent").getAsBoolean(), raw.get("scopedRegistryEquivalent").getAsBoolean(), components), expected, true,
                     registryLease);
-        } catch (IOException | RuntimeException unavailable) { return failed(service,stage); }
+        } catch (IOException | RuntimeException unavailable) {
+            // Read only our sealed progress cell, never exception messages,
+            // unknown identifiers, factory bodies or actor/private payloads.
+            if(stage==CaptureFailure.PUBLIC_CONFIGURATION_REJECTED && progress!=null) try {
+                var reason=CaptureFailure.valueOf(progress.getMember("phase").asString());
+                if(reason.name().startsWith("PUBLIC_CONFIGURATION_")) stage=reason;
+            } catch(RuntimeException ignored) { /* Retain the fixed fallback. */ }
+            return failed(service,stage);
+        }
     }
 }

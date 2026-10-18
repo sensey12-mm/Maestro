@@ -105,6 +105,25 @@ def run_installer(home, simulator, assets, resources):
     if changed != set(expected):
         raise ValueError('Actual installer changed unexpected source files')
     print('Published installer PASS: 13 exact assets, exact version marker and current-version fast path; source-only host')
+    return item_fixtures(target, resources)
+
+
+def item_fixtures(target, resources):
+    """Original public post-boot scripts; verify the separate native reload API."""
+    with zipfile.ZipFile(target) as archive:
+        code=archive.read('com/github/yajatkaul/mega_showdown/fabric/datapack/showdown/HeldItems.class')
+        if hashlib.sha256(code).hexdigest()!='1d52078cae0964292f2f872507aa39112c08ee6a4afe1d08ad4aacd150cdcf5b':
+            raise ValueError('Public item reload implementation differs')
+        prefix='data/mega_showdown/mega_showdown/showdown/held_items/'
+        scripts={Path(n).stem:archive.read(n).decode('utf-8') for n in archive.namelist()
+                 if n.startswith(prefix) and n.endswith('.js')}
+    if set(scripts)!={'eviolite','legendplate','pikaniumz','pikashuniumz'}:
+        raise ValueError('Public post-boot item factory inventory differs')
+    actual={k:hashlib.sha256(' '.join(v.splitlines()).encode()).hexdigest() for k,v in scripts.items()}
+    expected=dict(line.split('\t') for line in (resources/'runtime-pack-item-wires.tsv').read_text().splitlines())
+    if actual!=expected: raise ValueError('Native BufferedReader/newline wire pins differ')
+    return scripts
+
 
 
 class InstallerGuards(unittest.TestCase):

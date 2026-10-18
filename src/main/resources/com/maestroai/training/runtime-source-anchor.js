@@ -101,6 +101,7 @@
     return entryEqual(expected,value,{n:20000});
   };
   const callbacks = new Map(), methodPins = new Map();
+  const reloadedItems = new Set();
   const tableCallbacks = (value, path, collect) => {
     if (typeof value === 'function') {
       const key = JSON.stringify(path);
@@ -131,6 +132,27 @@
   const helpers = {toID:dex.toID,trunc:dex.trunc,clampIntRange:modules.Utils.clampIntRange};
   const speciesPrototype=Object.getPrototypeOf(dex.species.getByID('mew'));
   return Object.freeze({has: fn => trusted.has(fn),
+    // Called only by the observer-owned exact-wire boundary, never by a public
+    // registry entry. No actor/request/closure text is accepted as provenance.
+    observeItem: (id, value) => {
+      if(!['eviolite','legendplate','pikaniumz','pikashuniumz'].includes(id)
+          || value!==dex.dataCache.Items[id] || !value || Object.getPrototypeOf(value)!==Object.prototype)
+        throw Error('unverified item reload target');
+      const collect=x=>{
+        if(typeof x==='function'){trusted.add(x);return;}
+        if(!x || typeof x!=='object')return;
+        if(Object.getOwnPropertySymbols(x).length || ![Object.prototype,Array.prototype,null].includes(Object.getPrototypeOf(x)))
+          throw Error('unverified item reload structure');
+        for(const k of Object.getOwnPropertyNames(x)){
+          const d=Object.getOwnPropertyDescriptor(x,k);
+          if(d.get||d.set)throw Error('unverified item reload accessor');
+          collect(d.value);
+        }
+      };
+      collect(value);tableCallbacks(value,['Items',id],true);
+      originalEntries.Items[id]=copyEntry(value,{n:20000});reloadedItems.add(id);
+    },
+    itemsReloaded: () => reloadedItems.size===4,
     speciesEntry: (id,value) => {
       if(!value || Object.getPrototypeOf(value)!==speciesPrototype) return false;
       const name=Object.getOwnPropertyDescriptor(value,'name'),identity=Object.getOwnPropertyDescriptor(value,'id');

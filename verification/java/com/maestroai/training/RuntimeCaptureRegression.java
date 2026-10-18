@@ -4,6 +4,9 @@ import com.cobblemon.mod.common.battles.runner.graal.GraalShowdownService;
 import com.cobblemon.mod.relocations.graalvm.polyglot.*;
 import com.cobblemon.mod.relocations.graalvm.polyglot.proxy.ProxyExecutable;
 import com.maestroai.ai.SimulatorDomainBridge;
+import com.google.gson.*;
+import java.io.*;
+import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -86,6 +89,32 @@ public final class RuntimeCaptureRegression {
             }
             check(domain!=null&&domain.effectiveState().known(),"native boot/transport/actor-start capture rejected: "
                     +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
+            var beforeReload=domain;
+            // Independently use the pinned Java loader's BufferedReader recipe
+            // and original JS API, not production hashes to build expected input.
+            var scripts=JsonParser.parseString(Files.readString(Path.of("pack-item-fixtures.json"))).getAsJsonObject();
+            check(scripts.keySet().equals(Set.of("eviolite","legendplate","pikaniumz","pikashuniumz")),"public fixture scope differs");
+            int reloaded=0;
+            for(var entry:scripts.entrySet()) {
+                String wire;
+                try(var reader=new BufferedReader(new StringReader(entry.getValue().getAsString()))) {
+                    wire=reader.lines().collect(Collectors.joining("\n")).replace("\n"," ");
+                }
+                engine.getBindings("js").getMember("receiveHeldItemData").execute(entry.getKey(),wire);
+                if(++reloaded<scripts.size() && !(args.length>0 && args[0].equals("reload-old-rejects"))) {
+                    var partial=SimulatorDomainBridge.capture(service,id,choice::get);
+                    check(partial!=null&&!partial.effectiveState().known(),"partial reload gained a complete operation profile");
+                }
+            }
+            domain=SimulatorDomainBridge.capture(service,id,choice::get);
+            if(args.length>0 && args[0].equals("reload-old-rejects")) {
+                check(domain==null,"old implementation did not reject actual post-boot item callbacks");
+                check(SimulatorDomainBridge.unavailable(service).equals(Set.of("PUBLIC_CONFIGURATION_REJECTED")),"old captured failure differs");
+                System.out.println("Original 1.0.3 post-boot pack item rejection independently reproduced");return;
+            }
+            check(!beforeReload.current(),"item reload retained old Java receipt");
+            check(domain!=null&&domain.effectiveState().known(),"post-boot native item reload rejected: "
+                    +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
             PublicPipelineRegression.run(domain);
             choice.set(false);check(!domain.current(),"own choice expiry retained domain");
             check(SimulatorDomainBridge.capture(service,id,choice::get)==null
@@ -99,16 +128,23 @@ public final class RuntimeCaptureRegression {
                     &&SimulatorDomainBridge.unavailable(service).equals(Set.of("PUBLIC_BATTLE_LOOKUP_REJECTED")),"missing battle diagnostic wrong");
             engine.eval("js","verificationStream.battle.dex.conditions.conditionCache.set('syntheticprivate',Object.freeze({onStart(){throw Error('NEVER_LOG_ME');}}));");
             check(SimulatorDomainBridge.capture(service,id,choice::get)==null,"foreign condition accepted");
-            check(SimulatorDomainBridge.unavailable(service).equals(Set.of("PUBLIC_CONFIGURATION_REJECTED")),"unsafe exception details escaped");
+            check(SimulatorDomainBridge.unavailable(service).equals(Set.of("PUBLIC_CONFIGURATION_CACHE_REJECTED")),"unsafe exception details escaped");
             engine.eval("js","verificationStream.battle.dex.conditions.conditionCache.delete('syntheticprivate');"
                     +"['p1','p2','sides','log','inputLog','activePokemon','activeTarget'].forEach(k=>Object.defineProperty(verificationStream.battle,k,{get(){throw Error('private actor state touched');}}));");
             var fresh=SimulatorDomainBridge.capture(service,id,choice::get);
             check(fresh!=null&&fresh.effectiveState().known(),"private-state trap or restored configuration rejected");
+            engine.eval("js","globalThis.verificationReceiver=receiveHeldItemData;receiveHeldItemData=function(){throw Error('NEVER_LOG_ME');};");
+            check(!fresh.current(),"replaced public receiver retained current receipt");
+            check(SimulatorDomainBridge.capture(service,id,choice::get)==null
+                    && SimulatorDomainBridge.unavailable(service).equals(Set.of("PUBLIC_CONFIGURATION_REJECTED")),"foreign receiver bypassed provenance or leaked details");
+            engine.eval("js","receiveHeldItemData=verificationReceiver;delete globalThis.verificationReceiver;");
+            check(!fresh.current(),"receiver restoration revived old receipt");
+            fresh=SimulatorDomainBridge.capture(service,id,choice::get);check(fresh!=null,"restored receiver blocked fresh proof");
             SimulatorDomainBridge.mutationStarting(service);check(!fresh.current(),"registry mutation retained receipt");
             SimulatorDomainBridge.mutationFinished(service);check(!fresh.current(),"finished mutation revived old receipt");
             var last=SimulatorDomainBridge.capture(service,id,choice::get);check(last!=null,"fresh independent recapture rejected");
             SimulatorDomainBridge.invalidate(service);check(!last.current(),"context closure retained receipt");
-            System.out.println("Native Java/Graal runtime capture PASS: original boot, registry serialization, species init, actor entry, real domain/provider pipeline, privacy, fixed diagnostics and lifecycle withdrawal");
+            System.out.println("Native Java/Graal runtime capture PASS: original boot, registry serialization, species init, actor entry, exact post-boot item reload, real domain/provider pipeline, privacy, fixed diagnostics and lifecycle withdrawal");
         }
     }
 }

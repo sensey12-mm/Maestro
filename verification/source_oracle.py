@@ -238,7 +238,9 @@ def main():
         with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
             safe_entries(archive); archive.extractall(simulator_root)
         from pack_loader_oracle import run_installer
-        run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
+        scripts=run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
+        (Path(folder)/'pack-item-fixtures.json').write_text(json.dumps(scripts))
+        subprocess.run(['node','verification/pack_item_reload_oracle.cjs',str(simulator_root)],check=True)
         subprocess.run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['node', 'verification/source_oracle.cjs', str(simulator_root)], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
