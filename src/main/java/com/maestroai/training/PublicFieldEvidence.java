@@ -68,7 +68,50 @@ public final class PublicFieldEvidence {
             Boolean value = slot != null && slot.length() >= 2 ? tailwind.get(slot.substring(0, 2)) : null;
             return value == null ? Known.unknown() : Known.of(value, token());
         }
+        /** A witnessed ordinary switch initializes stages in the pinned engine.
+         * This requires current source AND full public effect/lifecycle coverage;
+         * an empty observer map alone is never evidence of zero stages.
+         */
+        public Map<String,Integer> stages(PublicMechanicsEvidence.Observation observation,
+                                          Known<Boolean> effectiveDomain) {
+            requireCurrent(turn);
+            Active active = actor(observation);
+            if (!effectiveDomain.known() || !Boolean.TRUE.equals(effectiveDomain.value())
+                    || active == null || !active.covered() || !allActorsCovered()
+                    || !unknown.isEmpty() || observation.ambiguous() || observation.unsupportedEffects()) return Map.of();
+            var observer = new PublicBattleObserver(); events.forEach(observer::accept);
+            String identity = observer.activeIdentity(observation.slot());
+            if (identity == null || observer.stagesUncertain(identity)) return Map.of();
+            var result = new TreeMap<String,Integer>();
+            STATS.forEach(stat -> result.put(stat, 0)); result.putAll(observer.knownStages(identity));
+            return Map.copyOf(result);
+        }
+        /** Only a witnessed initialized field plus a current engine receipt
+         * closes the partial protocol hazard map. Court Change, gaps and any
+         * unsupported field operation prevent this certificate.
+         */
+        public Hazards hazards(String side, Known<Boolean> effectiveDomain) {
+            requireCurrent(turn);
+            Hazards observed = protocol.sideHazards(side);
+            if (!Set.of("p1", "p2").contains(side) || !effectiveDomain.known()
+                    || !Boolean.TRUE.equals(effectiveDomain.value()) || !allActorsCovered()
+                    || !unknown.isEmpty()) return observed;
+            return new Hazards(observed.layers(), true, token() + ":source-verified-initial-field-and-side-events");
+        }
     }
+    // Past-only declarative outcomes: current public HP/status/stages and
+    // ordinary switches carry their effects. This does not grant future damage,
+    // drain, pivot or secondary-effect forecasting. Exact source/registry proof
+    // includes every ID below; unsupported transfers/volatiles still poison state.
+    // These IDs are admitted only as *already executed* public history, not
+    // as future outcome/damage certificates. Earthquake's ordinary Gen9
+    // Cobblemon Showdown definition is a direct all-adjacent Ground attack
+    // (secondary=null). The special Dig/invulnerability interactions are
+    // future battle mechanics and are NOT certified by this allowlist.
+    // An unrecognized [zeffect], indirect origin or extra protocol side effect
+    // still poisons the lifetime record; no Z/pack override is inferred safe.
+    private static final Set<String> OBSERVED_ONLY = Set.of("earthquake","uturn","ironhead","icebeam","moonblast","focusblast",
+            "astralbarrage","psyshock","drainingkiss","energyball","closecombat","rocktomb","shadowball","hypervoice","aurasphere");
     private long epoch;
     private Capture current;
     public void reset() { epoch++; current = null; }
@@ -76,7 +119,7 @@ public final class PublicFieldEvidence {
         return raw.toLowerCase(Locale.ROOT).replaceFirst("^(move|ability):\\s*", "").replaceAll("[^a-z0-9]", "");
     }
     private static final class Mutable {
-        String slot, name; int entry; boolean covered; Set<String> volatiles = new HashSet<>();
+        String slot, name; int entry; boolean covered, transientFlinch; Set<String> volatiles = new HashSet<>();
     }
     public Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence) {
         epoch++; Set<String> unknown = new TreeSet<>();
@@ -102,7 +145,7 @@ public final class PublicFieldEvidence {
                 wind.put("p1", false); wind.put("p2", false); continue;
             }
             if (event.equals("turn")) {
-                turn = Integer.parseInt(p[2]); active.values().forEach(a -> a.volatiles.remove("protect")); continue;
+                turn = Integer.parseInt(p[2]); active.values().forEach(a -> { a.volatiles.remove("protect"); a.transientFlinch=false; }); continue;
             }
             if (event.equals("-weather")) {
                 String value = p.length >= 3 ? key(p[2]) : "";
@@ -140,6 +183,9 @@ public final class PublicFieldEvidence {
             Mutable a = active.get(slot);
             if (a == null || !a.name.equals(name)) { unknown.add("ACTOR_BINDING_UNKNOWN"); continue; }
             if (event.equals("replace")) { a.covered = false; unknown.add("REVEAL_EXECUTION_HISTORY_UNRESOLVED"); continue; }
+            if (event.equals("cant") && p.length > 3 && key(p[3]).equals("flinch")) {
+                a.transientFlinch = true; continue; // duration1 in the pinned conditions table
+            }
             if (event.equals("-singleturn")) {
                 if (p.length > 3 && key(p[3]).equals("protect")) a.volatiles.add("protect"); else a.covered = false;
             } else if (Set.of("-start", "-end").contains(event)) {
@@ -153,7 +199,12 @@ public final class PublicFieldEvidence {
             } else if (event.equals("move")) {
                 // Already executed moves outside the modeled set may leave unannounced
                 // state (Baton Pass, forced locks, ability changes). Do not erase it.
-                if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null) {
+                // These source-audited setters leave only the side-condition
+                // events already tracked above. They are not supported root
+                // actions in the HP-exchange evaluator. A current runtime source
+                // certificate is still required before any field result is used.
+                boolean observedHazardSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb").contains(key(p[3]));
+                if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedHazardSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }
                 for (int i = 4; i < p.length; i++) if (p[i].startsWith("[")) {
@@ -163,7 +214,7 @@ public final class PublicFieldEvidence {
         }
         if (!start || !gen9 || !singles || turn == 0) unknown.add("WITNESSED_GEN9_SINGLES_START_OR_TURN_MISSING");
         Map<String, Active> actors = new HashMap<>();
-        active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered)));
+        active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered && !a.transientFlinch)));
         current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol); return current;
     }
 }
