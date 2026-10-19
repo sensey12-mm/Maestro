@@ -156,6 +156,7 @@ public final class ScopedExecution {
     public Certificate setupCoverage(Profile p, Actor a, String moveId) {
         bound(p, a); var c = new Check(Operation.SETUP); c.actor(a.id(), reserve(a.id()));
         Move m = move(moveId); c.need("SUPPORTED_SETUP_MOVE", m != null && m.power() == 0);
+        c.need("SUPPORTED_SETUP_EXECUTION", m != null && !m.id().equals("geomancy"));
         c.need(a.id() + ":STATUS", a.status().known() && a.status().value().equals("none"));
         if (m != null && m.id().equals("recover")) c.need(a.id() + ":EXACT_RECOVERY_MAX_HP",
                 p.maxHp().known() && p.maxHp().value().low() == p.maxHp().value().high());

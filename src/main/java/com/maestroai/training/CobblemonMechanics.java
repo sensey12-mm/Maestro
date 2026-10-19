@@ -47,13 +47,17 @@ public final class CobblemonMechanics {
         }
     }
     public record Move(String id, String type, int power, boolean physical, int priority,
-                       Map<String, Integer> boosts, boolean damageOnly) {
-        public Move { boosts = Map.copyOf(boosts); }
+                       Map<String, Integer> boosts, boolean damageOnly, int accuracy) {
+        public Move { boosts = Map.copyOf(boosts); if(accuracy < 1 || accuracy > 100) throw new IllegalArgumentException("unsupported accuracy"); }
+        public Move(String id,String type,int power,boolean physical,int priority,
+                    Map<String,Integer> boosts,boolean damageOnly) {
+            this(id,type,power,physical,priority,boosts,damageOnly,100);
+        }
         // Psyshock is Special against physical Defense: do not use the
         // Physical attack stat or the target's ordinary Special Defense.
         public String attackingStat() { return physical ? "atk" : "spa"; }
         public String defendingStat() {
-            return physical || id.equals("psyshock") ? "def" : "spd";
+            return physical || id.equals("psyshock") || id.equals("psystrike") ? "def" : "spd";
         }
     }
     // Deliberately small fixed-power/no-secondary allowlist, checked against the pinned moves.js.
@@ -75,6 +79,20 @@ public final class CobblemonMechanics {
             Map.entry("dragonclaw", new Move("dragonclaw", "dragon", 80, true, 0, Map.of(), true)),
             // Damage formula is supported, but burn secondary prevents a complete turn forecast.
             Map.entry("flamethrower", new Move("flamethrower", "fire", 90, false, 0, Map.of(), false)),
+            Map.entry("uturn", new Move("uturn", "bug", 70, true, 0, Map.of(), false)),
+            Map.entry("ironhead", new Move("ironhead", "steel", 80, true, 0, Map.of(), false)),
+            Map.entry("icebeam", new Move("icebeam", "ice", 90, false, 0, Map.of(), false)),
+            Map.entry("drainingkiss", new Move("drainingkiss", "fairy", 50, false, 0, Map.of(), false)),
+            Map.entry("energyball", new Move("energyball", "grass", 90, false, 0, Map.of(), false)),
+            Map.entry("geomancy", new Move("geomancy", "fairy", 0, false, 0, Map.of("spa", 2, "spd", 2, "spe", 2), false)),
+            Map.entry("moonblast", new Move("moonblast", "fairy", 95, false, 0, Map.of(), false)),
+            Map.entry("focusblast", new Move("focusblast", "fighting", 120, false, 0, Map.of(), false, 70)),
+            Map.entry("thunder", new Move("thunder", "electric", 110, false, 0, Map.of(), false, 70)),
+            Map.entry("psystrike", new Move("psystrike", "psychic", 100, false, 0, Map.of(), true)),
+            Map.entry("fireblast", new Move("fireblast", "fire", 110, false, 0, Map.of(), false, 85)),
+            Map.entry("spectralthief", new Move("spectralthief", "ghost", 90, true, 0, Map.of(), false)),
+            Map.entry("closecombat", new Move("closecombat", "fighting", 120, true, 0, Map.of(), false)),
+            Map.entry("rocktomb", new Move("rocktomb", "rock", 60, true, 0, Map.of(), false, 95)),
             Map.entry("swordsdance", new Move("swordsdance", "normal", 0, false, 0, Map.of("atk", 2), false)),
             Map.entry("nastyplot", new Move("nastyplot", "dark", 0, false, 0, Map.of("spa", 2), false)),
             Map.entry("bulkup", new Move("bulkup", "fighting", 0, false, 0, Map.of("atk", 1, "def", 1), false)));
@@ -162,30 +180,63 @@ public final class CobblemonMechanics {
         if (stat < 1 || stat > 10000 || stage < -6 || stage > 6) throw new IllegalArgumentException("invalid stat stage");
         return stage >= 0 ? stat * (stage + 2) / 2 : stat * 2 / (2 - stage);
     }
-    /** Only attacking types used in this slice; no inferred opponent species typing. */
-    public static int effectiveness(String attackType, List<String> targetTypes) {
-        int mod = 0;
-        for (String type : targetTypes) {
-            if (!TYPES.contains(type)) throw new IllegalArgumentException("invalid type");
-            switch (attackType) {
-                case "normal" -> { if (type.equals("ghost")) return Integer.MIN_VALUE;
-                    if (Set.of("rock", "steel").contains(type)) mod--; }
-                case "ghost" -> { if (type.equals("normal")) return Integer.MIN_VALUE;
-                    if (Set.of("ghost", "psychic").contains(type)) mod++;
-                    if (type.equals("dark")) mod--; }
-                case "dragon" -> { if (type.equals("fairy")) return Integer.MIN_VALUE;
-                    if (type.equals("dragon")) mod++; if (type.equals("steel")) mod--; }
-                case "fire" -> { if (Set.of("grass", "ice", "bug", "steel").contains(type)) mod++;
-                    if (Set.of("fire", "water", "rock", "dragon").contains(type)) mod--; }
-                case "rock" -> { if (Set.of("fire", "ice", "flying", "bug").contains(type)) mod++;
-                    if (Set.of("fighting", "ground", "steel").contains(type)) mod--; }
-                case "psychic" -> { if (type.equals("dark")) return Integer.MIN_VALUE;
-                    if (Set.of("fighting", "poison").contains(type)) mod++;
-                    if (Set.of("psychic", "steel").contains(type)) mod--; }
-                default -> throw new IllegalArgumentException("unsupported attacking type");
+    /** Standard gen-nine 18-type effectiveness table, derived from pinned
+     * Showdown typechart; oracle verifies every attacker/defender cell.
+     * Values: 1=super-effective, -1=resisted, X=immune, omitted=neutral.
+     * Deliberately no Stellar/Inverse Battle or pack-specific overlays.
+     */
+    private static final String[] TYPE_MATCHUPS = {
+            "bug dark:1 fairy:-1 fighting:-1 fire:-1 flying:-1 ghost:-1 grass:1 poison:-1 psychic:1 steel:-1",
+            "dark dark:-1 fairy:-1 fighting:-1 ghost:1 psychic:1",
+            "dragon dragon:1 fairy:X steel:-1",
+            "electric dragon:-1 electric:-1 flying:1 grass:-1 ground:X water:1",
+            "fairy dark:1 dragon:1 fighting:1 fire:-1 poison:-1 steel:-1",
+            "fighting bug:-1 dark:1 fairy:-1 flying:-1 ghost:X ice:1 normal:1 poison:-1 psychic:-1 rock:1 steel:1",
+            "fire bug:1 dragon:-1 fire:-1 grass:1 ice:1 rock:-1 steel:1 water:-1",
+            "flying bug:1 electric:-1 fighting:1 grass:1 rock:-1 steel:-1",
+            "ghost dark:-1 ghost:1 normal:X psychic:1",
+            "grass bug:-1 dragon:-1 fire:-1 flying:-1 grass:-1 ground:1 poison:-1 rock:1 steel:-1 water:1",
+            "ground bug:-1 electric:1 fire:1 flying:X grass:-1 poison:1 rock:1 steel:1",
+            "ice dragon:1 fire:-1 flying:1 grass:1 ground:1 ice:-1 steel:-1 water:-1",
+            "normal ghost:X rock:-1 steel:-1",
+            "poison fairy:1 ghost:-1 grass:1 ground:-1 poison:-1 rock:-1 steel:X",
+            "psychic dark:X fighting:1 poison:1 psychic:-1 steel:-1",
+            "rock bug:1 fighting:-1 fire:1 flying:1 ground:-1 ice:1 steel:-1",
+            "steel electric:-1 fairy:1 fire:-1 ice:1 rock:1 steel:-1 water:-1",
+            "water dragon:-1 fire:1 grass:-1 ground:1 rock:1 water:-1"
+    };
+    private static final Map<String, Map<String,Integer>> TYPE_CHART = loadTypeChart();
+    private static Map<String, Map<String,Integer>> loadTypeChart() {
+        Map<String,Map<String,Integer>> chart=new TreeMap<>();
+        for(String row:TYPE_MATCHUPS) {
+            String[] fields=row.split(" ");
+            if(!TYPES.contains(fields[0]) || chart.containsKey(fields[0]))
+                throw new IllegalStateException("invalid attack type chart");
+            Map<String,Integer> defenders=new HashMap<>();
+            for(int i=1;i<fields.length;i++) {
+                String[] part=fields[i].split(":");
+                if(part.length!=2 || !TYPES.contains(part[0]))
+                    throw new IllegalStateException("invalid defense type chart");
+                int v=part[1].equals("X")?Integer.MIN_VALUE:Integer.parseInt(part[1]);
+                if((v!=Integer.MIN_VALUE && Math.abs(v)!=1) || defenders.putIfAbsent(part[0],v)!=null)
+                    throw new IllegalStateException("duplicate/invalid type effectiveness");
             }
+            chart.put(fields[0],Map.copyOf(defenders));
         }
-        return mod;
+        if(!chart.keySet().equals(TYPES))throw new IllegalStateException("incomplete type effectiveness chart");
+        return Map.copyOf(chart);
+    }
+    public static int effectiveness(String attackType, List<String> targetTypes) {
+        var attack=TYPE_CHART.get(attackType);
+        if(attack==null)throw new IllegalArgumentException("unsupported attacking type");
+        int score=0;
+        for(String type:targetTypes) {
+            if(!TYPES.contains(type))throw new IllegalArgumentException("unsupported target type");
+            int cell=attack.getOrDefault(type,0);
+            if(cell==Integer.MIN_VALUE)return Integer.MIN_VALUE;
+            score+=cell;
+        }
+        return score;
     }
     public static Known<IntRange> speed(Profile profile, Actor actor) {
         bound(profile, actor);

@@ -207,6 +207,8 @@ public final class ShadowMechanicsEvaluation {
         Move move = move(moveId);
         if (move == null) return unknown(p, "UNSUPPORTED_MOVE:" + moveId);
         if (move.power() == 0) {
+            if (move.id().equals("geomancy"))
+                return unknown(p, "GEOMANCY_CHARGE_POWER_HERB_AND_CONSUMPTION_UNMODELED");
             if (execution != null) {
                 var coverage = execution.setupCoverage(profiles.get(attacker.id()), attacker, moveId);
                 if (!coverage.supported()) return unknown(p, String.join(",", coverage.missing()));
@@ -236,7 +238,8 @@ public final class ShadowMechanicsEvaluation {
             return replace(p, state(p.state(), own ? boosted : target, own ? target : boosted,
                     p.state().actionKind(), p.state().action()));
         }
-        if (!move.damageOnly()) return unknown(p, "SECONDARY_OR_OTHER_MOVE_EFFECTS_UNRESOLVED");
+        if (!move.damageOnly()) return unknown(p,
+                MaestroOwnMoveAudit.unmodeledEffect(moveId));
         Damage damage = execution == null ? damage(moveId, profiles.get(attacker.id()), attacker, profiles.get(target.id()), target, critical)
                 : execution.damage(moveId, profiles.get(attacker.id()), attacker, profiles.get(target.id()), target, critical);
         if (!damage.fraction().known()) return unknown(p, String.join(",", damage.unknown()));

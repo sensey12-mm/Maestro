@@ -336,6 +336,76 @@ for (const [maxHp,hp,expected] of [[381,100,291],[381,300,381],[381,381,381],[1,
 }
 console.log('Recover source oracle PASS: four exact rounding/capping cases');
 
+
+// Actual fixed Maestro roster: exact move IDs are an OWN-team verification
+// fixture, never a guessed opponent moveset at runtime. Source definitions
+// must match the Java move calculator (including accuracy & effect flags).
+{
+ const src=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/CobblemonMechanics.java'),'utf8');
+ const audit=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/MaestroOwnMoveAudit.java'),'utf8');
+ const sets=fs.readFileSync(path.join(__dirname,'maestro_fixed_team_moves.tsv'),'utf8').trim().split('\n').map(r=>r.split('\t'));
+ assert.equal(sets.length,6,'Maestro own team must contain six species');
+ const all=new Set(sets.flatMap(r=>r.slice(1)));
+ assert.equal(all.size,23,'24 move slots must contain 23 unique moves');
+ for(const row of sets) {
+   assert.equal(row.length,5,'each boss must have exactly four moves');
+   assert(audit.includes('"'+row[0]+'"')&&row.slice(1).every(id=>audit.includes('"'+id+'"')),
+     'Maestro own-team Java reference differs');
+ }
+ const supported=new Map();
+ for(const m of src.matchAll(/Map\.entry\("([a-z]+)", new Move\("([a-z]+)", "([a-z]+)", (\d+), (true|false), (-?\d+), Map\.of\(([^)]*)\), (true|false)(?:, (\d+))?\)\)/g)) {
+   const [,key,id,type,power,physical,priority,boosts,complete,accuracy]=m;
+   assert.equal(id,key);
+   supported.set(id,{type,power:+power,physical:physical==='true',priority:+priority,
+     complete:complete==='true',accuracy:accuracy?+accuracy:100});
+ }
+ const effectLabels=new Map([...audit.matchAll(/Map\.entry\("([a-z]+)", "([A-Z_]+)"\)/g)].map(m=>[m[1],m[2]]));
+ for(const id of all) {
+   const value=supported.get(id);
+   assert(value,'missing move calculator entry for actual Maestro move '+id);
+   const m=Dex.moves.get(id);
+   const raw=rawMoves[id];
+   assert.equal(value.type,m.type.toLowerCase(),id+' move type');
+   assert.equal(value.power,m.basePower,id+' power');
+   assert.equal(value.physical,m.category==='Physical',id+' physical');
+   assert.equal(value.priority,m.priority,id+' priority');
+   assert.equal(value.accuracy,typeof m.accuracy==='number'?m.accuracy:100,id+' accuracy');
+   // Complete means no side effects beyond pure fixed-power damage or
+   // separately modeled setup/recovery. Crit-ratio is bounded by BOTH.
+   if(value.complete) {
+     assert.equal(m.category==='Status',false,id+' status marked damage-complete');
+     assert.equal(m.secondary,null,id+' secondary marked complete');
+     assert(!raw.selfSwitch&&!raw.drain&&!raw.self&&!raw.recoil&&!raw.boosts&&!raw.onTryMove
+       &&!raw.onModifyMove&&!raw.onBasePower&&!raw.onHit&&!raw.onAfterHit,
+       id+' incomplete source special effect marked complete');
+   } else if(m.category!=='Status') {
+     assert(effectLabels.has(id),id+' missing explicit partial outcome effect reason');
+   } else if(id==='geomancy') {
+     assert(effectLabels.has(id)&&!!raw.onTryMove&&!!raw.boosts,
+       'Geomancy charging and boost/callback must remain guarded');
+   }
+ }
+ const matrix=src.match(/private static final String\[\] TYPE_MATCHUPS = \{([\s\S]*?)\n    \};/);
+ assert(matrix,'Java type chart no longer source auditable');
+ const rows=[...matrix[1].matchAll(/"([^"]+)"/g)].map(m=>m[1]);
+ assert.equal(rows.length,18,'type chart missing attack types');
+ const types=['normal','fire','water','electric','grass','ice','fighting','poison','ground',
+   'flying','psychic','bug','rock','ghost','dragon','dark','steel','fairy'];
+ const actual=new Map(rows.map(row=>{
+   const [type,...tokens]=row.split(' ');
+   return [type,new Map(tokens.map(t=>{const [to,n]=t.split(':');return [to,n==='X'?-99:+n]}))];
+ }));
+ assert.deepEqual([...actual.keys()].sort(),types.slice().sort(),'Java attack type domain mismatch');
+ for(const attacker of types)for(const target of types) {
+   const sourceWeak=Dex.getEffectiveness(attacker,target);
+   const sourceImmune=Dex.getImmunity(attacker,target);
+   const expected=sourceImmune?sourceWeak:-99;
+   assert.equal(actual.get(attacker).get(target)??0,expected,
+      attacker+' -> '+target+' type chart source divergence');
+ }
+ console.log('Maestro six-member/24-slot/23-move source oracle PASS: exact move IDs, damage properties, effect-aware UNKNOWN, 324 type matchups');
+}
+
 const policyOutcomes=require('./policy_oracle.cjs').run(Battle);
 assert.equal(policyOutcomes.length,8);
 console.log('Independent policy outcome oracle PASS: 8 jointly legal source-executed exchanges before residuals');

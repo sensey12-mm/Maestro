@@ -275,7 +275,47 @@ public final class StandaloneRegression {
                 "unknown opponent modifiers were assumed neutral");
     }
 
+    /** Explicitly account for every fixed own-team move without incorrectly
+     * upgrading secondary/pivot/charge/etc. to source-bounded forecasts. */
+    private static void maestroWholeRosterCoverage() {
+        var ids=MaestroOwnMoveAudit.ownMoveIds();
+        check(MaestroOwnMoveAudit.FIXED_ROSTER.size()==6);
+        check(ids.size()==23);
+        var count=0;
+        for(var e:MaestroOwnMoveAudit.FIXED_ROSTER.entrySet()) {
+            check(e.getValue().size()==4 && e.getValue().stream().distinct().count()==4);
+            for(var id:e.getValue()) {
+                count++;
+                var move=CobblemonMechanics.move(id);
+                check(move!=null, "actual Maestro move has no known calculator properties: "+id);
+                check(move.accuracy()>=1 && move.accuracy()<=100);
+                if(!MaestroOwnMoveAudit.completelySimulated(id)) {
+                    String label=MaestroOwnMoveAudit.unmodeledEffect(id);
+                    check(!label.equals("SECONDARY_OR_OTHER_MOVE_EFFECTS_UNRESOLVED"),
+                         "actual Maestro effect missing precise unsupported reason: "+id);
+                }
+            }
+        }
+        check(count==24);
+        check(CobblemonMechanics.move("psystrike").attackingStat().equals("spa")
+                && CobblemonMechanics.move("psystrike").defendingStat().equals("def"));
+        check(CobblemonMechanics.move("geomancy").power()==0
+                && !MaestroOwnMoveAudit.completelySimulated("geomancy"));
+        check(CobblemonMechanics.move("uturn").power()==70
+                && !MaestroOwnMoveAudit.completelySimulated("uturn"));
+        check(!MaestroOwnMoveAudit.completelySimulated("icebeam"));
+        check(MaestroOwnMoveAudit.completelySimulated("astralbarrage"));
+        check(MaestroOwnMoveAudit.completelySimulated("swordsdance"));
+        for(var t:List.of("normal","fire","water","electric","grass","ice","fighting","poison",
+               "ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy"))
+            check(CobblemonMechanics.effectiveness(t,List.of("normal"))<3);
+        check(CobblemonMechanics.effectiveness("ground",List.of("flying"))==Integer.MIN_VALUE);
+        check(CobblemonMechanics.effectiveness("fairy",List.of("dragon"))==1);
+        check(CobblemonMechanics.effectiveness("steel",List.of("fairy"))==1);
+    }
+
     public static void main(String[] args) {
+        maestroWholeRosterCoverage();
         calyrexMoveCoverage();
         modifierEnvelopeRegressions();
         publicFormReplay();
