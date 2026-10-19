@@ -47,7 +47,7 @@ public final class ShadowMechanicsEvaluation {
         public Comparison { rankings = List.copyOf(rankings); }
     }
     private record Progress(State state, double dealtLow, double dealtHigh,
-                            double lostLow, double lostHigh, Set<String> unknown) {}
+                             double lostLow, double lostHigh, Set<String> unknown, boolean skipNext) {}
 
     public static Comparison compare(BattleSnapshot snapshot, PublicMechanics mechanics,
                                      Map<String, Profile> profiles, List<Plan> plans,
@@ -81,7 +81,7 @@ public final class ShadowMechanicsEvaluation {
             List<Line> lines = new ArrayList<>(); Set<String> unknown = new TreeSet<>();
             for (List<Turn> turns : plan.scenarios()) {
                 if (turns.size() != horizon) throw new IllegalArgumentException("incomparable horizon lengths");
-                List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of()));
+                List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of(),false));
                 for (int i = 0; i < turns.size(); i++) {
                     List<Progress> expanded = new ArrayList<>();
                     for (Progress branch : branches) expanded.addAll(turn(branch, turns.get(i), i, mechanics, profiles, trickRoom, critical, execution));
@@ -187,19 +187,76 @@ public final class ShadowMechanicsEvaluation {
                     stages, target.status());
             Progress switched = replace(p, state(s, arriving, s.opponent(), Kind.SWITCH, t.action()));
             switched = hurt(switched, true, target.entryDamage().value());
-            return List.of(execute(switched, t.reply(), false, profiles, critical, execution));
+            return executeVariants(switched,t.reply(),false,profiles,critical,execution);
         }
-        if (order == Order.BOTH) return List.of(sequence(p, t, true, profiles, critical, execution), sequence(p, t, false, profiles, critical, execution));
-        return List.of(sequence(p, t, order == Order.SELF_FIRST, profiles, critical, execution));
+        if(order==Order.BOTH){
+            var all=new ArrayList<Progress>();
+            all.addAll(sequence(p,t,true,profiles,critical,execution));
+            all.addAll(sequence(p,t,false,profiles,critical,execution));
+            return all;
+        }
+        return sequence(p,t,order==Order.SELF_FIRST,profiles,critical,execution);
     }
-    private static Progress sequence(Progress p, Turn t, boolean selfFirst, Map<String, Profile> profiles, Critical critical, ScopedExecution execution) {
-        Move ownMove = move(t.action().substring(5));
-        p = replace(p, state(p.state(), p.state().self(), p.state().opponent(),
-                ownMove == null ? Kind.UNKNOWN : ownMove.power() == 0 ? Kind.SETUP : Kind.ATTACK, t.action()));
-        Progress first = execute(p, selfFirst ? t.action().substring(5) : t.reply(), selfFirst, profiles, critical, execution);
-        return execute(first, selfFirst ? t.reply() : t.action().substring(5), !selfFirst, profiles, critical, execution);
+    private static List<Progress> sequence(Progress p,Turn turn,boolean selfFirst,
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution) {
+        Move move=move(turn.action().substring(5));
+        p=replace(p,state(p.state(),p.state().self(),p.state().opponent(),
+                move==null?Kind.UNKNOWN:move.power()==0?Kind.SETUP:Kind.ATTACK,turn.action()));
+        var variants=new ArrayList<Progress>();
+        for(var first:executeVariants(p,selfFirst?turn.action().substring(5):turn.reply(),
+                selfFirst,profiles,critical,execution))
+            variants.addAll(executeVariants(first,selfFirst?turn.reply():turn.action().substring(5),
+                    !selfFirst,profiles,critical,execution));
+        return variants;
     }
-    private static Progress execute(Progress p, String moveId, boolean own, Map<String, Profile> profiles, Critical critical, ScopedExecution execution) {
+    private static List<Progress> executeVariants(Progress p,String id,boolean own,
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution) {
+        if(p.skipNext())return List.of(new Progress(p.state(),p.dealtLow(),p.dealtHigh(),
+                p.lostLow(),p.lostHigh(),p.unknown(),false));
+        Actor attacker=own?p.state().self():p.state().opponent();
+        if(attacker.status().known()&&Set.of("par","frz").contains(attacker.status().value())){
+            // Conditional paralysis/freeze may prevent the slower action.
+            Actor recovered=attacker.status().value().equals("frz")?withStatus(attacker,"none"):attacker;
+            var eligible=replace(p,state(p.state(),own?recovered:p.state().self(),
+                    own?p.state().opponent():recovered,p.state().actionKind(),p.state().action()));
+            return List.of(p,executeBase(eligible,id,own,profiles,critical,execution));
+        }
+        Progress primary=executeBase(p,id,own,profiles,critical,execution);
+        if(!primary.unknown().isEmpty())return List.of(primary);
+        var effect=SourceMoveEffects.SECONDARIES.get(id);
+        if(effect==null)return List.of(primary);
+        Actor after=own?primary.state().opponent():primary.state().self();
+        Actor before=own?p.state().opponent():p.state().self();
+        if(after.hp().value().high()==0||after.hp().value().equals(before.hp().value()))
+            return List.of(primary);
+        if(!effect.status().equals("none")&&!statusCanProc(after,effect.status(),profiles))
+            return List.of(primary);
+        Actor modified=after;
+        if(!effect.status().equals("none"))modified=withStatus(modified,effect.status());
+        if(!effect.targetStages().isEmpty()){
+            modified=stageEffect(modified,effect.targetStages());
+            if(modified==null)return List.of(unknown(primary,"SECONDARY_STAGE_DOMAIN_UNKNOWN"));
+        }
+        var state=state(primary.state(),own?primary.state().self():modified,
+                own?modified:primary.state().opponent(),primary.state().actionKind(),primary.state().action());
+        var proc=new Progress(state,primary.dealtLow(),primary.dealtHigh(),primary.lostLow(),
+                primary.lostHigh(),primary.unknown(),effect.flinch());
+        return effect.chance()==100?List.of(proc):List.of(primary,proc);
+    }
+    private static boolean statusCanProc(Actor actor,String change,Map<String,Profile> profiles) {
+        if(!actor.status().known()||!actor.status().value().equals("none"))return false;
+        Profile p=profiles.get(actor.id());
+        if(p==null||!p.types().known())return false;
+        return !p.types().value().contains(switch(change){
+            case "brn"->"fire";case "frz"->"ice";case "par"->"electric";
+            default->throw new IllegalArgumentException("unsupported condition");});
+    }
+    private static Actor withStatus(Actor a,String status){
+        return new Actor(a.id(),a.facts(),a.hp(),a.stages(),
+                Known.of(status,SOURCE+":conditional-secondary"));
+    }
+    private static Progress executeBase(Progress p,String moveId,boolean own,
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution) {
         if (!p.unknown().isEmpty()) return p;
         Actor attacker = own ? p.state().self() : p.state().opponent();
         Actor target = own ? p.state().opponent() : p.state().self();
@@ -227,7 +284,7 @@ public final class ShadowMechanicsEvaluation {
                 Actor healed = actor(attacker, new Interval(Math.min(1, hp.low() + recovery), Math.min(1, hp.high() + recovery)), attacker.stages());
                 State changed = state(p.state(), own ? healed : target, own ? target : healed, p.state().actionKind(), p.state().action());
                 return new Progress(changed, p.dealtLow() - (own ? 0 : high), p.dealtHigh() - (own ? 0 : low),
-                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown());
+                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown(),p.skipNext());
             }
             Map<String, Integer> stages = new TreeMap<>(attacker.stages());
             for (var e : move.boosts().entrySet()) {
@@ -238,7 +295,8 @@ public final class ShadowMechanicsEvaluation {
             return replace(p, state(p.state(), own ? boosted : target, own ? target : boosted,
                     p.state().actionKind(), p.state().action()));
         }
-        if (!move.damageOnly() && !Set.of("drainingkiss","closecombat","rocktomb","spectralthief","uturn").contains(moveId))
+        if (!move.damageOnly() && !Set.of("drainingkiss","closecombat","rocktomb","spectralthief","uturn").contains(moveId)
+                && !SourceMoveEffects.modeledSecondary(moveId))
             return unknown(p,MaestroOwnMoveAudit.unmodeledEffect(moveId));
         if(moveId.equals("spectralthief")) {
             if(!target.stages().keySet().containsAll(Set.of("atk","def","spa","spd","spe")))
@@ -307,7 +365,7 @@ public final class ShadowMechanicsEvaluation {
         State state=state(p.state(),own?after:p.state().self(),own?p.state().opponent():after,
                 p.state().actionKind(),p.state().action());
         return new Progress(state,p.dealtLow()-(own?0:hi),p.dealtHigh()-(own?0:lo),
-                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown());
+                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown(),p.skipNext());
     }
     private static Progress hurt(Progress p, boolean self, Interval damage) {
         Actor a = self ? p.state().self() : p.state().opponent(); Interval hp = a.hp().value();
@@ -316,7 +374,7 @@ public final class ShadowMechanicsEvaluation {
         State s = state(p.state(), self ? changed : p.state().self(), self ? p.state().opponent() : changed,
                 p.state().actionKind(), p.state().action());
         return new Progress(s, p.dealtLow() + (self ? 0 : low), p.dealtHigh() + (self ? 0 : high),
-                p.lostLow() + (self ? low : 0), p.lostHigh() + (self ? high : 0), p.unknown());
+                p.lostLow() + (self ? low : 0), p.lostHigh() + (self ? high : 0), p.unknown(),p.skipNext());
     }
     private static Actor actor(Actor a, Interval hp, Map<String, Integer> stages) {
         var f = a.facts(); double point = hp.low() == hp.high() ? hp.low() : BattleSnapshot.UNKNOWN_HP_FRACTION;
@@ -331,11 +389,11 @@ public final class ShadowMechanicsEvaluation {
                 kind, action, List.of(), List.of(), false, false, false, false);
     }
     private static Progress replace(Progress p, State s) {
-        return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown());
+        return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown(),p.skipNext());
     }
     private static Progress unknown(Progress p, String reason) {
         Set<String> unknown = new TreeSet<>(p.unknown()); unknown.add(reason);
-        return new Progress(p.state(), p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), Set.copyOf(unknown));
+        return new Progress(p.state(), p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), Set.copyOf(unknown),p.skipNext());
     }
     private static boolean zero(Actor a) { return a.hp().known() && a.hp().value().high() == 0; }
     private static boolean possibleFaint(Actor a) { return a.hp().known() && a.hp().value().low() == 0; }
