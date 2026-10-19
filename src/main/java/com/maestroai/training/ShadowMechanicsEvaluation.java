@@ -187,30 +187,32 @@ public final class ShadowMechanicsEvaluation {
                     stages, target.status());
             Progress switched = replace(p, state(s, arriving, s.opponent(), Kind.SWITCH, t.action()));
             switched = hurt(switched, true, target.entryDamage().value());
-            return executeVariants(switched,t.reply(),false,profiles,critical,execution);
+            return executeVariants(switched,t.reply(),false,profiles,critical,execution,mechanics,s.legalSwitches());
         }
         if(order==Order.BOTH){
             var all=new ArrayList<Progress>();
-            all.addAll(sequence(p,t,true,profiles,critical,execution));
-            all.addAll(sequence(p,t,false,profiles,critical,execution));
+            all.addAll(sequence(p,t,true,profiles,critical,execution,mechanics,s.legalSwitches()));
+            all.addAll(sequence(p,t,false,profiles,critical,execution,mechanics,s.legalSwitches()));
             return all;
         }
-        return sequence(p,t,order==Order.SELF_FIRST,profiles,critical,execution);
+        return sequence(p,t,order==Order.SELF_FIRST,profiles,critical,execution,mechanics,s.legalSwitches());
     }
     private static List<Progress> sequence(Progress p,Turn turn,boolean selfFirst,
-            Map<String,Profile> profiles,Critical critical,ScopedExecution execution) {
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
+            PublicMechanics mechanics,List<String> sourceLegalSwitches) {
         Move move=move(turn.action().substring(5));
         p=replace(p,state(p.state(),p.state().self(),p.state().opponent(),
                 move==null?Kind.UNKNOWN:move.power()==0?Kind.SETUP:Kind.ATTACK,turn.action()));
         var variants=new ArrayList<Progress>();
         for(var first:executeVariants(p,selfFirst?turn.action().substring(5):turn.reply(),
-                selfFirst,profiles,critical,execution))
+                selfFirst,profiles,critical,execution,mechanics,sourceLegalSwitches))
             variants.addAll(executeVariants(first,selfFirst?turn.reply():turn.action().substring(5),
-                    !selfFirst,profiles,critical,execution));
+                    !selfFirst,profiles,critical,execution,mechanics,sourceLegalSwitches));
         return variants;
     }
     private static List<Progress> executeVariants(Progress p,String id,boolean own,
-            Map<String,Profile> profiles,Critical critical,ScopedExecution execution) {
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
+            PublicMechanics mechanics,List<String> sourceLegalSwitches) {
         if(p.skipNext())return List.of(new Progress(p.state(),p.dealtLow(),p.dealtHigh(),
                 p.lostLow(),p.lostHigh(),p.unknown(),false));
         Actor attacker=own?p.state().self():p.state().opponent();
@@ -219,9 +221,9 @@ public final class ShadowMechanicsEvaluation {
             Actor recovered=attacker.status().value().equals("frz")?withStatus(attacker,"none"):attacker;
             var eligible=replace(p,state(p.state(),own?recovered:p.state().self(),
                     own?p.state().opponent():recovered,p.state().actionKind(),p.state().action()));
-            return List.of(p,executeBase(eligible,id,own,profiles,critical,execution));
+            return List.of(p,executeBase(eligible,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches));
         }
-        Progress primary=executeBase(p,id,own,profiles,critical,execution);
+        Progress primary=executeBase(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
         if(!primary.unknown().isEmpty())return List.of(primary);
         var effect=SourceMoveEffects.SECONDARIES.get(id);
         if(effect==null)return List.of(primary);
@@ -256,7 +258,8 @@ public final class ShadowMechanicsEvaluation {
                 Known.of(status,SOURCE+":conditional-secondary"));
     }
     private static Progress executeBase(Progress p,String moveId,boolean own,
-            Map<String,Profile> profiles,Critical critical,ScopedExecution execution) {
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
+            PublicMechanics mechanics,List<String> sourceLegalSwitches) {
         if (!p.unknown().isEmpty()) return p;
         Actor attacker = own ? p.state().self() : p.state().opponent();
         Actor target = own ? p.state().opponent() : p.state().self();
@@ -341,10 +344,11 @@ public final class ShadowMechanicsEvaluation {
             result=replace(result,state(result.state(),own?boosted:result.state().self(),
                     own?result.state().opponent():boosted,result.state().actionKind(),result.state().action()));
         }
-        // U-turn transfers the reply target when acting first. Without a
-        // bound replacement choice and entry effects, that turn is UNKNOWN.
-        if(moveId.equals("uturn") && !(own?result.state().opponent():result.state().self()).hp().value().equals(new Interval(0,0)))
-            return unknown(result,"U_TURN_REPLACEMENT_REQUEST_UNKNOWN");
+        if(moveId.equals("uturn")&&!zero(own?result.state().opponent():result.state().self())){
+            if(!own)return unknown(result,"OPPONENT_U_TURN_PARTY_HIDDEN");
+            if(d.high()==0)return result; // immunity or Protect prevents pivot
+            result=pivotToSoleCertifiedReserve(result,mechanics,sourceLegalSwitches,profiles,execution);
+        }
         if(moveId.equals("drainingkiss")) {
             Profile me=profiles.get(attacker.id()), them=profiles.get(target.id());
             if(!me.maxHp().known()||!them.maxHp().known()||!damage.points().known()
@@ -368,6 +372,40 @@ public final class ShadowMechanicsEvaluation {
                     affectedOwn?result.state().opponent():modified,result.state().actionKind(),result.state().action()));
         }
         return result;
+    }
+    /** Only the sole legal, current owner-side reserve can be a deterministic
+     * conditional U-turn target. No invented opponent party or chosen teammate.
+     */
+    private static Progress pivotToSoleCertifiedReserve(Progress p,PublicMechanics mechanics,
+            List<String> choices,Map<String,Profile> profiles,ScopedExecution execution){
+        if(choices.size()!=1)return unknown(p,"U_TURN_REPLACEMENT_CHOICE_NOT_DETERMINED");
+        String id=choices.getFirst();
+        SwitchTarget entry=mechanics.transitions().context().switchTargets().get(id);
+        if(entry==null||!entry.entryDamage().known()||!entry.entrySpeedDelta().known()
+                ||!entry.status().known()||!entry.status().value().equals("none")
+                ||entry.facts().fainted()||!entry.facts().hpKnown())
+            return unknown(p,"U_TURN_REPLACEMENT_ENTRY_UNKNOWN");
+        Profile reserve=profiles.get(id);
+        if(reserve==null||execution==null&&!yes(reserve.ordinaryEffects()))
+            return unknown(p,"U_TURN_RESERVE_PROFILE_UNKNOWN");
+        if(execution!=null){
+            var max=reserve.maxHp().known()&&reserve.maxHp().value().low()==reserve.maxHp().value().high()
+                    ?Known.of(reserve.maxHp().value().low(),reserve.maxHp().source())
+                    :Known.<Integer>unknown();
+            var cert=execution.entryCoverage(p.state().selfHazards(),max,reserve);
+            if(!cert.supported())return unknown(p,String.join(",",cert.missing()));
+        }
+        if(!p.state().selfHazards().complete()
+                ||p.state().selfHazards().layers().getOrDefault("toxicspikes",0)>0)
+            return unknown(p,"U_TURN_NON_HP_ENTRY_EFFECTS_UNKNOWN");
+        Map<String,Integer> nextStages=new TreeMap<>();STATS.forEach(k->nextStages.put(k,0));
+        nextStages.put("spe",entry.entrySpeedDelta().value());
+        Actor arriving=new Actor(id,entry.facts(),Known.of(new Interval(
+                entry.facts().hpFraction(),entry.facts().hpFraction()),"owner-only current reserve HP"),
+                nextStages,entry.status());
+        Progress swapped=replace(p,state(p.state(),arriving,p.state().opponent(),
+                Kind.FORCED_CONTINUATION,p.state().action()));
+        return hurt(swapped,true,entry.entryDamage().value());
     }
     private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
         var stages=new TreeMap<>(actor.stages());

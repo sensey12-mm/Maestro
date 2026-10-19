@@ -176,8 +176,9 @@ final class ModifierTacticalRegression {
         check(kiss.lines().stream().anyMatch(l->l.state().self().hp().value().high()>0.4),
                 "Draining Kiss did not increase own HP");
         var pivot=ranks.get("move:uturn");
-        check(!pivot.utility().known()&&pivot.unknown().contains("U_TURN_REPLACEMENT_REQUEST_UNKNOWN"),
-                "U-turn fabricated an unrequested replacement");
+        check(pivot.utility().known()&&!pivot.lines().isEmpty()
+                &&pivot.lines().stream().allMatch(line->line.state().self().id().equals("reserve")),
+                "source-verified sole-reserve U-turn did not redirect observed reply: "+pivot);
         for(String move:List.of("ironhead","icebeam","flamethrower","energyball",
                 "moonblast","focusblast","thunder","fireblast")) {
             var effect=fixture(domain,200,true,"marshadiumz","technician",true,List.of(move));
@@ -199,7 +200,7 @@ final class ModifierTacticalRegression {
         check(compare(charged,"move:geomancy").rankings().stream()
                         .anyMatch(x->x.action().equals("move:geomancy")&&!x.utility().known()),
                 "unconsumed charge was treated as free same-turn Geomancy");
-        System.out.println("Maestro tactical effect regressions PASS: secondary forks, guaranteed stat drops, heal, boost theft, Power Herb charge gate, and pivot abstention");
+        System.out.println("Maestro tactical effect regressions PASS: secondary forks, stat drops, healing, boost theft, Power Herb and sole-reserve pivot");
     }
     static void realTeamModifierRegressions(RuntimeDomain domain){
         // Fully public opponent modifier domain; synthetic move attribution
