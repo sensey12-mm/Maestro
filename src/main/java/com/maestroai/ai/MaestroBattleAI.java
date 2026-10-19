@@ -6314,6 +6314,9 @@ public class MaestroBattleAI extends RCTBattleAI {
             // Public current-modifier singleton only; no inferred hidden
             // opponent set, no private request and no live policy handoff.
             System.out.println("[MaestroAI] " + envelopedAudit.modifiers().safeLine());
+            // A bounded pair is not a global recommendation: other legal
+            // actions and unseen opponent moves may remain unresolved.
+            System.out.println("[MaestroAI] " + envelopedAudit.pairwise().safeLine());
             var comparison = ShadowMechanicsEvaluation.compare(snapshot, mechanicsEvidence, profiles, plans,
                     mechanicsExecution == null ? PublicTransitionState.Known.unknown() : mechanicsExecution.field().trickRoom(),
                     CobblemonMechanics.Critical.BOTH, legacyAction, mechanicsExecution);

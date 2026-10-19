@@ -43,10 +43,12 @@ public final class PublicReplyCoverage {
      * announced in the current spectator entry, with no unsupported form.
      * Unknown opponents never gain a synthetic "no item" or neutral ability.
      */
-    public record Enveloped(Audit replies, ModifierScenarioEnvelope.Audit modifiers) {
+    public record Enveloped(Audit replies, ModifierScenarioEnvelope.Audit modifiers,
+                            TacticalPairwiseCoverage.Audit pairwise) {
         public Enveloped {
             Objects.requireNonNull(replies);
             Objects.requireNonNull(modifiers);
+            Objects.requireNonNull(pairwise);
         }
     }
 
@@ -65,7 +67,9 @@ public final class PublicReplyCoverage {
         // This closure cannot inspect a private foe request or confer a later lease.
         var modifiers = ModifierScenarioEnvelope.compare(worlds, singleton,
                 execution == null ? () -> false : execution::sourceCurrent);
-        return new Enveloped(audit, modifiers);
+        var pairwise = TacticalPairwiseCoverage.inspect(audit, singleton,
+                execution == null ? () -> false : execution::sourceCurrent);
+        return new Enveloped(audit, modifiers, pairwise);
     }
 
     private static Audit withheld(int candidates, int replies, String why) {

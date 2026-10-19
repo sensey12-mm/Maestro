@@ -104,12 +104,82 @@ public final class AcceptanceGateRegression {
         var integrated=PublicReplyCoverage.evaluateEnveloped(scenario,mechanics,
                 Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
                 field.trickRoom(),CobblemonMechanics.Critical.NON_CRITICAL);
+        yes(integrated.pairwise().legalActions()==2 && integrated.pairwise().boundedActions()==2
+                && integrated.pairwise().comparedPairs()==1
+                && integrated.pairwise().attackPairs()==1
+                && integrated.pairwise().fullRootBounded(),
+                "real source-conditional reply pipeline lost its bounded attack pair");
         yes(integrated.replies().compared() && integrated.modifiers().bounds().size()==2,
                 "current public modifier singleton could not reach runtime envelope");
         yes(integrated.modifiers().safeLine().contains("advisoryOnly=true")
                 && integrated.modifiers().safeLine().contains("hiddenModifierProbability=NONE")
                 && !integrated.modifiers().safeLine().contains("Foe"),
                 "runtime envelope leaked public identity or invented a modifier probability");
+
+        // A legal root containing an unsupported third move must never claim
+        // an all-action preference, but the bounded ordinary pair remains
+        // useful as an explicitly partial, reply-conditional diagnostic.
+        var partialScenario=new BattleSnapshot(1,neutral,neutral,List.of(),List.of(),
+                List.of("tackle","quickattack","UNSUPPORTED_PRIVATE_SET_GUESS"),
+                List.of(),Map.of(),false,null);
+        var partial=PublicReplyCoverage.evaluateEnveloped(partialScenario,mechanics,
+                Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
+                field.trickRoom(),CobblemonMechanics.Critical.NON_CRITICAL);
+        yes(partial.replies().compared() && partial.replies().allCandidates()
+                && partial.replies().result().preferredConditional()==null
+                && partial.pairwise().legalActions()==3
+                && partial.pairwise().boundedActions()==2
+                && partial.pairwise().comparedPairs()==1
+                && !partial.pairwise().fullRootBounded()
+                && partial.modifiers().bounds().isEmpty(),
+                "unsupported legal root incorrectly erased bounded pair or became globally preferred");
+        String secret="SECRET_PRIVATE_BUILD_NEVER_LOG";
+        yes(!partial.pairwise().safeLine().contains(secret)
+                && !partial.pairwise().safeLine().contains("UNSUPPORTED_PRIVATE_SET_GUESS")
+                && partial.pairwise().safeLine().contains("globalPreferred=UNDETERMINED"),
+                "partial pairwise audit claimed global preference or leaked candidate");
+        yes(TacticalPairwiseCoverage.inspect(partial.replies(),Known.unknown(),()->true)
+                .boundedActions()==0
+                && TacticalPairwiseCoverage.inspect(partial.replies(),yesScope,()->false)
+                .boundedActions()==0,
+                "unknown hidden modifier or stale execution retained pairwise evidence");
+        var expiryAfterEvaluation=new java.util.concurrent.atomic.AtomicInteger();
+        yes(TacticalPairwiseCoverage.inspect(partial.replies(),yesScope,
+                ()->expiryAfterEvaluation.incrementAndGet()==1).boundedActions()==0,
+                "stale source between audit entry and exit retained pairs");
+
+        // Independently categorized bounded synthetic pair fixture exercises
+        // attack versus setup, stay versus switch, and strict non-overlap;
+        // it never impersonates installed Cobblemon battle observations.
+        var aa=Known.of(new ShadowMechanicsEvaluation.Utility(.6,.8),"synthetic verified interval");
+        var as=Known.of(new ShadowMechanicsEvaluation.Utility(.1,.2),"synthetic verified interval");
+        var sw=Known.of(new ShadowMechanicsEvaluation.Utility(-.4,-.2),"synthetic verified interval");
+        var synthesized=new ShadowMechanicsEvaluation.Comparison(List.of(
+                new ShadowMechanicsEvaluation.Ranking("move:tackle",aa,
+                        List.of(new ShadowMechanicsEvaluation.Line(null,aa,Set.of())),Set.of()),
+                new ShadowMechanicsEvaluation.Ranking("move:swordsdance",as,
+                        List.of(new ShadowMechanicsEvaluation.Line(null,as,Set.of())),Set.of()),
+                new ShadowMechanicsEvaluation.Ranking("switch:reserve",sw,
+                        List.of(new ShadowMechanicsEvaluation.Line(null,sw,Set.of())),Set.of())),
+                null,null,null,false,true,"source-conditional synthetic;advisoryOnly=true");
+        var syntheticAudit=new PublicReplyCoverage.Audit(3,1,true,true,false,
+                Set.of("INTERVALS_OVERLAP_OR_TIE"),synthesized);
+        var pairs=TacticalPairwiseCoverage.inspect(syntheticAudit,yesScope,()->true);
+        yes(pairs.comparedPairs()==3 && pairs.strictPairs()==3
+                && pairs.attackSetupPairs()==1 && pairs.staySwitchPairs()==2
+                && pairs.fullRootBounded(),
+                "attack/setup/switch bounded categories or strict interval arithmetic regressed");
+        var badLine=Known.of(new ShadowMechanicsEvaluation.Utility(-1,1),"synthetic invalid");
+        var forged=new ShadowMechanicsEvaluation.Comparison(List.of(
+                new ShadowMechanicsEvaluation.Ranking("move:tackle",aa,
+                        List.of(new ShadowMechanicsEvaluation.Line(null,badLine,Set.of())),Set.of()),
+                new ShadowMechanicsEvaluation.Ranking("move:swordsdance",as,
+                        List.of(new ShadowMechanicsEvaluation.Line(null,as,Set.of())),Set.of())),
+                null,null,null,false,true,"source-conditional synthetic;advisoryOnly=true");
+        var forgedAudit=new PublicReplyCoverage.Audit(2,1,true,true,false,
+                Set.of("OUTCOME_PREREQUISITES_UNKNOWN"),forged);
+        yes(TacticalPairwiseCoverage.inspect(forgedAudit,yesScope,()->true).comparedPairs()==0,
+                "tampered line/ranking envelope produced a false bounded pair");
 
         // Source-known item/ability candidates cannot replace missing public
         // revelations, even if the caller supplies a seemingly viable variant.
