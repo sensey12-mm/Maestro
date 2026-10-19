@@ -496,6 +496,27 @@ console.log('Recover source oracle PASS: four exact rounding/capping cases');
   console.log('Maestro complex-move native oracle PASS: nine secondary definitions, true source drain/boost theft/Herb execution');
 }
 
+
+// Pinned native modifier hooks relevant to Maestro's real team, not a generic
+// claim that every Cobbleverse addon or hidden opponent modifier is supported.
+{
+ const own=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/ScopedExecution.java'),'utf8');
+ const nativeOrb=Dex.items.get('lifeorb');
+ const nativeHerb=Dex.items.get('powerherb');
+ const fairy=Dex.abilities.get('fairyaura');
+ const shield=Dex.abilities.get('shadowshield');
+ const asOne=Dex.abilities.get('asonespectrier');
+ assert.equal(typeof nativeOrb.onModifyDamage,'function','pinned Life Orb modifier missing');
+ assert.equal(typeof nativeOrb.onAfterMoveSecondarySelf,'function','pinned Life Orb recoil callback missing');
+ assert.equal(typeof nativeHerb.onChargeMove,'function','pinned Power Herb charge callback missing');
+ assert.equal(typeof fairy.onAnyBasePower,'function','pinned Fairy Aura base-power callback missing');
+ assert.equal(typeof shield.onSourceModifyDamage,'function','pinned Shadow Shield full-HP callback missing');
+ assert.equal(typeof asOne.onSourceAfterFaint,'function','pinned As One post-KO callback missing');
+ assert(own.includes('5324')&&own.includes('5448')&&own.includes('"shadowshield"')&&
+        own.includes('"asonespectrier"')&&own.includes('"lifeorb"'),'Java lacks native modifier constants');
+ console.log('Maestro source-held-item/ability oracle PASS: pinned Life Orb, Power Herb, Fairy Aura, Shadow Shield and As One callback domains');
+}
+
 const policyOutcomes=require('./policy_oracle.cjs').run(Battle);
 assert.equal(policyOutcomes.length,8);
 console.log('Independent policy outcome oracle PASS: 8 jointly legal source-executed exchanges before residuals');

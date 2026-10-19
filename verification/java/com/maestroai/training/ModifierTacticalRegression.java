@@ -167,9 +167,9 @@ final class ModifierTacticalRegression {
         check(close.lines().stream().allMatch(l->l.state().self().stages().get("def")==-1
                 &&l.state().self().stages().get("spd")==-1),"Close Combat missed defense debuff");
         var rock=ranks.get("move:rocktomb");
-        check(rock.utility().known()&&rock.lines().size()==1
-                &&rock.lines().getFirst().state().opponent().stages().get("spe")==-1,
-                "Rock Tomb speed debuff applied incorrectly");
+        check(rock.utility().known()&&!rock.lines().isEmpty()
+                &&rock.lines().stream().allMatch(line->line.state().opponent().stages().get("spe")==-1),
+                "Rock Tomb must lower target Speed exactly once in every speed-order branch: "+rock);
         check(ranks.get("move:spectralthief").utility().known(),"unboosted public Spectral Thief unknown");
         var kiss=ranks.get("move:drainingkiss");
         check(kiss.utility().known(),"Draining Kiss HP recovery unknown");
@@ -201,8 +201,50 @@ final class ModifierTacticalRegression {
                 "unconsumed charge was treated as free same-turn Geomancy");
         System.out.println("Maestro tactical effect regressions PASS: secondary forks, guaranteed stat drops, heal, boost theft, Power Herb charge gate, and pivot abstention");
     }
+    static void realTeamModifierRegressions(RuntimeDomain domain){
+        // Fully public opponent modifier domain; synthetic move attribution
+        // is not claimed to be a real Arceus/Marshadow learnset.
+        var plain=fixture(domain,200,false,"leftovers","multitype",true,List.of("moonblast"));
+        var aura=fixture(domain,200,false,"leftovers","fairyaura",true,List.of("moonblast"));
+        var p=compare(plain,"move:moonblast").rankings().stream()
+                .filter(x->x.action().equals("move:moonblast")).findFirst().orElseThrow();
+        var a=compare(aura,"move:moonblast").rankings().stream()
+                .filter(x->x.action().equals("move:moonblast")).findFirst().orElseThrow();
+        check(p.utility().known()&&a.utility().known()&&a.utility().value().high()>p.utility().value().high(),
+                "source Fairy Aura base-power modifier was lost");
+        var holder=fixture(domain,200,true,"lifeorb","asonespectrier",true,List.of("astralbarrage"));
+        var orb=compare(holder,"move:astralbarrage").rankings().stream()
+                .filter(x->x.action().equals("move:astralbarrage")).findFirst().orElseThrow();
+        check(orb.utility().known(),"source Life Orb + As One opponent-domain outcome unknown: "+orb.unknown());
+        var nonOrb=fixture(domain,200,true,"marshadiumz","technician",true,List.of("astralbarrage"));
+        var basic=compare(nonOrb,"move:astralbarrage").rankings().stream()
+                .filter(x->x.action().equals("move:astralbarrage")).findFirst().orElseThrow();
+        check(basic.utility().known()&&orb.utility().value().high()>basic.utility().value().high(),
+                "Life Orb final-damage power failed to exceed otherwise ordinary damage");
+        var full=fixture(domain,381,false,"leftovers","shadowshield",true,List.of("recover"));
+        var normal=fixture(domain,381,false,"leftovers","multitype",true,List.of("recover"));
+        var shield=compare(full,"move:recover").rankings().stream()
+                .filter(x->x.action().equals("move:recover")).findFirst().orElseThrow();
+        var noShield=compare(normal,"move:recover").rankings().stream()
+                .filter(x->x.action().equals("move:recover")).findFirst().orElseThrow();
+        check(shield.utility().known()&&noShield.utility().known()
+                        &&shield.utility().value().low()>noShield.utility().value().low(),
+                "source full-HP Shadow Shield damage reduction not applied");
+        var onlyStone=fixture(domain,200,false,"mewtwonitey","shadowshield",true,List.of("recover"));
+        check(compare(onlyStone,"move:recover").rankings().stream()
+                        .anyMatch(x->x.action().equals("move:recover")&&x.utility().known()),
+                "held Mega Stone/current Shadow Shield shouldn't independently poison status move scope");
+        var protectedOrb=fixture(domain,200,true,"lifeorb","magicguard",true,List.of("astralbarrage"));
+        var protectedRank=compare(protectedOrb,"move:astralbarrage").rankings().stream()
+                .filter(x->x.action().equals("move:astralbarrage")).findFirst().orElseThrow();
+        check(protectedRank.utility().known()
+                        &&protectedRank.lines().stream().allMatch(x->x.state().self().hp().value().low()>=0),
+                "Magic Guard on Life Orb user must protect from post-hit recoil");
+        System.out.println("Maestro held-item/ability tactical modifier regression PASS: Fairy Aura, Life Orb/As One, Shadow Shield, Mega Stone, Magic Guard");
+    }
     static void run(RuntimeDomain domain,IntRange oracle) throws Exception {
         complexMoveRegressions(domain);
+        realTeamModifierRegressions(domain);
         checks=0;
         LegacyPolicyRegression.run();
         // All three ordinary Arceus actions remain legal in the request; Extreme

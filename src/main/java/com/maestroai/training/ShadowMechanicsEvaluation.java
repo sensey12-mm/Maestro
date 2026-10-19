@@ -324,6 +324,7 @@ public final class ShadowMechanicsEvaluation {
         if (possibleFaint(attacker)) d = new Interval(0, d.high()); // bound conditional nonexecution without an invented probability
         Progress result=hurt(p,!own,d);
         if(execution!=null&&execution.currentItem(attacker.id()).equals("lifeorb")
+                &&!execution.currentAbility(attacker.id()).equals("magicguard")
                 &&damage.points().known()&&damage.points().value().high()>0) {
             Profile holder=profiles.get(attacker.id());
             if(!holder.maxHp().known()||holder.maxHp().value().low()!=holder.maxHp().value().high())
