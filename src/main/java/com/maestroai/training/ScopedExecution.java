@@ -71,6 +71,12 @@ public final class ScopedExecution {
         return Known.of(true, field.token() + ":current-spectator-public-item-and-ability-only");
     }
     public void requireCurrent(int turn) { field.requireCurrent(turn); }
+    /** Active Power Herb requires current own binding and no Magic Room. */
+    boolean activePowerHerb(String role) {
+        var b=actors.get(role);
+        return sourceCurrent() && b!=null && b.item().known() && field.magicRoom().known()
+                && !field.magicRoom().value() && item(role).equals("powerherb");
+    }
     public Set<String> unresolved() {
         Set<String> reasons = new TreeSet<>(field.unknown());
         if (Arrays.stream(Operation.values()).anyMatch(op -> !yes(scopes.get(op)))) reasons.add("UNANNOUNCED_PACK_OR_EXECUTION_EFFECTS_UNRESOLVED");
@@ -156,7 +162,7 @@ public final class ScopedExecution {
     public Certificate setupCoverage(Profile p, Actor a, String moveId) {
         bound(p, a); var c = new Check(Operation.SETUP); c.actor(a.id(), reserve(a.id()));
         Move m = move(moveId); c.need("SUPPORTED_SETUP_MOVE", m != null && m.power() == 0);
-        c.need("SUPPORTED_SETUP_EXECUTION", m != null && !m.id().equals("geomancy"));
+        c.need("SUPPORTED_SETUP_EXECUTION", m != null && (!m.id().equals("geomancy") || activePowerHerb(a.id())));
         c.need(a.id() + ":STATUS", a.status().known() && a.status().value().equals("none"));
         if (m != null && m.id().equals("recover")) c.need(a.id() + ":EXACT_RECOVERY_MAX_HP",
                 p.maxHp().known() && p.maxHp().value().low() == p.maxHp().value().high());

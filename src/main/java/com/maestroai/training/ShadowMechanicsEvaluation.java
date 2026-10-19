@@ -207,8 +207,8 @@ public final class ShadowMechanicsEvaluation {
         Move move = move(moveId);
         if (move == null) return unknown(p, "UNSUPPORTED_MOVE:" + moveId);
         if (move.power() == 0) {
-            if (move.id().equals("geomancy"))
-                return unknown(p, "GEOMANCY_CHARGE_POWER_HERB_AND_CONSUMPTION_UNMODELED");
+            if(move.id().equals("geomancy") && (execution==null || !execution.activePowerHerb(attacker.id())))
+                return unknown(p, "GEOMANCY_POWER_HERB_OR_CHARGE_DOMAIN_UNKNOWN");
             if (execution != null) {
                 var coverage = execution.setupCoverage(profiles.get(attacker.id()), attacker, moveId);
                 if (!coverage.supported()) return unknown(p, String.join(",", coverage.missing()));
@@ -238,14 +238,76 @@ public final class ShadowMechanicsEvaluation {
             return replace(p, state(p.state(), own ? boosted : target, own ? target : boosted,
                     p.state().actionKind(), p.state().action()));
         }
-        if (!move.damageOnly()) return unknown(p,
-                MaestroOwnMoveAudit.unmodeledEffect(moveId));
+        if (!move.damageOnly() && !Set.of("drainingkiss","closecombat","rocktomb","spectralthief","uturn").contains(moveId))
+            return unknown(p,MaestroOwnMoveAudit.unmodeledEffect(moveId));
+        if(moveId.equals("spectralthief")) {
+            if(!target.stages().keySet().containsAll(Set.of("atk","def","spa","spd","spe")))
+                return unknown(p,"SPECTRAL_THIEF_PUBLIC_STAGE_DOMAIN_UNKNOWN");
+            var bonus=new TreeMap<String,Integer>();
+            var removed=new TreeMap<String,Integer>();
+            target.stages().forEach((stat,value)->{
+                if(value>0){bonus.put(stat,value);removed.put(stat,-value);}
+            });
+            Actor thief=stageEffect(attacker,bonus),victim=stageEffect(target,removed);
+            if(thief==null||victim==null)return unknown(p,"SPECTRAL_THIEF_STAGES_UNKNOWN");
+            p=replace(p,state(p.state(),own?thief:victim,own?victim:thief,
+                    p.state().actionKind(),p.state().action()));
+            attacker=own?p.state().self():p.state().opponent();
+            target=own?p.state().opponent():p.state().self();
+        }
         Damage damage = execution == null ? damage(moveId, profiles.get(attacker.id()), attacker, profiles.get(target.id()), target, critical)
                 : execution.damage(moveId, profiles.get(attacker.id()), attacker, profiles.get(target.id()), target, critical);
         if (!damage.fraction().known()) return unknown(p, String.join(",", damage.unknown()));
         Interval d = damage.fraction().value();
         if (possibleFaint(attacker)) d = new Interval(0, d.high()); // bound conditional nonexecution without an invented probability
-        return hurt(p, !own, d);
+        Progress result=hurt(p,!own,d);
+        // U-turn transfers the reply target when acting first. Without a
+        // bound replacement choice and entry effects, that turn is UNKNOWN.
+        if(moveId.equals("uturn") && !(own?result.state().opponent():result.state().self()).hp().value().equals(new Interval(0,0)))
+            return unknown(result,"U_TURN_REPLACEMENT_REQUEST_UNKNOWN");
+        if(moveId.equals("drainingkiss")) {
+            Profile me=profiles.get(attacker.id()), them=profiles.get(target.id());
+            if(!me.maxHp().known()||!them.maxHp().known()||!damage.points().known()
+                    ||me.maxHp().value().low()!=me.maxHp().value().high()
+                    ||them.maxHp().value().low()!=them.maxHp().value().high())
+                return unknown(result,"DRAIN_ACTUAL_HP_AND_DAMAGE_POINTS_UNKNOWN");
+            int ownMax=me.maxHp().value().low(),otherMax=them.maxHp().value().low();
+            int actualMin=Math.min(damage.points().value().low(),(int)Math.floor(target.hp().value().low()*otherMax));
+            int actualMax=Math.min(damage.points().value().high(),(int)Math.ceil(target.hp().value().high()*otherMax));
+            // ceil(3 * actual HP removed / 4), bounded by both HP domains.
+            double healedMin=actualMin==0?0:((3L*actualMin+3)/4)/(double)ownMax;
+            double healedMax=actualMax==0?0:((3L*actualMax+3)/4)/(double)ownMax;
+            result=heal(result,own,new Interval(healedMin,healedMax));
+        }
+        if(moveId.equals("closecombat") || moveId.equals("rocktomb")) {
+            boolean affectedSelf=moveId.equals("closecombat");
+            boolean affectedOwn=affectedSelf==own;
+            Actor actor=affectedOwn?result.state().self():result.state().opponent();
+            Actor modified=stageEffect(actor,affectedSelf?Map.of("def",-1,"spd",-1):Map.of("spe",-1));
+            if(modified==null)return unknown(result,"ON_HIT_STAGE_DOMAIN_UNKNOWN");
+            result=replace(result,state(result.state(),affectedOwn?modified:result.state().self(),
+                    affectedOwn?result.state().opponent():modified,result.state().actionKind(),result.state().action()));
+        }
+        return result;
+    }
+    private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
+        var stages=new TreeMap<>(actor.stages());
+        for(var e:changes.entrySet()){
+            if(!stages.containsKey(e.getKey()))return null;
+            stages.put(e.getKey(),observedStageAfter(stages.get(e.getKey()),e.getValue()));
+        }
+        return actor(actor,actor.hp().value(),stages);
+    }
+    private static Progress heal(Progress p,boolean own,Interval healing){
+        Actor self=own?p.state().self():p.state().opponent();
+        Interval before=self.hp().value();
+        double lo=Math.min(1-before.high(),healing.low()),hi=Math.min(1-before.low(),healing.high());
+        Actor after=actor(self,new Interval(Math.min(1,before.low()+healing.low()),
+                Math.min(1,before.high()+healing.high())),self.stages());
+        State state=state(p.state(),own?after:p.state().self(),own?p.state().opponent():after,
+                p.state().actionKind(),p.state().action());
+        return new Progress(state,p.dealtLow()-(own?0:hi),p.dealtHigh()-(own?0:lo),
+                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown());
     }
     private static Progress hurt(Progress p, boolean self, Interval damage) {
         Actor a = self ? p.state().self() : p.state().opponent(); Interval hp = a.hp().value();

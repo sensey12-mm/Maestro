@@ -324,7 +324,17 @@ public final class StandaloneRegression {
         check(CobblemonMechanics.effectiveness("steel",List.of("fairy"))==1);
     }
 
+    private static void ownMechanicsExecutionAudit(){
+        var special=CobblemonMechanics.move("drainingkiss");
+        check(special.power()==50&&!special.damageOnly());
+        check(CobblemonMechanics.move("closecombat").power()==120);
+        check(CobblemonMechanics.move("rocktomb").accuracy()==95);
+        check(CobblemonMechanics.move("spectralthief").power()==90);
+        check(CobblemonMechanics.move("geomancy").boosts().equals(Map.of("spa",2,"spd",2,"spe",2)));
+        check(!MaestroOwnMoveAudit.completelySimulated("uturn"));
+    }
     public static void main(String[] args) {
+        ownMechanicsExecutionAudit();
         maestroWholeRosterCoverage();
         calyrexMoveCoverage();
         modifierEnvelopeRegressions();
