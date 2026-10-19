@@ -185,8 +185,9 @@ final class ModifierTacticalRegression {
             var effect=fixture(domain,200,true,"marshadiumz","technician",true,List.of(move));
             var ranking=compare(effect,"move:"+move).rankings().stream()
                     .filter(x->x.action().equals("move:"+move)).findFirst().orElseThrow();
-            check(ranking.utility().known()&&ranking.lines().size()==2,
-                    "secondary proc/nonproc outcomes not branched "+move+": "+ranking.unknown());
+            check(ranking.utility().known()&&ranking.lines().size()>=2,
+                    "secondary proc/nonproc outcomes not branched across possible speed orders "
+                            +move+": lines="+ranking.lines().size()+" unknown="+ranking.unknown());
         }
         // This is an intentionally synthetic Power Herb/Geomancy execution
         // fixture, NOT a claim that the species used in fixture knows Geomancy.
