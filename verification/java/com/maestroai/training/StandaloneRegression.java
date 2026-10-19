@@ -11,6 +11,10 @@ public final class StandaloneRegression {
         if (!condition) throw new AssertionError("Synthetic contract failed");
         checks++;
     }
+    private static void check(boolean condition,String why) {
+        if (!condition) throw new AssertionError(why);
+        checks++;
+    }
     private static void reject(Runnable action) {
         boolean rejected = false;
         try { action.run(); } catch (RuntimeException expected) { rejected = true; }

@@ -169,6 +169,35 @@ final class ModifierTacticalRegression {
         check(switched.rankings().stream().allMatch(r->r.utility().known()),"fixed-pack switch outcomes unknown: "+switched.rankings());
         check("switch:reserve".equals(switched.preferredConditional()),"normal immunity must dominate three slower lethal stay actions");
         check(switched.disagreement()&&"move:shadowclaw".equals(switched.simpleAction()),"switch comparison lost supplied legacy/nominal baselines");
+        // Phase 3.52: the actual fourth-slot Maestro Arceus move kit is a
+        // viable end-of-phase supported tactical target once the opponent
+        // publicly witnesses Pressure, item removal and a Swift reply.
+        // This remains a source-fixture, not a claim an in-game turn occurred.
+        var actualArceus=fixture(domain,200,false,"leftovers","multitype",true,
+                List.of("extremespeed","shadowclaw","swordsdance","recover"));
+        var fullKit=compare(actualArceus,"move:shadowclaw");
+        check(fullKit.candidateCoverageComplete() && fullKit.rankings().size()==5,
+                "actual Arceus move/switch root lost legal candidate coverage");
+        check(fullKit.rankings().stream().allMatch(r->r.utility().known()),
+                "actual Arceus move kit remained unbounded against publicly witnessed Swift: "+fullKit.rankings());
+        check(fullKit.rankings().stream().anyMatch(r->r.action().equals("move:extremespeed"))
+                        && fullKit.rankings().stream().anyMatch(r->r.action().equals("move:recover"))
+                        && fullKit.rankings().stream().anyMatch(r->r.action().equals("move:swordsdance")),
+                "actual Arceus normal-priority/setup/recovery candidate missing");
+        check(TacticalPairwiseCoverage.inspect(
+                new PublicReplyCoverage.Audit(5,1,true,true,
+                        fullKit.preferredConditional()!=null,
+                        fullKit.rankings().stream().allMatch(r->r.utility().known())
+                                ? (fullKit.preferredConditional()==null ? Set.of("INTERVALS_OVERLAP_OR_TIE") : Set.of())
+                                : Set.of("OUTCOME_PREREQUISITES_UNKNOWN"),fullKit),
+                Known.of(true,"explicit source fixture public Pressure and consumed item"),
+                actualArceus.execution::sourceCurrent).comparedPairs()==10,
+                "actual Arceus kit source-supported pairwise coverage incomplete");
+        var staleScope=TacticalPairwiseCoverage.inspect(
+                new PublicReplyCoverage.Audit(5,1,true,true,false,Set.of("INTERVALS_OVERLAP_OR_TIE"),fullKit),
+                Known.unknown(),actualArceus.execution::sourceCurrent);
+        check(staleScope.boundedActions()==0 && staleScope.comparedPairs()==0,
+                "missing actual public opponent modifier-proof became full-kit preference");
         var healing=fixture(domain,200,false,"leftovers","multitype",true,List.of("swordsdance","recover"));
         String recoveryLegacy=LegacyScorerRegression.choose(200,381,220,416,416,394,100,List.of("swordsdance","recover"));
         check(recoveryLegacy.equals("move:swordsdance"),"compiled legacy recovery/setup ranking changed");
