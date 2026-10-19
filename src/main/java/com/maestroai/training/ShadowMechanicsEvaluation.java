@@ -304,12 +304,23 @@ public final class ShadowMechanicsEvaluation {
         if(moveId.equals("spectralthief")) {
             // Native Protect blocks the attack and must block pre-hit theft,
             // even when the target has publicly observed positive boosts.
-            if(execution!=null&&execution.protectedTarget(target.id()))
-                return hurt(p,!own,new Interval(0,0));
             if(!profiles.get(target.id()).types().known())
                 return unknown(p,"SPECTRAL_THIEF_TARGET_TYPE_UNKNOWN");
-            if(effectiveness("ghost",profiles.get(target.id()).types().value())==Integer.MIN_VALUE)
+            boolean immune=effectiveness("ghost",profiles.get(target.id()).types().value())==Integer.MIN_VALUE;
+            boolean protectedHit=execution!=null&&execution.protectedTarget(target.id());
+            if(protectedHit||immune) {
+                // Even zero-damage success must pass the SAME source-current
+                // item/ability/actor coverage as other tactical predictions.
+                if(execution!=null) {
+                    Damage certified=execution.damage(moveId,profiles.get(attacker.id()),attacker,
+                            profiles.get(target.id()),target,critical);
+                    if(!certified.fraction().known())
+                        return unknown(p,String.join(",",certified.unknown()));
+                    if(certified.fraction().value().high()!=0)
+                        return unknown(p,"SPECTRAL_THIEF_BLOCKED_DAMAGE_NOT_ZERO");
+                }
                 return hurt(p,!own,new Interval(0,0));
+            }
             if(!target.stages().keySet().containsAll(Set.of("atk","def","spa","spd","spe")))
                 return unknown(p,"SPECTRAL_THIEF_PUBLIC_STAGE_DOMAIN_UNKNOWN");
             var bonus=new TreeMap<String,Integer>();

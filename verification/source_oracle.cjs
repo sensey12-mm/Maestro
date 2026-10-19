@@ -526,8 +526,9 @@ console.log('Recover source oracle PASS: four exact rounding/capping cases');
   assert.equal(move.stealsBoosts,true);
   assert(move.flags.protect,'Spectral Thief native Protect flag missing');
   assert(evalSrc.includes('execution.protectedTarget(target.id())')&&
-         evalSrc.indexOf('execution.protectedTarget(target.id())')<evalSrc.indexOf('SPECTRAL_THIEF_PUBLIC_STAGE_DOMAIN_UNKNOWN'),
-         'Spectral Thief source execution steals stages before testing Protect');
+         evalSrc.indexOf('execution.protectedTarget(target.id())')<evalSrc.indexOf('SPECTRAL_THIEF_PUBLIC_STAGE_DOMAIN_UNKNOWN')&&
+         evalSrc.includes('Damage certified=execution.damage(moveId,profiles.get(attacker.id()),attacker,'),
+         'Spectral Thief blocked hit skipped source-current modifier coverage or stole boosts');
   assert(scopedSrc.includes('a.volatiles().contains("protect")')&&scopedSrc.includes('sourceCurrent()'),
          'Protect provenance not bound to fresh public field');
   console.log('Spectral Thief Protect pre-hit source guard PASS');
