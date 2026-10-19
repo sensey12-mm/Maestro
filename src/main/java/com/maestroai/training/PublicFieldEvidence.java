@@ -103,7 +103,14 @@ public final class PublicFieldEvidence {
     // ordinary switches carry their effects. This does not grant future damage,
     // drain, pivot or secondary-effect forecasting. Exact source/registry proof
     // includes every ID below; unsupported transfers/volatiles still poison state.
-    private static final Set<String> OBSERVED_ONLY = Set.of("uturn","ironhead","icebeam","moonblast","focusblast",
+    // These IDs are admitted only as *already executed* public history, not
+    // as future outcome/damage certificates. Earthquake's ordinary Gen9
+    // Cobblemon Showdown definition is a direct all-adjacent Ground attack
+    // (secondary=null). The special Dig/invulnerability interactions are
+    // future battle mechanics and are NOT certified by this allowlist.
+    // An unrecognized [zeffect], indirect origin or extra protocol side effect
+    // still poisons the lifetime record; no Z/pack override is inferred safe.
+    private static final Set<String> OBSERVED_ONLY = Set.of("earthquake","uturn","ironhead","icebeam","moonblast","focusblast",
             "astralbarrage","psyshock","drainingkiss","energyball","closecombat","rocktomb","shadowball","hypervoice","aurasphere");
     private long epoch;
     private Capture current;

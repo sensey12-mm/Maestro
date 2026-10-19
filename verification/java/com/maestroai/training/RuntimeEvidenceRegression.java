@@ -128,6 +128,63 @@ final class RuntimeEvidenceRegression {
             var e=provider();e.update(p);var field=new PublicFieldEvidence().update(p,e);
             check(field.unknown().isEmpty()==prior.equals("U-turn"));
         }
+        // Phase 3.51: the captured Gen9 Earthquake was a witnessed completed
+        // ordinary attack. It should not poison all later field history solely
+        // because its ID is absent from the future-damage predictor.
+        var quake=new PublicProtocolEvidence();
+        quake.update(List.of(start,
+                "update\n|move|p2a: Foe|Earthquake|p1a: Own\n"
+                + "|-damage|p1a: Own|50/100\n|turn|2"));
+        var quakeEvidence=provider();quakeEvidence.update(quake);
+        var quakeObserver=new PublicFieldEvidence();
+        var quakeField=quakeObserver.update(quake,quakeEvidence);
+        check(quakeField.unknown().isEmpty() && quakeField.allActorsCovered());
+        check(quakeField.actor(quakeEvidence.observation("p2a")).covered());
+        check(quakeField.turn()==2);
+        // Different casing/spacing in genuine move display names must still
+        // normalize, without granting any opponent hidden-move knowledge.
+        var spaced=new PublicProtocolEvidence();
+        spaced.update(List.of(start,"update\n|move|p2a: Foe|Earth quake|p1a: Own\n|turn|2"));
+        var spacedEvidence=provider();spacedEvidence.update(spaced);
+        check(new PublicFieldEvidence().update(spaced,spacedEvidence).unknown().isEmpty());
+
+        // A later unverified Z-effect remains unsupported even if preceded by
+        // an otherwise ordinary Earthquake. A subsequent ordinary turn does
+        // NOT magically repair the prior effect gap.
+        var z=new PublicProtocolEvidence();
+        z.update(List.of(start,
+                "update\n|move|p2a: Foe|Earthquake|p1a: Own\n|turn|2",
+                "update\n|move|p2a: Foe|Twinkle Tackle|p1a: Own|[zeffect]\n|turn|3",
+                "update\n|move|p2a: Foe|Earthquake|p1a: Own\n|turn|4"));
+        var zEvidence=provider();zEvidence.update(z);
+        var zField=new PublicFieldEvidence().update(z,zEvidence);
+        check(zField.unknown().contains("INDIRECT_EXECUTION_UNRESOLVED"));
+        check(zField.unknown().contains("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER"));
+        check(!zField.allActorsCovered());
+        check(!zField.actor(zEvidence.observation("p2a")).covered());
+
+        // Non-Z unknown effects and guessed/private only opponent modifiers
+        // must never become a witnessed current field.
+        var unknownMove=new PublicProtocolEvidence();
+        unknownMove.update(List.of(start,
+                "update\n|move|p2a: Foe|Baton Pass|p1a: Own\n|turn|2",
+                "update\n|move|p2a: Foe|Earthquake|p1a: Own\n|turn|3"));
+        var unknownEvidence=provider();unknownEvidence.update(unknownMove);
+        check(new PublicFieldEvidence().update(unknownMove,unknownEvidence).unknown()
+                .contains("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER"));
+        var priv=new PublicProtocolEvidence();
+        priv.update(List.of(start,"sideupdate\np1\n|move|p2a: PRIVATE_OPPONENT_SECRET|Earthquake|p1a: Own",
+                "update\n|move|p2a: Foe|Earthquake|p1a: Own\n|turn|2"));
+        var privEvidence=provider();privEvidence.update(priv);
+        var privField=new PublicFieldEvidence().update(priv,privEvidence);
+        check(privField.unknown().isEmpty() && priv.mechanicsEvents().stream()
+                .noneMatch(line -> line.contains("PRIVATE_OPPONENT_SECRET")));
+        check(!quakeField.token().contains("PRIVATE_OPPONENT_SECRET"));
+        quakeObserver.reset();
+        boolean oldReceiptStale=false;
+        try { quakeField.requireCurrent(2); } catch(IllegalArgumentException expected) { oldReceiptStale=true; }
+        check(oldReceiptStale);
+
         for(boolean ended:List.of(false,true)) {
             var p=new PublicProtocolEvidence();p.update(List.of(start,"update\n|move|p1a: Own|Iron Head|p2a: Foe\n|cant|p2a: Foe|flinch"+(ended?"\n|turn|2":"")));
             var e=provider();e.update(p);var field=new PublicFieldEvidence().update(p,e);
