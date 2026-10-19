@@ -38,6 +38,36 @@ public final class PublicReplyCoverage {
         }
     }
 
+    /** Runtime Shadow's strict modifier layer. The only automatically exhaustive
+     * world is a singleton whose present item and ability were explicitly
+     * announced in the current spectator entry, with no unsupported form.
+     * Unknown opponents never gain a synthetic "no item" or neutral ability.
+     */
+    public record Enveloped(Audit replies, ModifierScenarioEnvelope.Audit modifiers) {
+        public Enveloped {
+            Objects.requireNonNull(replies);
+            Objects.requireNonNull(modifiers);
+        }
+    }
+
+    public static Enveloped evaluateEnveloped(BattleSnapshot snapshot, PublicMechanics mechanics,
+                                              Map<String, Profile> profiles, ScopedExecution execution,
+                                              PublicProtocolEvidence publicHistory, String opponentSlot,
+                                              Known<Boolean> trickRoom, Critical critical) {
+        Audit audit = evaluate(snapshot, mechanics, profiles, execution, publicHistory,
+                opponentSlot, trickRoom, critical);
+        Known<Boolean> singleton = execution == null ? Known.unknown()
+                : execution.publicModifierSingletonScope();
+        List<ModifierScenarioEnvelope.Scenario> worlds = audit.compared() && audit.allCandidates()
+                && audit.result() != null
+                ? List.of(new ModifierScenarioEnvelope.Scenario("observed-public-current-modifiers", audit.result()))
+                : List.of();
+        // This closure cannot inspect a private foe request or confer a later lease.
+        var modifiers = ModifierScenarioEnvelope.compare(worlds, singleton,
+                execution == null ? () -> false : execution::sourceCurrent);
+        return new Enveloped(audit, modifiers);
+    }
+
     private static Audit withheld(int candidates, int replies, String why) {
         return new Audit(candidates,replies,false,false,false,Set.of(why),null);
     }

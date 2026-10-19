@@ -99,6 +99,36 @@ public final class AcceptanceGateRegression {
                 "every legal root action must evaluate both witnessed replies");
         yes(audit.result().rankings().stream().allMatch(r->r.utility().known()),
                 "explicit ordinary-source conditions failed to produce bounded exchange");
+        // Phase 3.50: actual public-reply pipeline enters the new modifier
+        // envelope ONLY when the current opponent item+ability were announced.
+        var integrated=PublicReplyCoverage.evaluateEnveloped(scenario,mechanics,
+                Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
+                field.trickRoom(),CobblemonMechanics.Critical.NON_CRITICAL);
+        yes(integrated.replies().compared() && integrated.modifiers().bounds().size()==2,
+                "current public modifier singleton could not reach runtime envelope");
+        yes(integrated.modifiers().safeLine().contains("advisoryOnly=true")
+                && integrated.modifiers().safeLine().contains("hiddenModifierProbability=NONE")
+                && !integrated.modifiers().safeLine().contains("Foe"),
+                "runtime envelope leaked public identity or invented a modifier probability");
+
+        // Source-known item/ability candidates cannot replace missing public
+        // revelations, even if the caller supplies a seemingly viable variant.
+        var guessedExecution=new ScopedExecution(field,Map.of(
+                "self",new ScopedExecution.Binding(ownSeen,
+                        Known.of("none","own current item"),Known.of("runaway","own current ability"),yesScope),
+                "opponent",new ScopedExecution.Binding(foeSeen,
+                        Known.of("leftovers","guess from opponent species"),foeSeen.ability())),
+                ExecutionCoverage.Scopes.all(yesScope));
+        yes(!guessedExecution.publicModifierSingletonScope().known()
+                && PublicReplyCoverage.evaluateEnveloped(scenario,mechanics,
+                        Map.of("self",own,"opponent",foe),guessedExecution,publicStream,"p2a",
+                        field.trickRoom(),CobblemonMechanics.Critical.NON_CRITICAL)
+                        .modifiers().bounds().isEmpty(),
+                "invented opponent item produced exhaustive modifier proof");
+
+        // An ephemeral source proof cannot continue after its field reset.
+        yes(execution.publicModifierSingletonScope().known(),
+                "explicit current modifier observations should be usable before withdrawal");
         // Full compiled provider comparisons can enter a finite modifier envelope.
         // No claim that the real opponent's hidden ability/item universe is exhausted.
         var envelope=ModifierScenarioEnvelope.compare(List.of(
@@ -117,6 +147,12 @@ public final class AcceptanceGateRegression {
                 && !audit.safeLine().contains("Foe"),
                 "successful audit leaked opponent reply or invented probability");
         fieldObserver.reset();
+        yes(!execution.publicModifierSingletonScope().known()
+                && PublicReplyCoverage.evaluateEnveloped(scenario,mechanics,
+                        Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
+                        Known.unknown(),CobblemonMechanics.Critical.NON_CRITICAL)
+                        .modifiers().bounds().isEmpty(),
+                "expired field evidence continued to certify opponent modifiers");
         var expired=PublicReplyCoverage.evaluate(scenario,mechanics,
                 Map.of("self",own,"opponent",foe),execution,publicStream,"p2a",
                 Known.of(false,"prior field record"),CobblemonMechanics.Critical.NON_CRITICAL);

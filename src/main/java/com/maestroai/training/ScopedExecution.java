@@ -46,6 +46,30 @@ public final class ScopedExecution {
         return scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
                 .allMatch(b->b.lease().current());
     }
+    /**
+     * Exhaustiveness of the current *item/ability modifier choice* only:
+     * both opponent values must be explicit, current, spectator-public events.
+     * This does not certify the foe's move distribution, other unseen party
+     * members, form effects, arbitrary addon callbacks or future turns.
+     *
+     * Actual action arithmetic and fields remain independently gated by every
+     * executed operation's certificate and by the completed reply comparison.
+     * In particular, merely recognizing an item/ability in the engine registry
+     * is never evidence of the opponent's currently held item or ability.
+     */
+    public Known<Boolean> publicModifierSingletonScope() {
+        if (!sourceCurrent() || !field.unknown().isEmpty()) return Known.unknown();
+        Binding foe = actors.get("opponent");
+        if (foe == null || foe.observation() == null) return Known.unknown();
+        var seen = foe.observation();
+        if (seen.ambiguous() || seen.unsupportedEffects()
+                || !foe.item().known() || !foe.ability().known()
+                || !foe.item().equals(seen.item()) || !foe.ability().equals(seen.ability()))
+            return Known.unknown();
+        var publicEntry = field.actor(seen);
+        if (publicEntry == null || !publicEntry.covered()) return Known.unknown();
+        return Known.of(true, field.token() + ":current-spectator-public-item-and-ability-only");
+    }
     public void requireCurrent(int turn) { field.requireCurrent(turn); }
     public Set<String> unresolved() {
         Set<String> reasons = new TreeSet<>(field.unknown());

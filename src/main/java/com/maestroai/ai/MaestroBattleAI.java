@@ -6303,13 +6303,17 @@ public class MaestroBattleAI extends RCTBattleAI {
             // Independent Phase 3.34 advisory comparison against all strictly
             // witnessed public current-appearance replies; never promote and
             // never infer a probability for the opponent's next move.
-            var replyAudit = com.maestroai.training.PublicReplyCoverage.evaluate(
+            var envelopedAudit = com.maestroai.training.PublicReplyCoverage.evaluateEnveloped(
                     snapshot, mechanicsEvidence, profiles, mechanicsExecution,
                     publicProtocolEvidence, mechanicsOpponentSlot,
                     mechanicsExecution == null ? PublicTransitionState.Known.unknown()
                             : mechanicsExecution.field().trickRoom(),
                     CobblemonMechanics.Critical.BOTH);
+            var replyAudit = envelopedAudit.replies();
             System.out.println("[MaestroAI] " + replyAudit.safeLine());
+            // Public current-modifier singleton only; no inferred hidden
+            // opponent set, no private request and no live policy handoff.
+            System.out.println("[MaestroAI] " + envelopedAudit.modifiers().safeLine());
             var comparison = ShadowMechanicsEvaluation.compare(snapshot, mechanicsEvidence, profiles, plans,
                     mechanicsExecution == null ? PublicTransitionState.Known.unknown() : mechanicsExecution.field().trickRoom(),
                     CobblemonMechanics.Critical.BOTH, legacyAction, mechanicsExecution);
