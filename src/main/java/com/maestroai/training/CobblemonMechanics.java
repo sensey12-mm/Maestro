@@ -120,6 +120,13 @@ public final class CobblemonMechanics {
     }
     static Damage damage(String moveId, Profile attacker, Actor attackerState, Profile target, Actor targetState,
                          Critical critical, int weatherNumerator, int weatherDenominator, int powerNumerator, int powerDenominator) {
+        return damage(moveId,attacker,attackerState,target,targetState,critical,
+                weatherNumerator,weatherDenominator,powerNumerator,powerDenominator,1,1);
+    }
+    /** Fixed-point source power and final-damage modifiers retain native rounding order. */
+    static Damage damage(String moveId,Profile attacker,Actor attackerState,Profile target,Actor targetState,
+            Critical critical,int weatherNumerator,int weatherDenominator,int powerNumerator,
+            int powerDenominator,int finalNumerator,int finalDenominator) {
         bound(attacker, attackerState); bound(target, targetState); Objects.requireNonNull(critical);
         Move move = move(moveId);
         if (move == null || move.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
@@ -147,9 +154,9 @@ public final class CobblemonMechanics {
                     || stage(target.stat(defense).value().low(), dStage) == 0)
                 return Damage.unknown("ZERO_EFFECTIVE_STAT_OUTSIDE_SLICE");
             int min = hit(attacker.level().value(), power, stage(attacker.stat(offense).value().low(), aStage),
-                    stage(target.stat(defense).value().high(), dStage), stab, exponent, burn, crit, 85, weatherNumerator, weatherDenominator);
+                    stage(target.stat(defense).value().high(), dStage), stab, exponent, burn, crit, 85, weatherNumerator, weatherDenominator,finalNumerator,finalDenominator);
             int max = hit(attacker.level().value(), power, stage(attacker.stat(offense).value().high(), aStage),
-                    stage(target.stat(defense).value().low(), dStage), stab, exponent, burn, crit, 100, weatherNumerator, weatherDenominator);
+                    stage(target.stat(defense).value().low(), dStage), stab, exponent, burn, crit, 100, weatherNumerator, weatherDenominator,finalNumerator,finalDenominator);
             if (min < 0 || max < 0 || max > 10000) return Damage.unknown("DAMAGE_OVERFLOW_OUTSIDE_SLICE");
             low = Math.min(low, min); high = Math.max(high, max);
         }
@@ -159,7 +166,8 @@ public final class CobblemonMechanics {
                         (double) high / target.maxHp().value().low()), SOURCE), Set.of(), SOURCE);
     }
     private static int hit(int level, int power, int atk, int def, boolean stab,
-                           int exponent, boolean burn, boolean crit, int roll, int weatherNumerator, int weatherDenominator) {
+                           int exponent, boolean burn, boolean crit, int roll, int weatherNumerator, int weatherDenominator,
+                            int finalNumerator, int finalDenominator) {
         long damage = ((2L * level / 5 + 2) * power * atk / def) / 50 + 2;
         damage = halfDown(damage, weatherNumerator, weatherDenominator);
         if (crit) damage = damage * 3 / 2;
@@ -168,6 +176,7 @@ public final class CobblemonMechanics {
         if (exponent > 0) damage <<= exponent;
         else if (exponent < 0) damage >>= -exponent;
         if (burn) damage = halfDown(damage, 1, 2);
+        damage = halfDown(damage,finalNumerator,finalDenominator);
         // Showdown finally truncates to 16 bits. Refuse that overflow domain instead of
         // assuming monotonic endpoints across a wrap.
         return damage >= 65536 ? -1 : (int) Math.max(1, damage);

@@ -261,12 +261,15 @@ final class ModifierTacticalRegression {
         check(actual.points().known()&&actual.points().value().equals(oracle),"Technician base-power arithmetic differs from native oracle: "+actual+" / "+oracle);
         var missing=fixture(domain,200,false,"leftovers","multitype",false,List.of("swordsdance","recover"));
         check(compare(missing,"move:recover").preferredConditional()==null,"unseen opponent item certified via missing announcement");
-        for(String ability:List.of("shadowshield","asonespectrier","unknown")) {
+        for(String ability:List.of("unknown")) {
             var unsupported=fixture(domain,200,false,"leftovers",ability,true,List.of("recover"));
             check(compare(unsupported,"move:recover").preferredConditional()==null,"unverified ability certified: "+ability);
         }
+        // A Life Orb does not recoil for a status move such as Recover.
         var life=fixture(domain,200,false,"lifeorb","multitype",true,List.of("recover"));
-        check(compare(life,"move:recover").preferredConditional()==null,"unsupported item recoil was ignored");
+        check(compare(life,"move:recover").rankings().stream()
+                        .anyMatch(x->x.action().equals("move:recover")&&x.utility().known()),
+                "Life Orb incorrectly blocked non-damaging recovery");
         tech.ledger.endChoice();
         check(!tech.execution.damageCoverage("shadowsneak",tech.profiles.get("self"),state.self(),tech.profiles.get("opponent"),state.opponent()).supported(),"expired own transport retained Technician certificate");
         System.out.println("Fixed-pack modifier/tactical proof PASS: "+checks+" checks; source Technician extrema, useful switch/recover/setup states, compiled legacy move-scorer and simple baselines; no win-rate claim");

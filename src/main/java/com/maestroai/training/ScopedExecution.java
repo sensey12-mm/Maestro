@@ -71,6 +71,9 @@ public final class ScopedExecution {
         return Known.of(true, field.token() + ":current-spectator-public-item-and-ability-only");
     }
     public void requireCurrent(int turn) { field.requireCurrent(turn); }
+    /** These values must already pass current per-operation evidence gates. */
+    String currentItem(String role){return item(role);}
+    String currentAbility(String role){return ability(role);}
     /** Active Power Herb requires current own binding and no Magic Room. */
     boolean activePowerHerb(String role) {
         var b=actors.get(role);
@@ -106,10 +109,10 @@ public final class ScopedExecution {
                 need(role + ":OWN_TRANSPORT_FRESHNESS", yes(b.ownTransportCurrent()) && (b.lease() == null || b.lease().turn() == field.turn()));
                 if (b.lease() != null) leases.add(b.lease());
             }
-            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers").contains(b.item().value()));
+            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
             need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !b.ability().value().equals("download"));
@@ -134,13 +137,24 @@ public final class ScopedExecution {
         c.actor(a.id(), reserve(a.id())); c.actor(t.id(), reserve(t.id()));
         Move m = move(moveId); c.need("SUPPORTED_DAMAGE_MOVE", m != null && m.power() > 0);
         if(m!=null&&m.type().equals("fairy")) {
-            for(String role:List.of(a.id(),t.id())) {
-                var binding=actors.get(role);
-                c.need("FAIRY_AURA_DAMAGE_MODIFIER_UNMODELED",
-                        binding!=null&&binding.ability().known()
-                        &&!binding.ability().value().equals("fairyaura"));
-            }
+            // Fairy Aura and Technician both modify source base power. Only
+            // their separately source-verified domains are presently certified.
+            boolean aura=actors.values().stream().anyMatch(b->
+                    b.ability().known()&&b.ability().value().equals("fairyaura")
+                    &&b.observation()!=null);
+            boolean technician=actors.containsKey(a.id())&&actors.get(a.id()).ability().known()
+                    &&actors.get(a.id()).ability().value().equals("technician")&&m.power()<=60;
+            c.need("FAIRY_AURA_TECHNICIAN_COMPOSITION",!(aura&&technician));
         }
+        var defender=actors.get(t.id());
+        if(defender!=null&&defender.ability().known()&&defender.ability().value().equals("shadowshield"))
+            c.need("SHADOW_SHIELD_FULL_HP_CERTIFICATE",t.hp().known()
+                    &&(t.hp().value().low()==1.0||t.hp().value().high()<1.0));
+        var offense=actors.get(a.id());
+        if(defender!=null&&offense!=null&&defender.ability().known()&&offense.item().known())
+            c.need("LIFE_ORB_SHADOW_SHIELD_COMPOSITION",!(
+                    defender.ability().value().equals("shadowshield")&&offense.item().value().equals("lifeorb")
+                    &&t.hp().known()&&t.hp().value().low()==1.0));
         c.need("WEATHER", field.weather().known()); c.need("TERRAIN", field.terrain().known());
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {
@@ -158,8 +172,11 @@ public final class ScopedExecution {
                     int d = m.type().equals("fire") && !field.weather().value().equals("none") ? 2 : 1;
                     // Certify the full supported critical domain, refusing zero-stat
                     // and engine-wrap domains before issuing a usable certificate.
-                    var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t, Critical.BOTH, n, d, ability(a.id()).equals("technician") && m.power() <= 60 ? 3 : 1,
-                            ability(a.id()).equals("technician") && m.power() <= 60 ? 2 : 1);
+                    var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
+                            Critical.BOTH,n,d,sourcePowerNumerator(m,a.id(),t.id()),
+                            sourcePowerDenominator(m,a.id(),t.id()),
+                            finalDamageNumerator(a.id(),t.id(),t),
+                            finalDamageDenominator(a.id(),t.id(),t));
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -225,6 +242,24 @@ public final class ScopedExecution {
         return new Profile(raw.actor(), raw.level(), raw.maxHp(), raw.stats(), raw.types(),
                 supported(raw.actor(), reserve) ? Known.of(true, field.token() + ":limited-conditional-scope") : Known.unknown());
     }
+    private int sourcePowerNumerator(Move move,String a,String t) {
+        if(move.type().equals("fairy") && (ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
+            return 5448; // source Fairy Aura 5448/4096, before formula
+        return ability(a).equals("technician")&&move.power()<=60?3:1;
+    }
+    private int sourcePowerDenominator(Move move,String a,String t) {
+        if(move.type().equals("fairy") && (ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
+            return 4096;
+        return ability(a).equals("technician")&&move.power()<=60?2:1;
+    }
+    private int finalDamageNumerator(String a,String t,Actor target) {
+        if(item(a).equals("lifeorb"))return 5324; // pinned native Life Orb ModifyDamage
+        return ability(t).equals("shadowshield")&&target.hp().value().low()==1.0?1:1;
+    }
+    private int finalDamageDenominator(String a,String t,Actor target) {
+        if(item(a).equals("lifeorb"))return 4096;
+        return ability(t).equals("shadowshield")&&target.hp().value().low()==1.0?2:1;
+    }
     private String item(String role) { return field.magicRoom().known() && field.magicRoom().value() ? "none" : actors.get(role).item().value(); }
     private String ability(String role) { return actors.get(role).ability().value(); }
     private PublicFieldEvidence.Active active(String role) { Binding b = actors.get(role); return b == null ? null : field.actor(b.observation()); }
@@ -255,9 +290,9 @@ public final class ScopedExecution {
         }
         // Technician modifies base power before the level/stat formula. Never
         // multiply a final damage interval; the engine rounds at each stage.
-        int powerN = ability(a.id()).equals("technician") && m.power() <= 60 ? 3 : 1;
-        int powerD = powerN == 3 ? 2 : 1;
-        return CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t, critical, n, d, powerN, powerD);
+        return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
+                n,d,sourcePowerNumerator(m,a.id(),t.id()),sourcePowerDenominator(m,a.id(),t.id()),
+                finalDamageNumerator(a.id(),t.id(),t),finalDamageDenominator(a.id(),t.id(),t));
     }
     private static Damage zero(String why) {
         return new Damage(Known.unknown(), Known.of(new Interval(0, 0), PublicFieldEvidence.SOURCE + ":" + why), Set.of(), PublicFieldEvidence.SOURCE);

@@ -323,6 +323,23 @@ public final class ShadowMechanicsEvaluation {
         Interval d = damage.fraction().value();
         if (possibleFaint(attacker)) d = new Interval(0, d.high()); // bound conditional nonexecution without an invented probability
         Progress result=hurt(p,!own,d);
+        if(execution!=null&&execution.currentItem(attacker.id()).equals("lifeorb")
+                &&damage.points().known()&&damage.points().value().high()>0) {
+            Profile holder=profiles.get(attacker.id());
+            if(!holder.maxHp().known()||holder.maxHp().value().low()!=holder.maxHp().value().high())
+                return unknown(result,"LIFE_ORB_BASE_MAX_HP_UNKNOWN");
+            int max=holder.maxHp().value().low();
+            double chip=Math.max(1,max/10)/(double)max;
+            result=hurt(result,own,new Interval(chip,chip));
+        }
+        if(execution!=null&&execution.currentAbility(attacker.id()).equals("asonespectrier")
+                &&(own?result.state().opponent():result.state().self()).hp().value().high()==0) {
+            Actor acted=own?result.state().self():result.state().opponent();
+            Actor boosted=stageEffect(acted,Map.of("spa",1));
+            if(boosted==null)return unknown(result,"AS_ONE_POST_KO_SPA_STAGE_UNKNOWN");
+            result=replace(result,state(result.state(),own?boosted:result.state().self(),
+                    own?result.state().opponent():boosted,result.state().actionKind(),result.state().action()));
+        }
         // U-turn transfers the reply target when acting first. Without a
         // bound replacement choice and entry effects, that turn is UNKNOWN.
         if(moveId.equals("uturn") && !(own?result.state().opponent():result.state().self()).hp().value().equals(new Interval(0,0)))
