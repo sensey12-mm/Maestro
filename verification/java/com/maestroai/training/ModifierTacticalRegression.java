@@ -215,15 +215,20 @@ final class ModifierTacticalRegression {
                 .filter(x->x.action().equals("move:moonblast")).findFirst().orElseThrow();
         check(p.utility().known()&&a.utility().known()&&a.utility().value().high()>p.utility().value().high(),
                 "source Fairy Aura base-power modifier was lost");
-        var holder=fixture(domain,200,true,"lifeorb","asonespectrier",true,List.of("astralbarrage"));
-        var orb=compare(holder,"move:astralbarrage").rankings().stream()
-                .filter(x->x.action().equals("move:astralbarrage")).findFirst().orElseThrow();
+        var holder=fixture(domain,200,true,"lifeorb","asonespectrier",true,List.of("psyshock"));
+        var orb=compare(holder,"move:psyshock").rankings().stream()
+                .filter(x->x.action().equals("move:psyshock")).findFirst().orElseThrow();
         check(orb.utility().known(),"source Life Orb + As One opponent-domain outcome unknown: "+orb.unknown());
-        var nonOrb=fixture(domain,200,true,"marshadiumz","technician",true,List.of("astralbarrage"));
-        var basic=compare(nonOrb,"move:astralbarrage").rankings().stream()
-                .filter(x->x.action().equals("move:astralbarrage")).findFirst().orElseThrow();
-        check(basic.utility().known()&&orb.utility().value().high()>basic.utility().value().high(),
-                "Life Orb final-damage power failed to exceed otherwise ordinary damage");
+        // Compare actual opponent HP damage, NOT net resource utility, because
+        // source Life Orb also inflicts self recoil. Use resisted Psyshock,
+        // avoiding a knockout where both damage variants cap at target HP.
+        var nonOrb=fixture(domain,200,true,"marshadiumz","technician",true,List.of("psyshock"));
+        var basic=compare(nonOrb,"move:psyshock").rankings().stream()
+                .filter(x->x.action().equals("move:psyshock")).findFirst().orElseThrow();
+        double orbFoeRemaining=orb.lines().stream().mapToDouble(l->l.state().opponent().hp().value().low()).min().orElseThrow();
+        double ordinaryFoeRemaining=basic.lines().stream().mapToDouble(l->l.state().opponent().hp().value().low()).min().orElseThrow();
+        check(basic.utility().known()&&orbFoeRemaining<ordinaryFoeRemaining,
+                "Life Orb source boost did not increase raw damage (net utility also includes recoil)");
         var full=fixture(domain,381,false,"leftovers","shadowshield",true,List.of("recover"));
         var normal=fixture(domain,381,false,"leftovers","multitype",true,List.of("recover"));
         var shield=compare(full,"move:recover").rankings().stream()
