@@ -93,7 +93,9 @@ public final class ModifierScenarioEnvelope {
                 if (rank == null || rank.action() == null || !actions.add(rank.action())
                         || !rank.utility().known() || !rank.unknown().isEmpty()
                         || rank.lines().isEmpty()
-                        || rank.lines().stream().anyMatch(l -> l == null || !l.utility().known() || !l.unknown().isEmpty()))
+                        || rank.lines().stream().anyMatch(l -> l == null || !l.utility().known() || !l.unknown().isEmpty()
+                                || l.utility().value().low() < rank.utility().value().low()
+                                || l.utility().value().high() > rank.utility().value().high()))
                     return unknown(Reason.INCOMPLETE_ACTION_OR_OUTCOME);
                 Utility u = rank.utility().value();
                 if (firstActions != null && !firstActions.contains(rank.action()))

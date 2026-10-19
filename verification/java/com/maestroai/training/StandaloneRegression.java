@@ -161,6 +161,22 @@ public final class StandaloneRegression {
                 "switch:reserve",new ShadowMechanicsEvaluation.Utility(0,0)),false));
         check(ModifierScenarioEnvelope.compare(List.of(strong,noCoverage),certificate,()->true)
                 .reasons().contains(ModifierScenarioEnvelope.Reason.INCOMPLETE_ACTION_OR_OUTCOME));
+        // A forged narrow rank can hide a catastrophic line; never certify it.
+        var forged = new ShadowMechanicsEvaluation.Comparison(List.of(
+                new ShadowMechanicsEvaluation.Ranking("move:attack",
+                        PublicTransitionState.Known.of(new ShadowMechanicsEvaluation.Utility(.9,1),"forged"),
+                        List.of(new ShadowMechanicsEvaluation.Line(null,
+                                PublicTransitionState.Known.of(new ShadowMechanicsEvaluation.Utility(-1,1),"real line"),Set.of())),
+                        Set.of()),
+                new ShadowMechanicsEvaluation.Ranking("switch:reserve",
+                        PublicTransitionState.Known.of(new ShadowMechanicsEvaluation.Utility(0,0),"fixture"),
+                        List.of(new ShadowMechanicsEvaluation.Line(null,
+                                PublicTransitionState.Known.of(new ShadowMechanicsEvaluation.Utility(0,0),"fixture"),Set.of())),
+                        Set.of())),null,null,null,false,true,"synthetic;advisoryOnly=true");
+        check(ModifierScenarioEnvelope.compare(List.of(
+                new ModifierScenarioEnvelope.Scenario("forged candidate",forged)),certificate,()->true)
+                .reasons().contains(ModifierScenarioEnvelope.Reason.INCOMPLETE_ACTION_OR_OUTCOME));
+
         check(ModifierScenarioEnvelope.compare(List.of(),certificate,()->true)
                 .reasons().contains(ModifierScenarioEnvelope.Reason.MISSING_OR_DUPLICATE_SCENARIO));
         String secret = "PRIVATE_OPPONENT_PAYLOAD_DO_NOT_LOG";
