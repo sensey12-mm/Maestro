@@ -107,7 +107,74 @@ public final class StandaloneRegression {
                 && !unknown.ability().known() && !unknown.confirmedSpecies().known());
     }
 
+
+    private static ShadowMechanicsEvaluation.Comparison syntheticWorld(
+            Map<String, ShadowMechanicsEvaluation.Utility> outcomes, boolean complete) {
+        var rankings = outcomes.entrySet().stream().map(e -> {
+            var value = PublicTransitionState.Known.of(e.getValue(), "source-bounded synthetic fixture");
+            return new ShadowMechanicsEvaluation.Ranking(e.getKey(), value,
+                    List.of(new ShadowMechanicsEvaluation.Line(null, value, Set.of())), Set.of());
+        }).toList();
+        return new ShadowMechanicsEvaluation.Comparison(rankings,null,null,null,false,complete,
+                "synthetic-source-scoped;advisoryOnly=true");
+    }
+
+    private static void modifierEnvelopeRegressions() {
+        var strong = new ModifierScenarioEnvelope.Scenario("public source variant A", syntheticWorld(Map.of(
+                "move:attack",new ShadowMechanicsEvaluation.Utility(.7,.9),
+                "move:setup",new ShadowMechanicsEvaluation.Utility(-.5,-.3),
+                "switch:reserve",new ShadowMechanicsEvaluation.Utility(0,.1)),true));
+        var moderate = new ModifierScenarioEnvelope.Scenario("public source variant B", syntheticWorld(Map.of(
+                "move:attack",new ShadowMechanicsEvaluation.Utility(.6,.7),
+                "move:setup",new ShadowMechanicsEvaluation.Utility(-.2,-.1),
+                "switch:reserve",new ShadowMechanicsEvaluation.Utility(.05,.15)),true));
+        var certificate = PublicTransitionState.Known.of(true,"EXPLICIT_SYNTHETIC_COMPLETE_DOMAIN_ONLY");
+        var valid = ModifierScenarioEnvelope.compare(List.of(strong,moderate),certificate,()->true);
+        check(valid.complete() && "move:attack".equals(valid.preferredConditional()));
+        check(valid.bounds().get("move:attack").equals(new ShadowMechanicsEvaluation.Utility(.6,.9)));
+        check(valid.bounds().get("switch:reserve").equals(new ShadowMechanicsEvaluation.Utility(0,.15)));
+        var missing = ModifierScenarioEnvelope.compare(List.of(strong,moderate),
+                PublicTransitionState.Known.unknown(),()->true);
+        check(missing.preferredConditional() == null && missing.bounds().isEmpty()
+                && missing.reasons().contains(ModifierScenarioEnvelope.Reason.DOMAIN_NOT_EXHAUSTIVELY_CERTIFIED));
+        check(ModifierScenarioEnvelope.compare(List.of(strong,moderate),
+                PublicTransitionState.Known.of(false,"source incomplete"),()->true).bounds().isEmpty());
+        check(ModifierScenarioEnvelope.compare(List.of(strong,moderate),certificate,()->false)
+                .reasons().contains(ModifierScenarioEnvelope.Reason.SOURCE_LEASE_EXPIRED));
+        var overlapping = new ModifierScenarioEnvelope.Scenario("source variant C", syntheticWorld(Map.of(
+                "move:attack",new ShadowMechanicsEvaluation.Utility(.1,.4),
+                "move:setup",new ShadowMechanicsEvaluation.Utility(-.5,-.2),
+                "switch:reserve",new ShadowMechanicsEvaluation.Utility(.2,.45)),true));
+        var ambiguous = ModifierScenarioEnvelope.compare(List.of(strong,overlapping),certificate,()->true);
+        check(ambiguous.preferredConditional() == null
+                && ambiguous.reasons().contains(ModifierScenarioEnvelope.Reason.INTERVALS_OVERLAP_OR_TIE));
+        check(ModifierScenarioEnvelope.compare(List.of(strong,strong),certificate,()->true)
+                .reasons().contains(ModifierScenarioEnvelope.Reason.MISSING_OR_DUPLICATE_SCENARIO));
+        var mismatched = new ModifierScenarioEnvelope.Scenario("missing root action",syntheticWorld(Map.of(
+                "move:attack",new ShadowMechanicsEvaluation.Utility(.9,1),
+                "switch:reserve",new ShadowMechanicsEvaluation.Utility(0,0)),true));
+        check(ModifierScenarioEnvelope.compare(List.of(strong,mismatched),certificate,()->true)
+                .reasons().contains(ModifierScenarioEnvelope.Reason.ACTION_UNIVERSE_MISMATCH));
+        var noCoverage = new ModifierScenarioEnvelope.Scenario("partial",syntheticWorld(Map.of(
+                "move:attack",new ShadowMechanicsEvaluation.Utility(.9,1),
+                "move:setup",new ShadowMechanicsEvaluation.Utility(-1,0),
+                "switch:reserve",new ShadowMechanicsEvaluation.Utility(0,0)),false));
+        check(ModifierScenarioEnvelope.compare(List.of(strong,noCoverage),certificate,()->true)
+                .reasons().contains(ModifierScenarioEnvelope.Reason.INCOMPLETE_ACTION_OR_OUTCOME));
+        check(ModifierScenarioEnvelope.compare(List.of(),certificate,()->true)
+                .reasons().contains(ModifierScenarioEnvelope.Reason.MISSING_OR_DUPLICATE_SCENARIO));
+        String secret = "PRIVATE_OPPONENT_PAYLOAD_DO_NOT_LOG";
+        var secretWorld = new ModifierScenarioEnvelope.Scenario(secret,strong.comparison());
+        check(!ModifierScenarioEnvelope.compare(List.of(secretWorld,moderate),certificate,()->true)
+                .safeLine().contains(secret));
+        var seq = new java.util.concurrent.atomic.AtomicInteger();
+        check(ModifierScenarioEnvelope.compare(List.of(strong,moderate),certificate,
+                () -> seq.incrementAndGet() == 1).bounds().isEmpty());
+        check(!valid.safeLine().contains("source variant") && valid.safeLine().contains("advisoryOnly=true"));
+    }
+
     public static void main(String[] args) {
+        modifierEnvelopeRegressions();
         publicFormReplay();
         check(StrictOwnJson.read("{\"x\":[1,true,null]}").getAsJsonArray("x").size() == 3);
         reject(() -> StrictOwnJson.read("{\"x\":1,\"x\":2}"));

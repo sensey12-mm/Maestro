@@ -99,6 +99,19 @@ public final class AcceptanceGateRegression {
                 "every legal root action must evaluate both witnessed replies");
         yes(audit.result().rankings().stream().allMatch(r->r.utility().known()),
                 "explicit ordinary-source conditions failed to produce bounded exchange");
+        // Full compiled provider comparisons can enter a finite modifier envelope.
+        // No claim that the real opponent's hidden ability/item universe is exhausted.
+        var envelope=ModifierScenarioEnvelope.compare(List.of(
+                new ModifierScenarioEnvelope.Scenario("explicit synthetic source A",audit.result()),
+                new ModifierScenarioEnvelope.Scenario("explicit synthetic source B",audit.result())),
+                Known.of(true,"only explicitly duplicated synthetic fixtures"),()->true);
+        yes(envelope.bounds().size()==2 && envelope.bounds().keySet().equals(
+                Set.of("move:tackle","move:quickattack")),
+                "production evaluator comparisons did not preserve complete legal root action set");
+        yes(ModifierScenarioEnvelope.compare(List.of(
+                new ModifierScenarioEnvelope.Scenario("synthetic verified",audit.result())),
+                Known.unknown(),()->true).bounds().isEmpty(),
+                "one available source scenario was mistaken for exhaustive hidden modifiers");
         yes(audit.safeLine().contains("responseProbabilities=NONE")
                 && !audit.safeLine().contains("quickattack")
                 && !audit.safeLine().contains("Foe"),
