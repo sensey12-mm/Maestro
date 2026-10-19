@@ -259,6 +259,27 @@ assert.equal(rawMoves.earthquake.category,'Physical');
 assert.equal(rawMoves.earthquake.basePower,100);
 assert.equal(rawMoves.earthquake.secondary,null);
 assert.equal(rawMoves.earthquake.target,'allAdjacent');
+// Phase 3.52: certify the exact ordinary, no-secondary attacking slice for
+// Calyrex-Shadow. Psyshock uniquely uses the opponent's Defense despite
+// being a Special attack; never silently reinterpret it as physical.
+for(const [id,bp,type,target,override] of [
+  ['astralbarrage',120,'Ghost','allAdjacentFoes',undefined],
+  ['psyshock',80,'Psychic','normal','def']
+]) {
+  const m=rawMoves[id];
+  assert.equal(m.basePower,bp,id+' basePower');
+  assert.equal(m.category,'Special',id+' category');
+  assert.equal(m.type,type,id+' type');
+  assert.equal(m.target,target,id+' target');
+  assert.equal(m.priority,0,id+' priority');
+  assert.equal(m.accuracy,100,id+' accuracy');
+  assert.equal(m.secondary,null,id+' secondary');
+  assert.equal(m.overrideDefensiveStat,override,id+' defensive target');
+  assert(!m.selfSwitch && !m.drain && !m.self && !m.recoil,
+    id+' unsupported after-hit effects');
+  assert(!Object.values(m).some(v=>typeof v==='function'),
+    id+' unsupported callbacks');
+}
 assert.equal(rawMoves.uturn.selfSwitch,true);
 assert.deepEqual(rawMoves.drainingkiss.drain,[3,4]);
 assert.deepEqual(rawMoves.closecombat.self.boosts,{def:-1,spd:-1});
@@ -267,6 +288,37 @@ const fieldCode=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestr
 const observedIds=[...fieldCode.match(/OBSERVED_ONLY = Set.of\(([\s\S]*?)\);/)[1].matchAll(/"([a-z]+)"/g)].map(x=>x[1]).sort();
 assert.deepEqual(observedIds,observedOnly.sort(),'past-only Java scope drift');
 console.log('Past-only public-state source oracle PASS: 15 declarative moves, ordinary pivot, observed drain/stages and one-turn flinch; no future secondary/pivot forecast');
+{
+  const b=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+  const make=(moves)=>({species:'Mew',ability:'pressure',moves,
+    level:100,movesInfo:moves.map(()=>({pp:40,maxPp:40}))});
+  b.setPlayer('p1',{team:[make(['astralbarrage','psyshock'])]});
+  b.setPlayer('p2',{team:[make(['swift'])]});
+  b.makeChoices('team 1','team 1');
+  const own=b.p1.active[0], foe=b.p2.active[0];
+  own.storedStats.atk=50; own.storedStats.spa=300;
+  function hit(id,def,spd,crit,roll){
+    foe.storedStats.def=def;foe.storedStats.spd=spd;b.random=()=>roll;
+    const m=b.dex.getActiveMove(id);m.willCrit=crit;
+    return b.actions.getDamage(own,foe,m,true);
+  }
+  for(const [id,bp,type] of [['astralbarrage',120,'Ghost'],['psyshock',80,'Psychic']]) {
+    const rolls=[];
+    for(const def of [150,300])for(const spd of [150,450])
+      for(const crit of [false,true])for(let n=0;n<16;n++)
+        rolls.push(hit(id,def,spd,crit,n));
+    assert(rolls.every(v=>Number.isFinite(v)&&v>=0),id+' malformed native outcomes');
+  }
+  assert(hit('psyshock',150,150,false,0)>hit('psyshock',300,150,false,0),
+    'Psyshock must use Defense');
+  assert.equal(hit('psyshock',150,150,false,0),hit('psyshock',150,450,false,0),
+    'Psyshock must not use Special Defense');
+  assert.equal(hit('astralbarrage',150,150,false,0),hit('astralbarrage',300,150,false,0),
+    'Astral Barrage must not use physical Defense');
+  assert(hit('astralbarrage',150,150,false,0)>hit('astralbarrage',150,450,false,0),
+    'Astral Barrage must use Special Defense');
+  console.log('Phase3.52 Calyrex ordinary moves source oracle PASS: pinned move properties and independent native attack/defense selection, crit/roll fixture');
+}
 
 // Independently execute source healing, including odd max HP and capping.
 for (const [maxHp,hp,expected] of [[381,100,291],[381,300,381],[381,381,381],[1,1,1]]) {

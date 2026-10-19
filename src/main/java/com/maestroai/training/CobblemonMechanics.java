@@ -49,6 +49,12 @@ public final class CobblemonMechanics {
     public record Move(String id, String type, int power, boolean physical, int priority,
                        Map<String, Integer> boosts, boolean damageOnly) {
         public Move { boosts = Map.copyOf(boosts); }
+        // Psyshock is Special against physical Defense: do not use the
+        // Physical attack stat or the target's ordinary Special Defense.
+        public String attackingStat() { return physical ? "atk" : "spa"; }
+        public String defendingStat() {
+            return physical || id.equals("psyshock") ? "def" : "spd";
+        }
     }
     // Deliberately small fixed-power/no-secondary allowlist, checked against the pinned moves.js.
     private static final Map<String, Move> MOVES = Map.ofEntries(
@@ -61,6 +67,11 @@ public final class CobblemonMechanics {
             Map.entry("extremespeed", new Move("extremespeed", "normal", 80, true, 2, Map.of(), true)),
             Map.entry("shadowclaw", new Move("shadowclaw", "ghost", 70, true, 0, Map.of(), true)),
             Map.entry("psychocut", new Move("psychocut", "psychic", 70, true, 0, Map.of(), true)),
+            // Actual Maestro Calyrex-Shadow moves, restricted to ordinary
+            // witnessed-reply, source-covered, single-target/singles exchange.
+            // Astral Barrage hits all adjacent foes, which is one in singles.
+            Map.entry("astralbarrage", new Move("astralbarrage", "ghost", 120, false, 0, Map.of(), true)),
+            Map.entry("psyshock", new Move("psyshock", "psychic", 80, false, 0, Map.of(), true)),
             Map.entry("dragonclaw", new Move("dragonclaw", "dragon", 80, true, 0, Map.of(), true)),
             // Damage formula is supported, but burn secondary prevents a complete turn forecast.
             Map.entry("flamethrower", new Move("flamethrower", "fire", 90, false, 0, Map.of(), false)),
@@ -100,7 +111,7 @@ public final class CobblemonMechanics {
         int exponent = effectiveness(move.type(), target.types().value());
         if (exponent == Integer.MIN_VALUE)
             return new Damage(Known.unknown(), Known.of(new Interval(0, 0), SOURCE + ":type-immunity"), Set.of(), SOURCE);
-        String offense = move.physical() ? "atk" : "spa", defense = move.physical() ? "def" : "spd";
+        String offense = move.attackingStat(), defense = move.defendingStat();
         if (!attacker.level().known() || !attacker.stat(offense).known() || !target.stat(defense).known()
                 || !target.maxHp().known() || !attackerState.stages().containsKey(offense)
                 || !targetState.stages().containsKey(defense) || !attackerState.status().known())

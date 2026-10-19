@@ -134,7 +134,7 @@ public final class ScopedExecution {
             boolean blocked = active != null && active.volatiles().contains("protect")
                     || target.types().known() && effectiveness(m.type(), target.types().value()) == Integer.MIN_VALUE;
             if (!blocked) {
-                String atk = m.physical() ? "atk" : "spa", def = m.physical() ? "def" : "spd";
+                String atk = m.attackingStat(), def = m.defendingStat();
                 c.need(a.id() + ":LEVEL", attacker.level().known());
                 c.need(a.id() + ":" + atk, attacker.stat(atk).known() && a.stages().containsKey(atk));
                 c.need(t.id() + ":" + def, target.stat(def).known() && t.stages().containsKey(def));

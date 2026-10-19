@@ -190,7 +190,89 @@ public final class StandaloneRegression {
         check(!valid.safeLine().contains("source variant") && valid.safeLine().contains("advisoryOnly=true"));
     }
 
+    /** Regression of actual Maestro Calyrex-Shadow move definitions against
+     * the independent pinned Showdown source oracle (verification/source_oracle).
+     * No assertion that this fixture bypasses real Life Orb / As One or proves
+     * an in-game tactic.
+     */
+    private static void calyrexMoveCoverage() {
+        var astro=CobblemonMechanics.move("astralbarrage");
+        var shock=CobblemonMechanics.move("psyshock");
+        check(astro != null && astro.power()==120 && astro.damageOnly()
+                && astro.attackingStat().equals("spa") && astro.defendingStat().equals("spd"));
+        check(shock != null && shock.power()==80 && shock.damageOnly()
+                && shock.attackingStat().equals("spa") && shock.defendingStat().equals("def"));
+        for(String id:List.of("ironhead","icebeam","moonblast","geomancy","uturn","drainingkiss"))
+            check(CobblemonMechanics.move(id)==null,
+                    "experimental side effects/pivot/charge are NOT ordinary conditional completions: "+id);
+        check(!CobblemonMechanics.move("flamethrower").damageOnly());
+
+        var yes=PublicTransitionState.Known.of(true,"synthetic ordinary mechanics-only");
+        var known=PublicTransitionState.Known.of(100,"synthetic level");
+        var offense=Map.of("atk",PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(50),"synthetic"),
+                "spa",PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(300),"synthetic"));
+        var targetDef=Map.of("def",PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(150),"synthetic"),
+                "spd",PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(450),"synthetic"));
+        var atk=new CobblemonMechanics.Profile("self",known,
+                PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(300),"synthetic"),offense,
+                PublicTransitionState.Known.of(List.of("psychic"),"synthetic types"),yes);
+        var def=new CobblemonMechanics.Profile("opponent",known,
+                PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(300),"synthetic"),targetDef,
+                PublicTransitionState.Known.of(List.of("psychic"),"synthetic types"),yes);
+        var stages=Map.of("atk",0,"def",0,"spa",0,"spd",0,"spe",0);
+        var good=PublicTransitionState.Known.of(new PublicStateSearchAdapter.Interval(1,1),"synthetic public HP");
+        var status=PublicTransitionState.Known.of("none","synthetic status");
+        var self=new PublicTransitionState.Actor("self",
+                new BattleSnapshot.Combatant("Mew",1,List.of("psychic"),stages,List.of(),null,null,false),
+                good,stages,status);
+        var foe=new PublicTransitionState.Actor("opponent",
+                new BattleSnapshot.Combatant("Mew",1,List.of("psychic"),stages,List.of(),null,null,false),
+                good,stages,status);
+        var astral=CobblemonMechanics.damage("astralbarrage",atk,self,def,foe,CobblemonMechanics.Critical.BOTH);
+        var psycho=CobblemonMechanics.damage("psyshock",atk,self,def,foe,CobblemonMechanics.Critical.BOTH);
+        check(astral.points().known() && psycho.points().known()
+                && astral.points().value().low()>0 && psycho.points().value().low()>0);
+        var highDef=new CobblemonMechanics.Profile("opponent",known,def.maxHp(),
+                Map.of("def",PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(300),"synthetic"),
+                       "spd",targetDef.get("spd")),def.types(),yes);
+        check(CobblemonMechanics.damage("psyshock",atk,self,highDef,foe,CobblemonMechanics.Critical.NON_CRITICAL)
+                .points().value().high() <
+                CobblemonMechanics.damage("psyshock",atk,self,def,foe,CobblemonMechanics.Critical.NON_CRITICAL)
+                .points().value().high(), "Psyshock physical Defense ignored");
+        check(CobblemonMechanics.damage("astralbarrage",atk,self,highDef,foe,CobblemonMechanics.Critical.NON_CRITICAL)
+                .points().value().equals(CobblemonMechanics.damage("astralbarrage",atk,self,def,foe,
+                        CobblemonMechanics.Critical.NON_CRITICAL).points().value()),
+                "Astral Barrage illegally switched to Defense");
+        var highSpd=new CobblemonMechanics.Profile("opponent",known,def.maxHp(),
+                Map.of("def",targetDef.get("def"),
+                       "spd",PublicTransitionState.Known.of(CobblemonMechanics.IntRange.exact(900),"synthetic")),def.types(),yes);
+        check(CobblemonMechanics.damage("psyshock",atk,self,highSpd,foe,CobblemonMechanics.Critical.NON_CRITICAL)
+                .points().value().equals(CobblemonMechanics.damage("psyshock",atk,self,def,foe,
+                        CobblemonMechanics.Critical.NON_CRITICAL).points().value()),
+                "Psyshock illegally used Special Defense");
+        check(CobblemonMechanics.damage("astralbarrage",atk,self,highSpd,foe,CobblemonMechanics.Critical.NON_CRITICAL)
+                .points().value().high() <
+                CobblemonMechanics.damage("astralbarrage",atk,self,def,foe,CobblemonMechanics.Critical.NON_CRITICAL)
+                .points().value().high(), "Astral Barrage ignored Special Defense");
+        var missing=new CobblemonMechanics.Profile("opponent",known,def.maxHp(),
+                Map.of("def",targetDef.get("def")),def.types(),yes);
+        check(!CobblemonMechanics.damage("astralbarrage",atk,self,missing,foe,
+                CobblemonMechanics.Critical.BOTH).fraction().known(),
+                "missing required special-defense evidence was guessed");
+        var noDef=new CobblemonMechanics.Profile("opponent",known,def.maxHp(),
+                Map.of("spd",targetDef.get("spd")),def.types(),yes);
+        check(!CobblemonMechanics.damage("psyshock",atk,self,noDef,foe,
+                CobblemonMechanics.Critical.BOTH).fraction().known(),
+                "missing physical-defense evidence was guessed");
+        var unknown= new CobblemonMechanics.Profile("opponent",known,def.maxHp(),
+                targetDef,def.types(),PublicTransitionState.Known.unknown());
+        check(!CobblemonMechanics.damage("psyshock",atk,self,unknown,foe,
+                CobblemonMechanics.Critical.BOTH).fraction().known(),
+                "unknown opponent modifiers were assumed neutral");
+    }
+
     public static void main(String[] args) {
+        calyrexMoveCoverage();
         modifierEnvelopeRegressions();
         publicFormReplay();
         check(StrictOwnJson.read("{\"x\":[1,true,null]}").getAsJsonArray("x").size() == 3);
