@@ -110,7 +110,11 @@ public final class PublicMechanicsEvidence {
                     if (p.length > 3) details(a, p[3], true);
                     else a.ambiguous = true;
                 }
-                case "detailschange", "-formechange", "-transform" -> { invalidate(a); a.unsupported = true; }
+                case "detailschange", "-formechange", "-mega", "-transform" -> {
+                    // Even an isolated public Mega announcement invalidates the prior
+                    // appearance; it does not grant supported form/ability mechanics.
+                    invalidate(a); a.unsupported = true;
+                }
                 case "-terastallize" -> {
                     a.types = p.length > 3 ? types(p[3], a) : Known.unknown(); a.unsupported = true; a.tera = true;
                 }

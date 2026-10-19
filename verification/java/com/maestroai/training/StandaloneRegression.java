@@ -24,7 +24,80 @@ public final class StandaloneRegression {
         return new ShadowSearchEngine.Branch(kind, name,
                 List.of(new ShadowSearchEngine.Outcome("synthetic-response", 1, value, uncertainty, next)));
     }
+
+    /** Public Mega/form transitions must survive diagnostics without turning new forms,
+     * unseen items, private split data, or stale actor leases into tactical evidence. */
+    private static void publicFormReplay() {
+        String start = "update\n|gen|9\n|gametype|singles\n|start\n"
+                + "|switch|p2a: Public|Mewtwo, L100|100/100\n"
+                + "|-ability|p2a: Public|Pressure\n"
+                + "|-item|p2a: Public|Mewtwonite Y\n|turn|1";
+        String mega = "update\n|detailschange|p2a: Public|Mewtwo-Mega-Y, L100\n"
+                + "|-mega|p2a: Public|Mewtwonite Y\n"
+                + "|-formechange|p2a: Public|Mewtwo-Mega-Y";
+        String privateName = "PRIVATE_OPPONENT_MUST_NOT_LEAK";
+        List<String> history = List.of(start,
+                "sideupdate\np2\n|detailschange|p2a: " + privateName + "|Hidden",
+                mega,
+                "update\n|split|p2\n|-mega|p2a: " + privateName + "|Hidden",
+                "update\n|-mega|p2a: Public|Mewtwonite Y");
+        List<String> filtered = PublicProtocolFilter.publicEvents(history);
+        check(filtered.stream().anyMatch(line -> line.startsWith("|detailschange|")));
+        check(filtered.stream().anyMatch(line -> line.startsWith("|-formechange|")));
+        check(filtered.stream().filter(line -> line.startsWith("|-mega|")).count() == 2);
+        check(filtered.stream().noneMatch(line -> line.contains(privateName) || line.contains("sideupdate")));
+
+        var provenance = PublicEnvelopeProvenance.reconcile(history, filtered);
+        check(provenance.complete() && provenance.origins().size() == filtered.size());
+        check(provenance.origins().getLast().route() == PublicEnvelopeProvenance.Route.SPLIT_PUBLIC);
+        check(provenance.origins().getLast().splitTarget().equals("p2"));
+        var evidence = new PublicProtocolEvidence();
+        evidence.update(history);
+        check(evidence.complete() && evidence.framed() && evidence.publicTurn() == 1);
+        check(evidence.mechanicsEvents().contains("|-formechange|p2a: Public|Mewtwo-Mega-Y"));
+        check(evidence.mechanicsEvents().contains("|-mega|p2a: Public|Mewtwonite Y"));
+
+        var replay = new PublicBattleCapture();
+        var battle = java.util.UUID.fromString("00000000-0000-0000-0000-000000000048");
+        var captured = replay.observeWithProvenance(battle, history);
+        check(captured.replay().size() == filtered.size());
+        check(captured.envelopes().size() == filtered.size());
+        check(captured.replay().stream().anyMatch(line -> line.contains("event=|-formechange|")));
+        check(captured.replay().stream().anyMatch(line -> line.contains("event=|detailschange|")));
+        check(captured.envelopes().getLast().contains("route=SPLIT_PUBLIC"));
+        check(!captured.toString().contains(privateName));
+        check(replay.observeWithProvenance(battle, history).replay().isEmpty());
+
+        // An incomplete split must never be logged as an attested public change.
+        var unfinished = new PublicBattleCapture();
+        var unfinishedCapture = unfinished.observeWithProvenance(battle,
+                List.of(start, "update\n|split|p2\n|-mega|p2a: " + privateName + "|Hidden"));
+        check(unfinished.incomplete() && unfinishedCapture.replay().stream()
+                .noneMatch(line -> line.contains(privateName) || line.contains("event=|-mega|")));
+        check(unfinishedCapture.envelopes().stream().anyMatch(line -> line.contains("status=UNKNOWN")));
+        // A changed historical form is an append-only violation, never a corrected replay.
+        var edited = replay.observeWithProvenance(battle, List.of(start,
+                "sideupdate\np2\n|detailschange|p2a: " + privateName + "|Hidden",
+                "update\n|detailschange|p2a: Public|Different-Mega, L100"));
+        check(replay.incomplete() && edited.replay().stream().anyMatch(line -> line.contains("SHADOW_REPLAY_GAP")));
+        check(replay.observeWithProvenance(battle, history).replay().isEmpty());
+
+        var provider = new PublicMechanicsEvidence(species -> null);
+        var before = new PublicProtocolEvidence();
+        before.update(List.of(start));
+        provider.update(before);
+        check(provider.observation("p2a").item().known()
+                && provider.observation("p2a").ability().known());
+        var megaOnly = new PublicProtocolEvidence();
+        megaOnly.update(List.of(start, "update\n|-mega|p2a: Public|Mewtwonite Y"));
+        provider.update(megaOnly);
+        var unknown = provider.observation("p2a");
+        check(unknown.unsupportedEffects() && !unknown.item().known()
+                && !unknown.ability().known() && !unknown.confirmedSpecies().known());
+    }
+
     public static void main(String[] args) {
+        publicFormReplay();
         check(StrictOwnJson.read("{\"x\":[1,true,null]}").getAsJsonArray("x").size() == 3);
         reject(() -> StrictOwnJson.read("{\"x\":1,\"x\":2}"));
         reject(() -> StrictOwnJson.read("{}{}"));
