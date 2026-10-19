@@ -126,6 +126,51 @@ public final class AcceptanceGateRegression {
                         .modifiers().bounds().isEmpty(),
                 "invented opponent item produced exhaustive modifier proof");
 
+        // Private-only ability and item announcements cannot certify the
+        // actual opponent's present modifiers, even if the sideupdate text
+        // resembles a valid public |-ability| or |-item| announcement.
+        String start = "update\n|gen|9\n|gametype|singles\n|start\n"
+                + "|switch|p1a: Own|Mew, L100|100/100\n"
+                + "|switch|p2a: Foe|Mew, L100|100/100\n|turn|1";
+        for (String actual : List.of(
+                "update\n|-enditem|p2a: Foe|Sitrus Berry",
+                "update\n|-ability|p2a: Foe|Run Away")) {
+            String privatePart = actual.startsWith("update\n|-ability")
+                    ? "sideupdate\np2\n|-ability|p2a: Foe|Run Away"
+                    : "sideupdate\np2\n|-item|p2a: Foe|Leftovers";
+            var noWitness = new PublicProtocolEvidence();
+            noWitness.update(List.of(start,actual,privatePart,
+                    "update\n|move|p2a: Foe|Tackle|p1a: Own"));
+            var noWitnessProvider = new PublicMechanicsEvidence(species -> null);
+            noWitnessProvider.update(noWitness);
+            var noWitnessField = new PublicFieldEvidence().update(noWitness,noWitnessProvider);
+            var foeUnwitnessed = noWitnessProvider.observation("p2a");
+            var untrusted = new ScopedExecution(noWitnessField,Map.of(
+                    "opponent",new ScopedExecution.Binding(foeUnwitnessed,
+                            foeUnwitnessed.item(),foeUnwitnessed.ability())),ExecutionCoverage.Scopes.all(yesScope));
+            yes(!untrusted.publicModifierSingletonScope().known(),
+                    "private-only modifier evidence certified opponent singleton");
+        }
+
+        // An independently public Mega announcement invalidates *both*
+        // formerly witnessed modifiers; do not carry the old singleton world
+        // across an unsupported appearance change.
+        var megaHistory = new PublicProtocolEvidence();
+        megaHistory.update(List.of(start,
+                "update\n|-enditem|p2a: Foe|Sitrus Berry\n|-ability|p2a: Foe|Run Away",
+                "update\n|move|p2a: Foe|Tackle|p1a: Own",
+                "update\n|-mega|p2a: Foe|Mewtwonite Y"));
+        var megaProvider = new PublicMechanicsEvidence(species -> null);
+        megaProvider.update(megaHistory);
+        var megaField = new PublicFieldEvidence().update(megaHistory,megaProvider);
+        var megaFoe = megaProvider.observation("p2a");
+        var megaExecution = new ScopedExecution(megaField,Map.of(
+                "opponent",new ScopedExecution.Binding(megaFoe,megaFoe.item(),megaFoe.ability())),
+                ExecutionCoverage.Scopes.all(yesScope));
+        yes(megaFoe.unsupportedEffects() && !megaExecution.publicModifierSingletonScope().known()
+                && PublicReplyCoverage.currentReplies(megaHistory,"p2a").isEmpty(),
+                "Mega retained old item/ability/reply universe");
+
         // An ephemeral source proof cannot continue after its field reset.
         yes(execution.publicModifierSingletonScope().known(),
                 "explicit current modifier observations should be usable before withdrawal");

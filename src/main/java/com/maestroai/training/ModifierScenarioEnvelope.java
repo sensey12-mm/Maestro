@@ -48,7 +48,8 @@ public final class ModifierScenarioEnvelope {
         public String safeLine() {
             return "ModifierScenarioEnvelope actions=" + bounds.size()
                     + " complete=" + complete()
-                    + " strictPreference=" + (preferredConditional != null)
+                    + " strictConditionalPreference=" + (preferredConditional != null)
+                    + " witnessedReplyOnly=true"
                     + " unresolved=" + new TreeSet<>(reasons)
                     + " hiddenModifierProbability=NONE advisoryOnly=true livePromotion=false";
         }
