@@ -302,6 +302,10 @@ public final class ShadowMechanicsEvaluation {
                 && !SourceMoveEffects.modeledSecondary(moveId))
             return unknown(p,MaestroOwnMoveAudit.unmodeledEffect(moveId));
         if(moveId.equals("spectralthief")) {
+            // Native Protect blocks the attack and must block pre-hit theft,
+            // even when the target has publicly observed positive boosts.
+            if(execution!=null&&execution.protectedTarget(target.id()))
+                return hurt(p,!own,new Interval(0,0));
             if(!profiles.get(target.id()).types().known())
                 return unknown(p,"SPECTRAL_THIEF_TARGET_TYPE_UNKNOWN");
             if(effectiveness("ghost",profiles.get(target.id()).types().value())==Integer.MIN_VALUE)

@@ -264,6 +264,13 @@ public final class ScopedExecution {
     private String ability(String role) { return actors.get(role).ability().value(); }
     private PublicFieldEvidence.Active active(String role) { Binding b = actors.get(role); return b == null ? null : field.actor(b.observation()); }
     public boolean taunted(String role) { var a = active(role); return a != null && a.volatiles().contains("taunt"); }
+    /** Fresh public Protect is checked before Spectral Thief's PRE-HIT boost transfer.
+     * Damage-only gating would otherwise leave an impossible stolen stage vector.
+     */
+    boolean protectedTarget(String role) {
+        var a=active(role);
+        return sourceCurrent()&&a!=null&&a.covered()&&a.volatiles().contains("protect");
+    }
     public Known<Boolean> grounded(String role, Profile profile, boolean reserve) {
         if (!role.equals(profile.actor())) throw new IllegalArgumentException("groundedness profile belongs to another actor");
         var c = new Check(Operation.ENTRY); c.actor(role, reserve);

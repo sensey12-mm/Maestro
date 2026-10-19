@@ -517,6 +517,21 @@ console.log('Recover source oracle PASS: four exact rounding/capping cases');
  console.log('Maestro source-held-item/ability oracle PASS: pinned Life Orb, Power Herb, Fairy Aura, Shadow Shield and As One callback domains');
 }
 
+// Adversarial source contract: Protect and Ghost immunity suppress Spectral
+// Thief's pre-hit stealing, not merely its calculated final damage.
+{
+  const evalSrc=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/ShadowMechanicsEvaluation.java'),'utf8');
+  const scopedSrc=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/ScopedExecution.java'),'utf8');
+  const move=Dex.moves.get('spectralthief');
+  assert.equal(move.stealsBoosts,true);
+  assert(move.flags.protect,'Spectral Thief native Protect flag missing');
+  assert(evalSrc.includes('execution.protectedTarget(target.id())')&&
+         evalSrc.indexOf('execution.protectedTarget(target.id())')<evalSrc.indexOf('SPECTRAL_THIEF_PUBLIC_STAGE_DOMAIN_UNKNOWN'),
+         'Spectral Thief source execution steals stages before testing Protect');
+  assert(scopedSrc.includes('a.volatiles().contains("protect")')&&scopedSrc.includes('sourceCurrent()'),
+         'Protect provenance not bound to fresh public field');
+  console.log('Spectral Thief Protect pre-hit source guard PASS');
+}
 const policyOutcomes=require('./policy_oracle.cjs').run(Battle);
 assert.equal(policyOutcomes.length,8);
 console.log('Independent policy outcome oracle PASS: 8 jointly legal source-executed exchanges before residuals');
