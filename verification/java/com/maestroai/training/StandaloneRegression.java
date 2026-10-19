@@ -207,8 +207,9 @@ public final class StandaloneRegression {
         check(shock != null && shock.power()==80 && shock.damageOnly()
                 && shock.attackingStat().equals("spa") && shock.defendingStat().equals("def"));
         for(String id:List.of("ironhead","icebeam","moonblast","geomancy","uturn","drainingkiss"))
-            check(CobblemonMechanics.move(id)==null,
-                    "experimental side effects/pivot/charge are NOT ordinary conditional completions: "+id);
+            check(CobblemonMechanics.move(id)!=null
+                    && !MaestroOwnMoveAudit.completelySimulated(id),
+                    "experimental side effects/pivot/charge must remain incompletely simulated: "+id);
         check(!CobblemonMechanics.move("flamethrower").damageOnly());
 
         var yes=PublicTransitionState.Known.of(true,"synthetic ordinary mechanics-only");

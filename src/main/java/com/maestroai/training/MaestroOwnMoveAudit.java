@@ -9,11 +9,11 @@ import java.util.*;
 public final class MaestroOwnMoveAudit {
     private MaestroOwnMoveAudit() {}
     public static final Map<String, List<String>> FIXED_ROSTER = Map.of(
-            "Genesect", List.of("uturn", "ironhead", "icebeam", "flamethrower")),
-            "Calyrex-Shadow", List.of("astralbarrage", "psyshock", "drainingkiss", "energyball")),
-            "Xerneas", List.of("geomancy", "moonblast", "focusblast", "thunder")),
-            "Arceus", List.of("swordsdance", "extremespeed", "shadowclaw", "recover")),
-            "Mewtwo-Mega-Y", List.of("psystrike", "icebeam", "fireblast", "nastyplot")),
+            "Genesect", List.of("uturn", "ironhead", "icebeam", "flamethrower"),
+            "Calyrex-Shadow", List.of("astralbarrage", "psyshock", "drainingkiss", "energyball"),
+            "Xerneas", List.of("geomancy", "moonblast", "focusblast", "thunder"),
+            "Arceus", List.of("swordsdance", "extremespeed", "shadowclaw", "recover"),
+            "Mewtwo-Mega-Y", List.of("psystrike", "icebeam", "fireblast", "nastyplot"),
             "Marshadow", List.of("spectralthief", "closecombat", "shadowsneak", "rocktomb"))
     );
     private static final Map<String,String> UNMODELED_EFFECTS = Map.ofEntries(
