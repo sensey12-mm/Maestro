@@ -133,6 +133,14 @@ public final class ScopedExecution {
         bound(attacker, a); bound(target, t); var c = new Check(Operation.DAMAGE);
         c.actor(a.id(), reserve(a.id())); c.actor(t.id(), reserve(t.id()));
         Move m = move(moveId); c.need("SUPPORTED_DAMAGE_MOVE", m != null && m.power() > 0);
+        if(m!=null&&m.type().equals("fairy")) {
+            for(String role:List.of(a.id(),t.id())) {
+                var binding=actors.get(role);
+                c.need("FAIRY_AURA_DAMAGE_MODIFIER_UNMODELED",
+                        binding!=null&&binding.ability().known()
+                        &&!binding.ability().value().equals("fairyaura"));
+            }
+        }
         c.need("WEATHER", field.weather().known()); c.need("TERRAIN", field.terrain().known());
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {

@@ -156,7 +156,53 @@ final class ModifierTacticalRegression {
                 "closing receipt retained a source-dependent forecast");
         System.out.println("Closing configuration mutation regression PASS: all calculated states/utilities withdrawn");
     }
+    static void complexMoveRegressions(RuntimeDomain domain) {
+        var fixture=fixture(domain,200,true,"marshadiumz","technician",true,
+                List.of("closecombat","rocktomb","spectralthief","drainingkiss","uturn"));
+        var outcome=compare(fixture,"move:closecombat");
+        var ranks=new HashMap<String,ShadowMechanicsEvaluation.Ranking>();
+        for(var r:outcome.rankings())ranks.put(r.action(),r);
+        var close=ranks.get("move:closecombat");
+        check(close.utility().known(),"Close Combat conditional source damage unknown "+close.unknown());
+        check(close.lines().stream().allMatch(l->l.state().self().stages().get("def")==-1
+                &&l.state().self().stages().get("spd")==-1),"Close Combat missed defense debuff");
+        var rock=ranks.get("move:rocktomb");
+        check(rock.utility().known()&&rock.lines().size()==1
+                &&rock.lines().getFirst().state().opponent().stages().get("spe")==-1,
+                "Rock Tomb speed debuff applied incorrectly");
+        check(ranks.get("move:spectralthief").utility().known(),"unboosted public Spectral Thief unknown");
+        var kiss=ranks.get("move:drainingkiss");
+        check(kiss.utility().known(),"Draining Kiss HP recovery unknown");
+        check(kiss.lines().stream().anyMatch(l->l.state().self().hp().value().high()>0.4),
+                "Draining Kiss did not increase own HP");
+        var pivot=ranks.get("move:uturn");
+        check(!pivot.utility().known()&&pivot.unknown().contains("U_TURN_REPLACEMENT_REQUEST_UNKNOWN"),
+                "U-turn fabricated an unrequested replacement");
+        for(String move:List.of("ironhead","icebeam","flamethrower","energyball",
+                "moonblast","focusblast","thunder","fireblast")) {
+            var effect=fixture(domain,200,true,"marshadiumz","technician",true,List.of(move));
+            var ranking=compare(effect,"move:"+move).rankings().stream()
+                    .filter(x->x.action().equals("move:"+move)).findFirst().orElseThrow();
+            check(ranking.utility().known()&&ranking.lines().size()==2,
+                    "secondary proc/nonproc outcomes not branched "+move+": "+ranking.unknown());
+        }
+        // This is an intentionally synthetic Power Herb/Geomancy execution
+        // fixture, NOT a claim that the species used in fixture knows Geomancy.
+        var herb=fixture(domain,200,false,"powerherb","multitype",true,List.of("geomancy"));
+        var gm=compare(herb,"move:geomancy").rankings().stream()
+                .filter(x->x.action().equals("move:geomancy")).findFirst().orElseThrow();
+        check(gm.utility().known()&&gm.lines().stream().allMatch(l->
+                l.state().self().stages().get("spa")==2
+                &&l.state().self().stages().get("spd")==2
+                &&l.state().self().stages().get("spe")==2),"Power Herb Geomancy did not boost");
+        var charged=fixture(domain,200,false,"leftovers","multitype",true,List.of("geomancy"));
+        check(compare(charged,"move:geomancy").rankings().stream()
+                        .anyMatch(x->x.action().equals("move:geomancy")&&!x.utility().known()),
+                "unconsumed charge was treated as free same-turn Geomancy");
+        System.out.println("Maestro tactical effect regressions PASS: secondary forks, guaranteed stat drops, heal, boost theft, Power Herb charge gate, and pivot abstention");
+    }
     static void run(RuntimeDomain domain,IntRange oracle) throws Exception {
+        complexMoveRegressions(domain);
         checks=0;
         LegacyPolicyRegression.run();
         // All three ordinary Arceus actions remain legal in the request; Extreme

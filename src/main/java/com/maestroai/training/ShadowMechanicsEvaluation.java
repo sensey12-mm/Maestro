@@ -299,6 +299,10 @@ public final class ShadowMechanicsEvaluation {
                 && !SourceMoveEffects.modeledSecondary(moveId))
             return unknown(p,MaestroOwnMoveAudit.unmodeledEffect(moveId));
         if(moveId.equals("spectralthief")) {
+            if(!profiles.get(target.id()).types().known())
+                return unknown(p,"SPECTRAL_THIEF_TARGET_TYPE_UNKNOWN");
+            if(effectiveness("ghost",profiles.get(target.id()).types().value())==Integer.MIN_VALUE)
+                return hurt(p,!own,new Interval(0,0));
             if(!target.stages().keySet().containsAll(Set.of("atk","def","spa","spd","spe")))
                 return unknown(p,"SPECTRAL_THIEF_PUBLIC_STAGE_DOMAIN_UNKNOWN");
             var bonus=new TreeMap<String,Integer>();
@@ -337,11 +341,10 @@ public final class ShadowMechanicsEvaluation {
             double healedMax=actualMax==0?0:((3L*actualMax+3)/4)/(double)ownMax;
             result=heal(result,own,new Interval(healedMin,healedMax));
         }
-        if(moveId.equals("closecombat") || moveId.equals("rocktomb")) {
-            boolean affectedSelf=moveId.equals("closecombat");
-            boolean affectedOwn=affectedSelf==own;
+        if(moveId.equals("closecombat")) {
+            boolean affectedOwn=own;
             Actor actor=affectedOwn?result.state().self():result.state().opponent();
-            Actor modified=stageEffect(actor,affectedSelf?Map.of("def",-1,"spd",-1):Map.of("spe",-1));
+            Actor modified=stageEffect(actor,Map.of("def",-1,"spd",-1));
             if(modified==null)return unknown(result,"ON_HIT_STAGE_DOMAIN_UNKNOWN");
             result=replace(result,state(result.state(),affectedOwn?modified:result.state().self(),
                     affectedOwn?result.state().opponent():modified,result.state().actionKind(),result.state().action()));
