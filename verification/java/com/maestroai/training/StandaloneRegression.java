@@ -82,6 +82,17 @@ public final class StandaloneRegression {
         check(replay.incomplete() && edited.replay().stream().anyMatch(line -> line.contains("SHADOW_REPLAY_GAP")));
         check(replay.observeWithProvenance(battle, history).replay().isEmpty());
 
+
+        // A public Mega trigger alone must withdraw past reply attribution;
+        // a previous move is not proof that a newly changed form can reuse it.
+        var oldReply = new PublicProtocolEvidence();
+        oldReply.update(List.of(start, "update\n|move|p2a: Public|Psycho Cut|p1a: Own"));
+        check(PublicReplyCoverage.currentReplies(oldReply, "p2a").equals(List.of("psychocut")));
+        var changedReply = new PublicProtocolEvidence();
+        changedReply.update(List.of(start, "update\n|move|p2a: Public|Psycho Cut|p1a: Own",
+                "update\n|-mega|p2a: Public|Mewtwonite Y"));
+        check(PublicReplyCoverage.currentReplies(changedReply, "p2a").isEmpty());
+
         var provider = new PublicMechanicsEvidence(species -> null);
         var before = new PublicProtocolEvidence();
         before.update(List.of(start));

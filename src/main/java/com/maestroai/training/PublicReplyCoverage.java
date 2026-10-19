@@ -70,7 +70,7 @@ public final class PublicReplyCoverage {
                 // replies while a replacement is still pending.
                 seen.clear(); current = false; ambiguous = false;
             } else if (event.equals("replace") || event.equals("-transform") || event.equals("-formechange")
-                    || event.equals("detailschange")) {
+                    || event.equals("detailschange") || event.equals("-mega")) {
                 seen.clear(); ambiguous = true;
             } else if (event.equals("move") && current && !ambiguous && p.length > 3) {
                 String move = moveId(p[3]);
