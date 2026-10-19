@@ -352,12 +352,15 @@ public final class ShadowMechanicsEvaluation {
         if(moveId.equals("drainingkiss")) {
             Profile me=profiles.get(attacker.id()), them=profiles.get(target.id());
             if(!me.maxHp().known()||!them.maxHp().known()||!damage.points().known()
-                    ||me.maxHp().value().low()!=me.maxHp().value().high()
-                    ||them.maxHp().value().low()!=them.maxHp().value().high())
-                return unknown(result,"DRAIN_ACTUAL_HP_AND_DAMAGE_POINTS_UNKNOWN");
-            int ownMax=me.maxHp().value().low(),otherMax=them.maxHp().value().low();
-            int actualMin=Math.min(damage.points().value().low(),(int)Math.floor(target.hp().value().low()*otherMax));
-            int actualMax=Math.min(damage.points().value().high(),(int)Math.ceil(target.hp().value().high()*otherMax));
+                    ||me.maxHp().value().low()!=me.maxHp().value().high())
+                return unknown(result,"DRAIN_OWN_EXACT_OR_OPPONENT_BOUNDED_HP_UNKNOWN");
+            int ownMax=me.maxHp().value().low();
+            // Opponent max HP is a justified PUBLIC INTERVAL, never an exact
+            // hidden IV/EV leak. Bound actual removed HP on both extremes.
+            int lowerOpponentHp=(int)Math.floor(target.hp().value().low()*them.maxHp().value().low());
+            int upperOpponentHp=(int)Math.ceil(target.hp().value().high()*them.maxHp().value().high());
+            int actualMin=Math.min(damage.points().value().low(),lowerOpponentHp);
+            int actualMax=Math.min(damage.points().value().high(),upperOpponentHp);
             // ceil(3 * actual HP removed / 4), bounded by both HP domains.
             double healedMin=actualMin==0?0:((3L*actualMin+3)/4)/(double)ownMax;
             double healedMax=actualMax==0?0:((3L*actualMax+3)/4)/(double)ownMax;

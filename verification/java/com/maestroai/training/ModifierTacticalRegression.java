@@ -173,8 +173,9 @@ final class ModifierTacticalRegression {
         check(ranks.get("move:spectralthief").utility().known(),"unboosted public Spectral Thief unknown");
         var kiss=ranks.get("move:drainingkiss");
         check(kiss.utility().known(),"Draining Kiss HP recovery unknown");
-        check(kiss.lines().stream().anyMatch(l->l.state().self().hp().value().high()>0.4),
-                "Draining Kiss did not increase own HP");
+        check(kiss.lines().stream().anyMatch(l->l.state().self().hp().value().high()
+                        >close.lines().stream().mapToDouble(x->x.state().self().hp().value().high()).max().orElseThrow()),
+                "source-bounded Draining Kiss healing did not exceed equivalent pre-reply own HP");
         var pivot=ranks.get("move:uturn");
         check(pivot.utility().known()&&!pivot.lines().isEmpty()
                 &&pivot.lines().stream().allMatch(line->line.state().self().id().equals("reserve")),
