@@ -239,7 +239,7 @@ nf.storedStats.def=306;
 const before=natural.p1.pokemon[1].hp;natural.makeChoices('switch 2','move bulkup');
 assert.equal(before-natural.p1.active[0].hp,44,'actual natural reserve entry through two hazards');
 console.log('Natural acceptance source oracle PASS: 14 catalog entries, legal abilities/moves, actual berry consumption, 64 damage bounds, Psychic immunity and real hazard entry');
-const observedOnly = ['uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock',
+const observedOnly = ['earthquake','uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock',
   'drainingkiss','energyball','closecombat','rocktomb','shadowball','hypervoice','aurasphere'];
 const rawMoves = require(path.join(root,'data/moves')).Moves;
 for (const id of observedOnly) {
@@ -250,6 +250,15 @@ for (const id of observedOnly) {
   if(secondary)assert(Object.keys(secondary).every(k=>['chance','status','boosts','volatileStatus'].includes(k)));
   if(secondary?.volatileStatus)assert.equal(secondary.volatileStatus,'flinch');
 }
+// Earthquake is ordinary directly damaging Gen9 history with no secondary
+// field/status effect. This is a past-only witness, not a new conditional
+// future damage certificate for Dig, airborne targets or pack scripts.
+assert.equal(rawMoves.earthquake.num,89);
+assert.equal(rawMoves.earthquake.type,'Ground');
+assert.equal(rawMoves.earthquake.category,'Physical');
+assert.equal(rawMoves.earthquake.basePower,100);
+assert.equal(rawMoves.earthquake.secondary,null);
+assert.equal(rawMoves.earthquake.target,'allAdjacent');
 assert.equal(rawMoves.uturn.selfSwitch,true);
 assert.deepEqual(rawMoves.drainingkiss.drain,[3,4]);
 assert.deepEqual(rawMoves.closecombat.self.boosts,{def:-1,spd:-1});
@@ -257,7 +266,7 @@ assert.equal(require(path.join(root,'data/conditions')).Conditions.flinch.durati
 const fieldCode=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/PublicFieldEvidence.java'),'utf8');
 const observedIds=[...fieldCode.match(/OBSERVED_ONLY = Set.of\(([\s\S]*?)\);/)[1].matchAll(/"([a-z]+)"/g)].map(x=>x[1]).sort();
 assert.deepEqual(observedIds,observedOnly.sort(),'past-only Java scope drift');
-console.log('Past-only public-state source oracle PASS: 14 declarative moves, ordinary pivot, observed drain/stages and one-turn flinch; no future secondary/pivot forecast');
+console.log('Past-only public-state source oracle PASS: 15 declarative moves, ordinary pivot, observed drain/stages and one-turn flinch; no future secondary/pivot forecast');
 
 // Independently execute source healing, including odd max HP and capping.
 for (const [maxHp,hp,expected] of [[381,100,291],[381,300,381],[381,381,381],[1,1,1]]) {
