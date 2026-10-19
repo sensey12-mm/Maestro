@@ -397,9 +397,12 @@ console.log('Recover source oracle PASS: four exact rounding/capping cases');
  }));
  assert.deepEqual([...actual.keys()].sort(),types.slice().sort(),'Java attack type domain mismatch');
  for(const attacker of types)for(const target of types) {
-   const sourceWeak=Dex.getEffectiveness(attacker,target);
-   const sourceImmune=Dex.getImmunity(attacker,target);
-   const expected=sourceImmune?sourceWeak:-99;
+   // TypeChart.damageTaken is indexed by canonical attacker display type,
+   // not lowercase IDs. Read the normalized *pinned native Dex* entries
+   // directly to avoid passing incorrectly cased strings to the helper API.
+   const taken=Dex.types.get(target).damageTaken;
+   const code=taken[attacker[0].toUpperCase()+attacker.slice(1)];
+   const expected=code===3?-99:code===1?1:code===2?-1:0;
    assert.equal(actual.get(attacker).get(target)??0,expected,
       attacker+' -> '+target+' type chart source divergence');
  }
