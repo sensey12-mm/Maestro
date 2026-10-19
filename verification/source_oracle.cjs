@@ -343,13 +343,15 @@ console.log('Recover source oracle PASS: four exact rounding/capping cases');
 {
  const src=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/CobblemonMechanics.java'),'utf8');
  const audit=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/MaestroOwnMoveAudit.java'),'utf8');
+ const fixtureJava=fs.readFileSync(path.join(__dirname,'java/com/maestroai/training/StandaloneRegression.java'),'utf8');
+ assert(!audit.includes('FIXED_ROSTER'),'shipped runtime must not contain static private boss roster');
  const sets=fs.readFileSync(path.join(__dirname,'maestro_fixed_team_moves.tsv'),'utf8').trim().split('\n').map(r=>r.split('\t'));
  assert.equal(sets.length,6,'Maestro own team must contain six species');
  const all=new Set(sets.flatMap(r=>r.slice(1)));
  assert.equal(all.size,23,'24 move slots must contain 23 unique moves');
  for(const row of sets) {
    assert.equal(row.length,5,'each boss must have exactly four moves');
-   assert(audit.includes('"'+row[0]+'"')&&row.slice(1).every(id=>audit.includes('"'+id+'"')),
+   assert(fixtureJava.includes('"'+row[0]+'"')&&row.slice(1).every(id=>fixtureJava.includes('"'+id+'"')),
      'Maestro own-team Java reference differs');
  }
  const supported=new Map();

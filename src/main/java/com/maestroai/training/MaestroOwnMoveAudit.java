@@ -2,20 +2,12 @@ package com.maestroai.training;
 
 import java.util.*;
 
-/** Own-team test coverage, NOT a hidden opponent set or a substitute for live
- * own-request moves. Names describe the owner-supplied fixed Maestro trainer;
- * every tactical action is still taken from the actual legal request.
+/** Public-source move effect caveats, never an opponent set or own legal move
+ * provider. The trainer roster is kept ONLY in verification sources, not in
+ * the shipped server-side mod / future publication artifact.
  */
 public final class MaestroOwnMoveAudit {
     private MaestroOwnMoveAudit() {}
-    public static final Map<String, List<String>> FIXED_ROSTER = Map.ofEntries(
-            Map.entry("Genesect", List.of("uturn", "ironhead", "icebeam", "flamethrower")),
-            Map.entry("Calyrex-Shadow", List.of("astralbarrage", "psyshock", "drainingkiss", "energyball")),
-            Map.entry("Xerneas", List.of("geomancy", "moonblast", "focusblast", "thunder")),
-            Map.entry("Arceus", List.of("swordsdance", "extremespeed", "shadowclaw", "recover")),
-            Map.entry("Mewtwo-Mega-Y", List.of("psystrike", "icebeam", "fireblast", "nastyplot")),
-            Map.entry("Marshadow", List.of("spectralthief", "closecombat", "shadowsneak", "rocktomb"))
-    );
     private static final Map<String,String> UNMODELED_EFFECTS = Map.ofEntries(
             Map.entry("uturn", "FORCED_PIVOT_AND_REPLACEMENT_UNKNOWN"),
             Map.entry("ironhead", "SECONDARY_FLINCH_BRANCH_UNKNOWN"),
@@ -34,11 +26,6 @@ public final class MaestroOwnMoveAudit {
     );
     public static String unmodeledEffect(String moveId) {
         return UNMODELED_EFFECTS.getOrDefault(moveId, "SECONDARY_OR_OTHER_MOVE_EFFECTS_UNRESOLVED");
-    }
-    public static Set<String> ownMoveIds() {
-        var result=new TreeSet<String>();
-        FIXED_ROSTER.values().forEach(result::addAll);
-        return Set.copyOf(result);
     }
     public static boolean completelySimulated(String moveId) {
         var move=CobblemonMechanics.move(moveId);

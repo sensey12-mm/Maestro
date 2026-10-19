@@ -6,6 +6,14 @@ import java.util.Set;
 
 /** Standalone synthetic contracts; not empirical battle or Minecraft acceptance. */
 public final class StandaloneRegression {
+    private static final Map<String, List<String>> FIXED_ROSTER = Map.ofEntries(
+            Map.entry("Genesect", List.of("uturn", "ironhead", "icebeam", "flamethrower")),
+            Map.entry("Calyrex-Shadow", List.of("astralbarrage", "psyshock", "drainingkiss", "energyball")),
+            Map.entry("Xerneas", List.of("geomancy", "moonblast", "focusblast", "thunder")),
+            Map.entry("Arceus", List.of("swordsdance", "extremespeed", "shadowclaw", "recover")),
+            Map.entry("Mewtwo-Mega-Y", List.of("psystrike", "icebeam", "fireblast", "nastyplot")),
+            Map.entry("Marshadow", List.of("spectralthief", "closecombat", "shadowsneak", "rocktomb"))
+    );
     private static int checks;
     private static void check(boolean condition) {
         if (!condition) throw new AssertionError("Synthetic contract failed");
@@ -279,11 +287,12 @@ public final class StandaloneRegression {
     /** Explicitly account for every fixed own-team move without incorrectly
      * upgrading secondary/pivot/charge/etc. to source-bounded forecasts. */
     private static void maestroWholeRosterCoverage() {
-        var ids=MaestroOwnMoveAudit.ownMoveIds();
-        check(MaestroOwnMoveAudit.FIXED_ROSTER.size()==6);
+        var ids=new java.util.TreeSet<String>();
+        FIXED_ROSTER.values().forEach(ids::addAll);
+        check(FIXED_ROSTER.size()==6);
         check(ids.size()==23);
         var count=0;
-        for(var e:MaestroOwnMoveAudit.FIXED_ROSTER.entrySet()) {
+        for(var e:FIXED_ROSTER.entrySet()) {
             check(e.getValue().size()==4 && e.getValue().stream().distinct().count()==4);
             for(var id:e.getValue()) {
                 count++;
