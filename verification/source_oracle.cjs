@@ -411,6 +411,91 @@ console.log('Recover source oracle PASS: four exact rounding/capping cases');
  console.log('Maestro six-member/24-slot/23-move source oracle PASS: exact move IDs, damage properties, effect-aware UNKNOWN, 324 type matchups');
 }
 
+
+// Native source oracle for complex Maestro move effects. This asserts the
+// conditional effect contracts; it does not assign opponent reply likelihood.
+{
+  const java=fs.readFileSync(path.join(__dirname,'../src/main/java/com/maestroai/training/SourceMoveEffects.java'),'utf8');
+  const secondaryCases=[
+    ['ironhead',30,'none',null,true],
+    ['icebeam',10,'frz',null,false],
+    ['flamethrower',10,'brn',null,false],
+    ['energyball',10,'none',['spd',-1],false],
+    ['moonblast',30,'none',['spa',-1],false],
+    ['focusblast',10,'none',['spd',-1],false],
+    ['thunder',30,'par',null,false],
+    ['fireblast',10,'brn',null,false],
+    ['rocktomb',100,'none',['spe',-1],false]
+  ];
+  assert.equal([...java.matchAll(/Map\.entry\("[a-z]+",new Secondary\(/g)].length,9,
+    'source Java secondary table must have exactly nine entries');
+  for(const [id,chance,status,boost,flinch] of secondaryCases){
+    const native=Dex.moves.get(id).secondary;
+    assert(native,id+' missing native secondary');
+    assert.equal(native.chance,chance,id+' chance');
+    assert.equal(native.status??'none',status,id+' status');
+    assert.equal(native.volatileStatus==='flinch',flinch,id+' flinch');
+    if(boost)assert.equal(native.boosts?.[boost[0]],boost[1],id+' boost');
+    else assert(!native.boosts,id+' unexpected boost');
+    const literal='Map.entry("'+id+'",new Secondary('+chance+',"'+status+'",'+
+      (boost?'Map.of("'+boost[0]+'",'+boost[1]+')':'Map.of()')+','+flinch+'))';
+    assert(java.includes(literal),id+' Java branch out of sync with pinned native effect');
+  }
+  assert.deepEqual(Dex.moves.get('drainingkiss').drain,[3,4]);
+  assert.equal(Dex.moves.get('uturn').selfSwitch,true);
+  assert.equal(Dex.moves.get('spectralthief').stealsBoosts,true);
+  assert.equal(Dex.moves.get('closecombat').self.boosts.def,-1);
+  assert.equal(Dex.moves.get('closecombat').self.boosts.spd,-1);
+  assert.equal(Dex.moves.get('geomancy').boosts.spa,2);
+  assert.equal(Dex.moves.get('geomancy').boosts.spd,2);
+  assert.equal(Dex.moves.get('geomancy').boosts.spe,2);
+  assert.equal(typeof Dex.items.get('powerherb').onChargeMove,'function');
+  const set=(moves,item='')=>({species:'Mew',level:100,ability:'runaway',item,moves,
+      movesInfo:moves.map(()=>({pp:40,maxPp:40}))});
+  {
+    const b=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+    b.setPlayer('p1',{team:[set(['drainingkiss'])]});
+    b.setPlayer('p2',{team:[set(['splash'])]});
+    b.makeChoices('team 1','team 1');
+    const own=b.p1.active[0],foe=b.p2.active[0];
+    own.maxhp=own.baseMaxhp=400;own.hp=200;
+    foe.maxhp=foe.baseMaxhp=400;foe.hp=400;
+    b.makeChoices('move drainingkiss','move splash');
+    const lost=400-foe.hp;
+    assert(lost>0,'native Draining Kiss must hit under this fixture');
+    assert.equal(own.hp,Math.min(400,200+Math.ceil(lost*3/4)),
+      'native HP recovery must reflect ceil 3/4 of actual inflicted HP');
+  }
+  {
+    const b=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+    b.setPlayer('p1',{team:[set(['spectralthief'])]});
+    b.setPlayer('p2',{team:[set(['splash'])]});
+    b.makeChoices('team 1','team 1');
+    const thief=b.p1.active[0],victim=b.p2.active[0];
+    victim.boosts.atk=2;victim.boosts.spa=1;victim.boosts.spe=1;
+    b.makeChoices('move spectralthief','move splash');
+    assert.equal(thief.boosts.atk,2);
+    assert.equal(thief.boosts.spa,1);
+    assert.equal(thief.boosts.spe,1);
+    assert.equal(victim.boosts.atk,0);
+    assert.equal(victim.boosts.spa,0);
+    assert.equal(victim.boosts.spe,0);
+  }
+  {
+    const b=new Battle({formatid:'gen9customgame',seed:[7,11,13,17]});
+    b.setPlayer('p1',{team:[set(['geomancy'],'powerherb')]});
+    b.setPlayer('p2',{team:[set(['splash'])]});
+    b.makeChoices('team 1','team 1');
+    const own=b.p1.active[0];
+    b.makeChoices('move geomancy','move splash');
+    assert.equal(own.boosts.spa,2);
+    assert.equal(own.boosts.spd,2);
+    assert.equal(own.boosts.spe,2);
+    assert.equal(own.item,'','Power Herb must be consumed');
+  }
+  console.log('Maestro complex-move native oracle PASS: nine secondary definitions, true source drain/boost theft/Herb execution');
+}
+
 const policyOutcomes=require('./policy_oracle.cjs').run(Battle);
 assert.equal(policyOutcomes.length,8);
 console.log('Independent policy outcome oracle PASS: 8 jointly legal source-executed exchanges before residuals');
