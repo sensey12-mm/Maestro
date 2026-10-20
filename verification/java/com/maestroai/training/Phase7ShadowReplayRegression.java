@@ -59,19 +59,23 @@ public final class Phase7ShadowReplayRegression {
     private static List<String> history(){return List.of(FIRST,SECOND);}
     private static String capture(Fixture f,String slug,int index,String action,String artifact)
             throws Exception {
+        return capture(f,slug,index,action,artifact,f.scenario());
+    }
+    private static String capture(Fixture f,String slug,int index,String action,String artifact,
+                                  Phase7Benchmark.Scenario scenario) throws Exception {
         String captureId="synthetic"+index;
         String own=digest("synthetic-private-own-request-"+index);
         String battle=new UUID(1,index+1).toString();
         List<String> history=history();
         String publicSha=Phase7LegacyImport.publicDigest(
                 PublicProtocolFilter.publicEvents(history));
-        String fp=Phase7Benchmark.stateFingerprint(f.scenario());
+        String fp=Phase7Benchmark.stateFingerprint(scenario);
         String receiptHash=Phase7LegacyImport.sha256(List.of(
                 "LEGACY_CHOOSE_RETURN",artifact,own,publicSha,fp,
                 "2",action,captureId));
         JsonObject manifest=new JsonObject();
         manifest.addProperty("schema",Phase7TrustedIntake.SCHEMA);
-        manifest.addProperty("scenarioId",f.scenario().id());
+        manifest.addProperty("scenarioId",scenario.id());
         manifest.addProperty("scenarioFingerprint",fp);
         manifest.addProperty("captureId",captureId);
         manifest.addProperty("battleId",battle);
@@ -229,6 +233,33 @@ public final class Phase7ShadowReplayRegression {
             var shuffled=new ArrayList<>(ids);Collections.reverse(shuffled);
             check(run(f,shuffled,pin,model).replay().json().equals(report),
                     "reordered bundle input has no effect on replay output");
+
+            // Phase 7.9: a genuinely unique three-scenario synthetic cohort
+            // keeps Phase 7.6 duplicate-state guards intact.
+            var multiScenarios=new TreeMap<String,Phase7Benchmark.Scenario>();
+            var multiGraphs=new TreeMap<String,Phase7ShadowReplay.Graph>();
+            var matrixIds=new ArrayList<String>();
+            for(int i=0;i<3;i++){
+                var old=f.scenario();
+                var snapshot=old.snapshot();
+                var self=snapshot.self();
+                var own=new BattleSnapshot.Combatant("synthetic-matrix-own-"+i,
+                        self.hpFraction(),self.types(),self.knownBoosts(),
+                        self.revealedMoves(),self.revealedItem(),self.revealedAbility(),false);
+                var distinct=new BattleSnapshot(snapshot.turn(),own,snapshot.opponent(),
+                        snapshot.selfBench(),snapshot.opponentBench(),snapshot.legalMoves(),
+                        snapshot.legalSwitches(),snapshot.knownOpponentMoveCounts(),
+                        snapshot.opponentTerastallized(),snapshot.opponentTeraType());
+                var scenario=new Phase7Benchmark.Scenario("matrix-scenario-"+i,1,
+                        distinct,old.criteria(),old.evidence(),null);
+                multiScenarios.put(scenario.id(),scenario);
+                multiGraphs.put(scenario.id(),graph(scenario.id(),"switch:reserve"));
+                matrixIds.add(capture(f,"matrix_signed_"+i,20+i,
+                        "move:attack",ARTIFACT,scenario));
+            }
+            var matrixPin=install(f,"shadow_matrix_ref",multiGraphs,multiScenarios,20,8);
+            Phase7ReplayMatrixRegression.run(f.root(),KEY_ID,f.keyPin(),ARTIFACT,
+                    multiScenarios,matrixIds,matrixPin,multiGraphs);
 
             var noCaptures=run(f,List.of(),pin,model);
             check(noCaptures.replay().status()==Phase7ShadowReplay.Reason.NO_CUSTODY_ACCEPTED

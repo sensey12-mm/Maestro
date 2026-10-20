@@ -451,3 +451,58 @@ privacy, bounded traces, immutable policies and malformed or re-pinned
 metadata. These tests provide **zero empirical Legacy battles, zero
 Minecraft acceptance claims and zero actual win-rate evidence**.
 Final integrated Phase 7 validation still waits for Phases 4–6 integration.
+
+## Phase 7.9 — cross-version Shadow replay robustness matrix
+
+`Phase7ReplayMatrix.evaluateLocal(...)` is a substantial **offline-only**
+comparison layer. It accepts an ordered baseline Shadow policy plus 1–7
+candidate policy revisions, **all independently pinned** through Phase 7.8,
+and re-runs exactly the **same signed private local Legacy bundles** through
+the full Phase 7.5 → 7.4 → 7.2 provenance chain for every revision. Only
+one public-state scenario set, source artifact SHA-256 and seed are allowed;
+different supported conditional graphs and search parameters are expected
+between revisions. Unsupported or mismatched scenario, build, model pin,
+seed or duplicate revision is refused BEFORE reading the private bundles.
+No fabricated Legacy action or simulation outcome substitutes for custody.
+
+Every pair runs the existing **Phase 7.6 pinned aggregate regression gate**
+AND **Phase 7.7 independently pinned stratified audit**, with no weakening
+or feature bypass. It also requires complete, consistent, untruncated
+per-row Phase 7.8 traces, matching signed intake statuses, exact public
+state and Legacy-action identities, and at least one genuinely eligible
+reviewed case. Across the same evidence, the matrix counts changes in
+selected Shadow actions, Legacy action-agreement gains/losses, new and
+recovered abstentions, illegal root decisions, search-budget exhaustion,
+unsupported decisions and increases in uncertainty.
+
+**Uncertainty is NOT a calibrated probability or forecast.** The matrix
+uses only the maximum *declared public conditional root-outcome
+uncertainty* for the selected action and changes in the pinned
+`uncertaintyPenalty`. Those are explicit deterministic proxy checks, not
+accuracy or win-rate evidence. New illegal decisions, exhausted search,
+increased abstention/unsupported decisions or uncertainty proxy each
+fail closed, regardless of whether aggregate agreement improves.
+All Phase 7.6 and 7.7 statuses remain visible even when a more-specific
+diagnostic takes priority. Evidence drift or incomplete traces cannot pass.
+
+Results are machine-readable, reproducible `phase7.9.v1` JSON.
+Reports include only sanitized policy/model/scenario/report digests,
+revision IDs, fixed comparison statuses and bounded summary deltas.
+No capture IDs, Pokémon/action identifiers, raw histories, actor
+details, hidden opponent data, private file paths or exceptions are
+exported. When fewer than **3** accepted cases exist, differential
+counts are suppressed in exported JSON (but still evaluated internally).
+This deliberately matches the earlier strata small-cell boundary.
+
+The regression suite adds **three distinct synthetic public-state
+scenarios**, each with a separate Ed25519-signed private local
+capture. It uses the same Phase 7.8 genuine offline replay adapter and
+verifies identical input/policy determinism; changed legal actions;
+global and per-stratum regression-gate enforcement; new illegal
+actions; inadequate node budgets; trace truncation; increased
+uncertainty/penalty; invalid artifact or seed boundaries; duplicate
+revisions; missing custody; small-cell disclosure; source-baseline
+mismatch and privacy-safe output. Duplicate public-state identities
+remain forbidden by Phase 7.6. There is **no real Legacy capture
+approval or Minecraft test**, and Shadow remains **offline-only**.
+Do not use these results as real win-rate or simulator validation.
