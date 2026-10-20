@@ -13,6 +13,14 @@ public final class PublicReplayCorpus {
     private PublicReplayCorpus() {}
     private static final Map<String,String> FORMATS=Map.of(
             "gen9ou","[Gen 9] OU","gen9ubers","[Gen 9] Ubers");
+    // Non-battle spectator metadata is ignored, not reused as a feature.
+    // Everything else must be an explicitly supported public protocol kind.
+    private static final Set<String> METADATA_KINDS=Set.of(
+            "gen","gametype","tier","player","teamsize","rule","rated",
+            "start","turn","win","tie","upkeep","t:","inactive","inactiveoff",
+            "chat","c","c:","j","l","-message","-hint","-anim",
+            "-nothing","-crit","-supereffective","-resisted",
+            "-immune","-miss","-fail","-notarget");
     public enum RightsBasis { EXPLICIT_REPLAY_USE_PERMISSION }
     /** Operator attestations require independent verification; a boolean cannot prove rights. */
     public record Source(String replayId,String format,boolean publiclyListed,RightsBasis rights) {
@@ -45,12 +53,33 @@ public final class PublicReplayCorpus {
         List<String> lines=log.lines().toList();
         if (lines.isEmpty() || lines.size()>50_000) throw rejected();
         int gen=0,game=0,tier=0,start=0,end=0,turns=0;
+        boolean started=false, finished=false;
         for (String line:lines) {
             if (line.length()>8192 || line.startsWith("sideupdate") || line.startsWith("|split")
                     || line.startsWith("|request|") || line.startsWith("|pp_update|")
                     || line.startsWith("|showteam|") || line.startsWith("|inputlog|")
                     || line.startsWith("|queryresponse|") || line.startsWith("|teams|")
                     || line.startsWith("|seed|")) throw rejected();
+            if (line.isEmpty() || line.equals("update")) continue;
+            if (!line.startsWith("|") || (line.indexOf('|',1)<0 && !line.equals("|tie"))) throw rejected();
+            String kind=line.equals("|tie") ? "tie" : line.substring(1,line.indexOf('|',1));
+            if (!METADATA_KINDS.contains(kind)
+                    && !PublicProtocolFilter.publicEvents(List.of(line)).contains(line))
+                throw rejected();
+            // A public log must be chronological, and cannot contain
+            // additional observations after its terminal result.
+            if (finished) throw rejected();
+            if (line.equals("|start")) {
+                if (started) throw rejected();
+                started=true;
+            }
+            if (line.startsWith("|win|") || line.equals("|tie")) {
+                if (!started || turns==0) throw rejected();
+                finished=true;
+            }
+            if (Set.of("move","switch","drag","replace","detailschange","-transform",
+                    "-formechange","-mega","-terastallize").contains(kind) && !started)
+                throw rejected();
             if (line.equals("|gen|9")) gen++;
             else if (line.startsWith("|gen|")) throw rejected();
             if (line.equals("|gametype|singles")) game++;
@@ -60,8 +89,13 @@ public final class PublicReplayCorpus {
             if (line.equals("|start")) start++;
             if (line.startsWith("|win|") || line.equals("|tie")) end++;
             if (line.startsWith("|turn|")) {
+                if (!started || !line.matches("\\|turn\\|[1-9][0-9]{0,5}"))
+                    throw rejected();
+                int next;
+                try { next=Integer.parseInt(line.substring("|turn|".length())); }
+                catch (NumberFormatException malformed) { throw rejected(); }
+                if (next!=turns+1) throw rejected();
                 turns++;
-                if (!line.matches("\\|turn\\|[1-9][0-9]{0,5}")) throw rejected();
             }
         }
         if (gen!=1 || game!=1 || tier!=1 || start!=1 || end!=1 || turns<1) throw rejected();
