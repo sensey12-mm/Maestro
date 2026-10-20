@@ -264,18 +264,12 @@ public final class Phase7RegressionGate {
         var b=candidate.corpus().coverage();
         int aAgreement=rate(a.shadowAgreements(),a.accepted());
         int bAgreement=rate(b.shadowAgreements(),b.accepted());
-        int aRejections=rate(a.provenanceRejected()+reference.intakeStatuses().size()-
-                reference.intakeStatuses().stream()
-                        .filter(x->x==Phase7TrustedIntake.Status.VERIFIED_FOR_CORPUS).count(),
-                a.submitted()+reference.intakeStatuses().size()-
-                reference.intakeStatuses().stream()
-                        .filter(x->x==Phase7TrustedIntake.Status.VERIFIED_FOR_CORPUS).count());
-        int bRejections=rate(b.provenanceRejected()+candidate.intakeStatuses().size()-
-                candidate.intakeStatuses().stream()
-                        .filter(x->x==Phase7TrustedIntake.Status.VERIFIED_FOR_CORPUS).count(),
-                b.submitted()+candidate.intakeStatuses().size()-
-                candidate.intakeStatuses().stream()
-                        .filter(x->x==Phase7TrustedIntake.Status.VERIFIED_FOR_CORPUS).count());
+        int deniedReference=reference.intakeStatuses().size()-(int)reference.intakeStatuses()
+                .stream().filter(x->x==Phase7TrustedIntake.Status.VERIFIED_FOR_CORPUS).count();
+        int deniedCandidate=candidate.intakeStatuses().size()-(int)candidate.intakeStatuses()
+                .stream().filter(x->x==Phase7TrustedIntake.Status.VERIFIED_FOR_CORPUS).count();
+        int aRejections=rate(a.provenanceRejected()+deniedReference,a.submitted()+deniedReference);
+        int bRejections=rate(b.provenanceRejected()+deniedCandidate,b.submitted()+deniedCandidate);
         Status status;
         if(reference.seed()!=baseline.seed() || candidate.seed()!=baseline.seed()
                 || !sha256(reference.json()).equals(baseline.referenceReportSha256())) {
