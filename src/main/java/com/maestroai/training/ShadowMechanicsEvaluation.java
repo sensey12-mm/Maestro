@@ -357,7 +357,7 @@ public final class ShadowMechanicsEvaluation {
                 &&!execution.currentAbility(attacker.id()).equals("magicguard")
                 &&damage.points().known()&&damage.points().value().high()>0;
         // A possibly absent user/target cannot certify a successful follow-up.
-        if ((moveId.equals("drainingkiss") || recoil) && (possibleFaint(attacker) || possibleFaint(target)))
+        if ((moveId.equals("drainingkiss") || moveId.equals("uturn") || recoil) && (possibleFaint(attacker) || possibleFaint(target)))
             return unknown(p,"HEALING_OR_RECOIL_EXECUTION_SURVIVAL_UNKNOWN");
         if (possibleFaint(attacker)) d = new Interval(0, d.high()); // bound conditional nonexecution without an invented probability
         Progress result=hurt(p,!own,d);
@@ -398,11 +398,15 @@ public final class ShadowMechanicsEvaluation {
             result=replace(result,state(result.state(),own?boosted:result.state().self(),
                     own?result.state().opponent():boosted,result.state().actionKind(),result.state().action()));
         }
-        if(moveId.equals("uturn")&&!zero(own?result.state().opponent():result.state().self())
-                &&!zero(own?result.state().self():result.state().opponent())){
-            if(!own)return unknown(result,"OPPONENT_U_TURN_PARTY_HIDDEN");
-            if(d.high()==0)return result; // immunity or Protect prevents pivot
-            result=pivotToSoleCertifiedReserve(result,mechanics,sourceLegalSwitches,profiles,execution);
+        if(moveId.equals("uturn")){
+            // Native U-turn pivots after a KO only if the battle continues.
+            // Public active HP cannot prove the opponent's party closure.
+            if(possibleFaint(own?result.state().opponent():result.state().self()))
+                return unknown(clearFaintedStages(result),"U_TURN_TARGET_KO_OR_PARTY_CLOSURE_UNKNOWN");
+            if(!zero(own?result.state().self():result.state().opponent())) {
+                if(!own)return unknown(result,"OPPONENT_U_TURN_PARTY_HIDDEN");
+                result=pivotToSoleCertifiedReserve(result,mechanics,sourceLegalSwitches,profiles,execution);
+            }
         }
         if(moveId.equals("closecombat")) {
             boolean affectedOwn=own;
@@ -469,29 +473,35 @@ public final class ShadowMechanicsEvaluation {
         SwitchTarget entry=mechanics.transitions().context().switchTargets().get(id);
         if(entry==null||!entry.entryDamage().known()||!entry.entrySpeedDelta().known()
                 ||!entry.status().known()||!entry.status().value().equals("none")
-                ||entry.facts().fainted()||!entry.facts().hpKnown())
+                ||entry.facts().fainted()||!entry.facts().hpKnown()||entry.facts().hpFraction()<=0)
             return unknown(p,"U_TURN_REPLACEMENT_ENTRY_UNKNOWN");
         Profile reserve=profiles.get(id);
-        if(reserve==null||execution==null&&!yes(reserve.ordinaryEffects()))
+        if(reserve==null||execution==null||!reserve.actor().equals(id)||Set.of("self","opponent").contains(id))
             return unknown(p,"U_TURN_RESERVE_PROFILE_UNKNOWN");
-        if(execution!=null){
-            var max=reserve.maxHp().known()&&reserve.maxHp().value().low()==reserve.maxHp().value().high()
-                    ?Known.of(reserve.maxHp().value().low(),reserve.maxHp().source())
-                    :Known.<Integer>unknown();
-            var cert=execution.entryCoverage(p.state().selfHazards(),max,reserve);
-            if(!cert.supported())return unknown(p,String.join(",",cert.missing()));
-        }
         if(!p.state().selfHazards().complete()
                 ||p.state().selfHazards().layers().getOrDefault("toxicspikes",0)>0)
             return unknown(p,"U_TURN_NON_HP_ENTRY_EFFECTS_UNKNOWN");
+        var max=reserve.maxHp().known()&&reserve.maxHp().value().low()==reserve.maxHp().value().high()
+                ?Known.of(reserve.maxHp().value().low(),reserve.maxHp().source())
+                :Known.<Integer>unknown();
+        var cert=execution.entryCoverage(p.state().selfHazards(),max,reserve);
+        if(!cert.supported())return unknown(p,String.join(",",cert.missing()));
+        var sourceEntry=execution.entry(p.state().selfHazards(),max,reserve);
+        if(!sourceEntry.damage().known()||!sourceEntry.speedDelta().known()||!sourceEntry.unknown().isEmpty())
+            return unknown(p,"U_TURN_SOURCE_ENTRY_UNKNOWN");
+        if(!entry.entryDamage().value().equals(sourceEntry.damage().value())
+                ||!entry.entrySpeedDelta().value().equals(sourceEntry.speedDelta().value()))
+            return unknown(p,"U_TURN_ENTRY_SOURCE_MISMATCH");
+        var hp=new Interval(entry.facts().hpFraction(),entry.facts().hpFraction());
+        if(remainingHp(hp,sourceEntry.damage().value()).low()<=0)
+            return unknown(p,"U_TURN_ENTRY_SURVIVAL_UNKNOWN");
         Map<String,Integer> nextStages=new TreeMap<>();STATS.forEach(k->nextStages.put(k,0));
-        nextStages.put("spe",entry.entrySpeedDelta().value());
-        Actor arriving=new Actor(id,entry.facts(),Known.of(new Interval(
-                entry.facts().hpFraction(),entry.facts().hpFraction()),"owner-only current reserve HP"),
+        nextStages.put("spe",sourceEntry.speedDelta().value());
+        Actor arriving=new Actor(id,entry.facts(),Known.of(hp,"owner-only current reserve HP"),
                 nextStages,entry.status());
         Progress swapped=replace(p,state(p.state(),arriving,p.state().opponent(),
                 Kind.FORCED_CONTINUATION,p.state().action()));
-        return hurt(swapped,true,entry.entryDamage().value());
+        return hurt(swapped,true,sourceEntry.damage().value());
     }
     private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
         var stages=new TreeMap<>(actor.stages());
