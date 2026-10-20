@@ -319,6 +319,35 @@ public final class PublicReplayProvenance {
                 refs,receipt.revision(),true);
     }
 
+
+    /**
+     * Offline durable trust file is reconstructed from a separately pinned
+     * trusted bootstrap and exact latest checkpoint. Never derive trust roots
+     * from the state file itself; no active battle or live promotion.
+     */
+    public static CheckedReplay ingestWithDurableCustody(
+            PublicReplayCorpus.Source source,String spectatorLog,
+            CompetitiveFormatNormalizer.Target target,java.nio.file.Path directory,
+            PublicSignedCustody.TrustedPolicy independentlyTrustedBootstrap,
+            PublicCustodyTrustStore.Checkpoint externallyPinned,long evaluatedAtEpochSecond) {
+        var recovered=PublicCustodyTrustStore.resolve(directory,
+                independentlyTrustedBootstrap,externallyPinned,evaluatedAtEpochSecond);
+        return ingestWithSignedCustody(source,spectatorLog,target,recovered.manifest(),
+                recovered.policy(),evaluatedAtEpochSecond);
+    }
+
+    public static CheckedSplit verifySplitWithDurableCustody(
+            List<PublicHeldOutEvaluation.Replay> supplied,
+            CompetitiveFormatNormalizer.Target target,PublicHeldOutEvaluation.Report submitted,
+            java.nio.file.Path directory,
+            PublicSignedCustody.TrustedPolicy independentlyTrustedBootstrap,
+            PublicCustodyTrustStore.Checkpoint externallyPinned,long evaluatedAtEpochSecond) {
+        var recovered=PublicCustodyTrustStore.resolve(directory,
+                independentlyTrustedBootstrap,externallyPinned,evaluatedAtEpochSecond);
+        return verifySplitWithSignedCustody(supplied,target,submitted,recovered.manifest(),
+                recovered.policy(),evaluatedAtEpochSecond);
+    }
+
     private static CheckedReplay issued(CompetitiveFormatNormalizer.Result normalized,
                                         PublicCompetitiveTendencies.Report tendencies) {
         var audit=PublicCompetitiveShadowContract.audit(normalized,tendencies);
