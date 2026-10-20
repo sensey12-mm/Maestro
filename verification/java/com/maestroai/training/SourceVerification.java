@@ -75,6 +75,7 @@ public final class SourceVerification {
             HealingRecoilRegression.differential(engine);
             RecoilContinuationRegression.differential(engine);
             PivotOutcomeRegression.differential(engine);
+            StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);
             ModifierCompositionRegression.differential(engine);
             engine.eval("js", "var verificationStream=new BS.BattleStream(); battleMap.set('synthetic-verification',verificationStream);"

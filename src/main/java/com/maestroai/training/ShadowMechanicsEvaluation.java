@@ -152,7 +152,9 @@ public final class ShadowMechanicsEvaluation {
         if (!s.opponent().facts().revealedMoves().contains(t.reply())) return List.of(unknown(p, "UNREVEALED_OPPONENT_REPLY"));
         if (!s.self().hp().known() || !s.opponent().hp().known()) return List.of(unknown(p, "PUBLIC_HP_UNKNOWN"));
         if (!s.self().status().known() || !s.opponent().status().known()
-                || !s.self().status().value().equals("none") || !s.opponent().status().value().equals("none"))
+                || !Set.of("none","par").contains(s.self().status().value())
+                || !Set.of("none","par").contains(s.opponent().status().value())
+                || execution == null && (!s.self().status().value().equals("none") || !s.opponent().status().value().equals("none")))
             return List.of(unknown(p, "STATUS_EXECUTION_OR_RESIDUAL_EFFECTS_UNRESOLVED"));
         Profile self = profiles.get(s.self().id()), foe = profiles.get(s.opponent().id());
         if (self == null || foe == null || execution == null && (!yes(self.ordinaryEffects()) || !yes(foe.ordinaryEffects())))
@@ -213,16 +215,27 @@ public final class ShadowMechanicsEvaluation {
     private static List<Progress> executeVariants(Progress p,String id,boolean own,
             Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
             PublicMechanics mechanics,List<String> sourceLegalSwitches) {
+        if(!p.unknown().isEmpty())return List.of(p);
         if(p.skipNext())return List.of(new Progress(p.state(),p.dealtLow(),p.dealtHigh(),
                 p.lostLow(),p.lostHigh(),p.unknown(),false));
         Actor attacker=own?p.state().self():p.state().opponent();
+        Actor target=own?p.state().opponent():p.state().self();
+        if(zero(attacker)||zero(target)&&!p.state().forcedReplacement())return List.of(p);
         if(attacker.status().known()&&Set.of("par","frz").contains(attacker.status().value())){
+            if(possibleFaint(attacker))return List.of(unknown(p,"STATUS_ACTION_EXECUTION_SURVIVAL_UNKNOWN"));
             // Conditional paralysis/freeze may prevent the slower action.
             Actor recovered=attacker.status().value().equals("frz")?withStatus(attacker,"none"):attacker;
             var eligible=replace(p,state(p.state(),own?recovered:p.state().self(),
                     own?p.state().opponent():recovered,p.state().actionKind(),p.state().action()));
-            return List.of(p,executeBase(eligible,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches));
+            var branches=new ArrayList<Progress>();branches.add(p);
+            branches.addAll(executeEffects(eligible,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches));
+            return branches;
         }
+        return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+    }
+    private static List<Progress> executeEffects(Progress p,String id,boolean own,
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
+            PublicMechanics mechanics,List<String> sourceLegalSwitches) {
         Progress primary=executeBase(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
         if(!primary.unknown().isEmpty())return List.of(primary);
         var effect=SourceMoveEffects.SECONDARIES.get(id);

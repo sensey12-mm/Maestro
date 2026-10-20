@@ -192,6 +192,10 @@ public final class PublicFieldEvidence {
                 String effect = p.length > 3 ? key(p[3]) : "";
                 if (effect.equals("taunt")) { if (event.equals("-start")) a.volatiles.add(effect); else a.volatiles.remove(effect); }
                 else a.covered = false;
+            } else if (event.equals("cant") && p.length == 4 && key(p[3]).equals("par")) {
+                // The attested paralysis BeforeMove branch leaves no persistent
+                // modifier. A previous skipped action does not prove this turn's
+                // execution, and is not an arbitrary unsupported effect either.
             } else if (Set.of("-activate", "-singlemove", "detailschange", "-formechange", "-transform", "-terastallize", "-endability", "-sethp",
                     "-block", "-prepare", "-mustrecharge", "-zpower", "-mega", "-primal", "-burst", "-dynamax",
                     "-clearallboost", "-invertboost", "-swapboost", "-setboost", "-copyboost", "-clearnegativeboost", "cant").contains(event)) {
@@ -203,9 +207,9 @@ public final class PublicFieldEvidence {
                 // condition events tracked above. They are not supported root
                 // actions in the HP-exchange evaluator. A current runtime source
                 // certificate is still required before any field result is used.
-                // Psychic Terrain's exact nested condition is also attested;
+                // Terrain/Tailwind exact nested conditions are also attested;
                 // accepting its past setter does not add a selectable action.
-                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","psychicterrain").contains(key(p[3]));
+                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","psychicterrain","tailwind").contains(key(p[3]));
                 if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }

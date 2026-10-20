@@ -235,6 +235,7 @@ def main():
         subprocess.run(['node', 'verification/recoil_continuation_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/pivot_outcome_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/modifier_composition_oracle.cjs', folder], check=True)
+        subprocess.run(['node', 'verification/status_speed_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/psychic_terrain_oracle.cjs', folder], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                         'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)

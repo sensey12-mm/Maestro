@@ -171,7 +171,7 @@ public final class ScopedExecution {
         bound(p, a); var c = new Check(Operation.SETUP); c.actor(a.id(), reserve(a.id()));
         Move m = move(moveId); c.need("SUPPORTED_SETUP_MOVE", m != null && m.power() == 0);
         c.need("SUPPORTED_SETUP_EXECUTION", m != null && (!m.id().equals("geomancy") || activePowerHerb(a.id())));
-        c.need(a.id() + ":STATUS", a.status().known() && a.status().value().equals("none"));
+        c.need(a.id() + ":STATUS", a.status().known() && Set.of("none","par").contains(a.status().value()));
         if (m != null && m.id().equals("recover")) c.need(a.id() + ":EXACT_RECOVERY_MAX_HP",
                 p.maxHp().known() && p.maxHp().value().low() == p.maxHp().value().high());
         if (m != null) m.boosts().keySet().forEach(stat -> c.need(a.id() + ":STAGE_" + stat, a.stages().containsKey(stat)));
@@ -180,7 +180,8 @@ public final class ScopedExecution {
     public Certificate speedCoverage(Profile p, Actor a) {
         bound(p, a); var c = new Check(Operation.SPEED); c.actor(a.id(), reserve(a.id()));
         c.need(a.id() + ":SPEED", p.stat("spe").known() && a.stages().containsKey("spe"));
-        c.need(a.id() + ":STATUS", a.status().known() && a.status().value().equals("none"));
+        c.need(a.id() + ":STATUS", a.status().known()
+                && Set.of("none","par","slp","frz","brn","psn","tox").contains(a.status().value()));
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         c.need(a.id() + ":TAILWIND", b != null && b.observation() != null && field.tailwind(b.observation().slot()).known());
         if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a).known());
@@ -325,8 +326,7 @@ public final class ScopedExecution {
         return computedSpeed(p, a);
     }
     private Known<IntRange> computedSpeed(Profile p, Actor a) {
-        Known<IntRange> base = CobblemonMechanics.speed(certified(p), a);
-        if (!a.status().known() || !a.status().value().equals("none")) return Known.unknown();
+        Known<IntRange> base = CobblemonMechanics.stagedSpeed(certified(p), a);
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         Known<Boolean> wind = b == null || b.observation() == null ? Known.unknown() : field.tailwind(b.observation().slot());
         if (!base.known() || !wind.known()) return Known.unknown();
@@ -335,6 +335,20 @@ public final class ScopedExecution {
         // Source modify uses round-half-down, not ordinary half-up.
         int low = (base.value().low() * n * 4096 / 2 + 2047) / 4096;
         int high = (base.value().high() * n * 4096 / 2 + 2047) / 4096;
+        if (a.status().value().equals("par")) {
+            // The status/item callbacks tie and may be shuffled. A zero cached
+            // action speed also ties actor callbacks with the side's Tailwind.
+            // No private cached speed is assumed: bound every native ordering,
+            // including a rounded Scarf before paralysis and Tailwind after it.
+            int scarf = item(a.id()).equals("choicescarf") ? 3 : 2;
+            int windFactor = wind.value() ? 2 : 1;
+            int middleLow = ((base.value().low() * scarf * 4096 / 2 + 2047) / 4096 / 2) * windFactor;
+            int middleHigh = ((base.value().high() * scarf * 4096 / 2 + 2047) / 4096 / 2) * windFactor;
+            int afterLow = (base.value().low() / 2 * n * 4096 / 2 + 2047) / 4096;
+            int afterHigh = (base.value().high() / 2 * n * 4096 / 2 + 2047) / 4096;
+            low = Math.min(middleLow, Math.min(low / 2, afterLow));
+            high = Math.max(middleHigh, Math.max(high / 2, afterHigh));
+        }
         if (low < 1 || high > 10000) return Known.unknown();
         return Known.of(new IntRange(low, high), field.token());
     }

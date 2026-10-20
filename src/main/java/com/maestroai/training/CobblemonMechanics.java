@@ -250,13 +250,24 @@ public final class CobblemonMechanics {
         return score;
     }
     public static Known<IntRange> speed(Profile profile, Actor actor) {
+        Known<IntRange> staged = stagedSpeed(profile, actor);
+        if (!staged.known()) return Known.unknown();
+        int low = staged.value().low(), high = staged.value().high();
+        // The native paralysis callback floors after finalModify, rather than
+        // applying another round-half-down modifier.
+        if (actor.status().value().equals("par")) { low /= 2; high /= 2; }
+        if (low < 1) return Known.unknown(); // Native zero speed is outside IntRange.
+        return Known.of(new IntRange(low, high), SOURCE + ":effective-speed");
+    }
+    /** Stage arithmetic before item/side modifiers and the final status callback. */
+    static Known<IntRange> stagedSpeed(Profile profile, Actor actor) {
         bound(profile, actor);
         Integer stage = actor.stages().get("spe");
-        if (!yes(profile.ordinaryEffects()) || !profile.stat("spe").known() || stage == null || !actor.status().known())
+        if (!yes(profile.ordinaryEffects()) || !profile.stat("spe").known() || stage == null || !actor.status().known()
+                || !Set.of("none","par","slp","frz","brn","psn","tox").contains(actor.status().value()))
             return Known.unknown();
         IntRange base = profile.stat("spe").value();
         int low = stage(base.low(), stage), high = stage(base.high(), stage);
-        if (actor.status().value().equals("par")) { low = (int) halfDown(low, 1, 2); high = (int) halfDown(high, 1, 2); }
         if (low < 1 || high > 10000) return Known.unknown();
         return Known.of(new IntRange(low, high), SOURCE + ":effective-speed");
     }

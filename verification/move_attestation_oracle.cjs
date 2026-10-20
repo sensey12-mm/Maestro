@@ -11,7 +11,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   const initial = capture(), original = JSON.parse(initial.json);
   const covered = JSON.parse(original.components.operationTables).Moves;
   for (const id of selectable) check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
-  const fieldDependencies=['psychicterrain'];
+  const fieldDependencies=['psychicterrain','tailwind'];
   for(const id of fieldDependencies){
     check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
     check(!selectable.includes(id),'Field dependency became a selectable calculator action: '+id);
@@ -113,6 +113,28 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Field lifecycle omitted from operation fingerprint');
       table[id]=definition;
       check(capture().current()&&!receipt.current(),'Field lifecycle restoration revived old lease');
+    }
+
+    // Status callbacks execute outside move definitions. Full public condition
+    // attestation must reject identical-text closures without reading actors.
+    const conditions=battle.dex.dataCache.Conditions;
+    for(const id of ['par','slp','frz']){
+      const definition=conditions[id];
+      for(const slot of Object.keys(definition).filter(k=>typeof definition[k]==='function')){
+        receipt=capture();check(receipt.current(),'Native status receipt missing: '+id+'.'+slot);
+        const foreign=eval('({'+definition[slot].toString()+'})')[slot];
+        check(foreign!==definition[slot]&&foreign.toString()===definition[slot].toString(),'Invalid status foreign callback fixture');
+        conditions[id]={...definition,[slot]:foreign};
+        let rejected=false;try{capture();}catch(unverified){rejected=true;}
+        check(rejected&&!receipt.current(),'Foreign status callback retained operation scope: '+id+'.'+slot);
+        conditions[id]=definition;
+        check(capture().current()&&!receipt.current(),'Status restoration revived old receipt: '+id+'.'+slot);
+      }
+      receipt=capture();conditions[id]={...definition,onBeforeMovePriority:definition.onBeforeMovePriority+1};
+      check(!receipt.current(),'Status callback priority alteration retained receipt: '+id);
+      check(JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Status priority omitted from fingerprint: '+id);
+      conditions[id]=definition;
+      check(capture().current()&&!receipt.current(),'Status priority restoration revived old receipt: '+id);
     }
 
     // An unused custom move may coexist, but receives no selected-operation

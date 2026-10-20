@@ -27,6 +27,8 @@ final class ModifierCompositionRegression {
         int userHp(){return data.has("userHp")?n("userHp"):500;}
         int userSpeed(){return data.has("userSpeed")?n("userSpeed"):300;}
         int targetSpeed(){return data.has("targetSpeed")?n("targetSpeed"):100;}
+        String targetStatus(){return data.has("targetStatus")?s("targetStatus"):"none";}
+        int speedStage(boolean user){String key=user?"speedStage":"targetSpeedStage";return data.has(key)?n(key):0;}
         String action(){return b("enemy")?otherMove():s("move");}
         String reply(){return b("enemy")?s("move"):otherMove();}
     }
@@ -50,6 +52,7 @@ final class ModifierCompositionRegression {
             values.put("atk",user?c.n("attack"):220);values.put("spa",user?c.n("attack"):220);
             values.put("def",user?220:c.n("defense"));values.put("spd",user?220:c.n("defense"));values.put("spe",user?c.userSpeed():c.targetSpeed());
             stats.put(role,values);var bounded=new TreeMap<String,Known<IntRange>>();values.forEach((key,n)->bounded.put(key,known(IntRange.exact(n))));
+            if(missing.equals("speed-stat")&&user)bounded.remove("spe");
             if(missing.equals("attack-stat")&&user){var move=CobblemonMechanics.move(c.s("move"));bounded.remove(move==null?"spa":move.attackingStat());}
             var max=missing.equals("target-max")&&!user?Known.<IntRange>unknown():known(IntRange.exact(user?1000:c.n("targetMax")));
             if(missing.equals("bounded-target-max")&&!user)max=known(new IntRange(c.n("targetMax")-100,c.n("targetMax")+100));
@@ -62,7 +65,7 @@ final class ModifierCompositionRegression {
         var active=new UUID(0,47);ledger.owner(battle,actor,"p1");boolean ownUser=!c.b("enemy");
         var pokemon=new OwnRequestTransport.Pokemon(new OwnRequestEvidence.Sample(active,"p1: Own",
                 ownUser?c.userHp()+"/1000":c.n("targetHp")+"/"+c.n("targetMax"),true,ownAbility,c.types(ownUser?"types":"targetTypes")),
-                ownUser?c.n("level"):100,stats.get("self"),ownItem,c.types(ownUser?"types":"targetTypes"),ownUser?c.s("status"):"",false);
+                ownUser?c.n("level"):100,stats.get("self"),ownItem,c.types(ownUser?"types":"targetTypes"),ownUser?c.s("status"):c.targetStatus(),false);
         var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,List.of(pokemon));
         ledger.dispatched(battle,actor,"p1",first,()->request);ledger.turnDispatched(battle,1);ledger.turnFinished(battle,1);
         ledger.dispatched(battle,actor,"p1",second,()->request);ledger.turnDispatched(battle,2);
@@ -75,12 +78,27 @@ final class ModifierCompositionRegression {
         if(!missing.equals("opponent-item"))events.append(foeItem.equals("none")?"|-enditem|p2a: Foe|Sitrus Berry\n":"|-item|p2a: Foe|"+foeItem+"\n");
         if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|").append(foeAbility).append('\n');
         events.append("|turn|1");
+        if(c.data().has("pastPar")&&c.b("pastPar"))events.append("\n|cant|").append(ownUser?"p1a: Own":"p2a: Foe").append("|par");
+        if(missing.equals("unsupported-cant"))events.append("\n|cant|").append(ownUser?"p1a: Own":"p2a: Foe").append("|frz");
+        if(c.data().has("witnessTailwind")&&c.b("witnessTailwind")){
+            String slot=ownUser?"p1a: Own":"p2a: Foe";
+            events.append("\n|move|").append(slot).append("|Tailwind|").append(slot);
+            if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
+            events.append("\n|-sidestart|").append(ownUser?"p1: Own":"p2: Foe").append("|move: Tailwind");
+        }
         if(c.data().has("witnessSetter")&&c.b("witnessSetter")){
             events.append("\n|move|p2a: Foe|Psychic Terrain|p2a: Foe");
             if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
             events.append("\n|-fieldstart|move: Psychic Terrain");
         }
         events.append("\n|turn|2");
+        for(String key:List.of("wind","targetWind"))if(c.data().has(key)&&c.b(key)){
+            boolean own=key.equals("wind")?ownUser:!ownUser;
+            if(!key.equals("wind")||!c.data().has("witnessTailwind")||!c.b("witnessTailwind"))
+                events.append("\n|-sidestart|").append(own?"p1: Own":"p2: Foe").append("|move: Tailwind");
+            if(c.data().has("windEnded")&&c.b("windEnded"))events.append("\n|-sideend|").append(own?"p1: Own":"p2: Foe").append("|move: Tailwind");
+        }
+        if(c.data().has("trickRoom")&&c.b("trickRoom"))events.append("\n|-fieldstart|move: Trick Room");
         if(c.b("room"))events.append("\n|-fieldstart|move: Magic Room");
         if(!c.s("weather").equals("none"))events.append("\n|-weather|").append(c.s("weather"));
         if(c.data().has("terrain")&&!c.s("terrain").equals("none")&&!(c.data().has("witnessSetter")&&c.b("witnessSetter")))events.append("\n|-fieldstart|move: ").append(c.s("terrain"));
@@ -103,10 +121,12 @@ final class ModifierCompositionRegression {
                         missing.equals("own-ability")?Known.unknown():known(ownAbility),missing.equals("own-transport")?Known.unknown():YES,lease),
                 "opponent",new ScopedExecution.Binding(foe,foe.item(),missing.equals("forged-opponent")?known("technician"):foe.ability())),scopes);
         var userHp=known(new Interval(c.userHp()/1000.0,c.userHp()/1000.0));var selfHp=c.b("enemy")?targetHp:userHp;var foeHp=c.b("enemy")?userHp:targetHp;
-        var selfFacts=facts(selfHp,c.types(c.b("enemy")?"targetTypes":"types"),stages(c.b("enemy")?0:c.n("attackStage"),c.b("enemy")?c.n("defenseStage"):0),List.of());
-        var foeFacts=facts(foeHp,c.types(c.b("enemy")?"types":"targetTypes"),stages(c.b("enemy")?c.n("attackStage"):0,c.b("enemy")?0:c.n("defenseStage")),List.of(c.reply()));
+        var selfStages=stages(c.b("enemy")?0:c.n("attackStage"),c.b("enemy")?c.n("defenseStage"):0);selfStages.put("spe",c.speedStage(!c.b("enemy")));
+        var foeStages=stages(c.b("enemy")?c.n("attackStage"):0,c.b("enemy")?0:c.n("defenseStage"));foeStages.put("spe",c.speedStage(c.b("enemy")));
+        var selfFacts=facts(selfHp,c.types(c.b("enemy")?"targetTypes":"types"),selfStages,List.of());
+        var foeFacts=facts(foeHp,c.types(c.b("enemy")?"types":"targetTypes"),foeStages,List.of(c.reply()));
         var snapshot=new BattleSnapshot(2,selfFacts,foeFacts,List.of(),List.of(),List.of(c.action()),List.of(),Map.of(),false,null);
-        var hazards=new Hazards(Map.of(),true,SOURCE);var healthy=known("none");var status=missing.equals("status")?Known.<String>unknown():known(c.s("status"));
+        var hazards=new Hazards(Map.of(),true,SOURCE);var healthy=known(c.targetStatus());var status=missing.equals("status")?Known.<String>unknown():known(c.s("status"));
         var context=new PublicTransitionState.Context(selfHp,foeHp,c.b("enemy")?healthy:status,c.b("enemy")?status:healthy,hazards,hazards,Map.of(),Map.of(),Set.of());
         var mechanics=new PublicMechanics(Map.of(),foeFacts.knownBoosts(),Set.of(),false,false,false,0,new Evidence(context,Map.of(),Map.of()));
         var state=PublicStateSearchAdapter.project(snapshot,mechanics).states().get("root");
