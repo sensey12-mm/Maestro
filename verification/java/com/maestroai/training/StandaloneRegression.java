@@ -400,6 +400,7 @@ public final class StandaloneRegression {
         PublicOpponentBuildHypothesesRegression.run();
         PublicSpeciesBuildLegalityRegression.run();
         PublicFormBuildReconciliationRegression.run();
+        PublicBuildEvidenceConsistencyRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
