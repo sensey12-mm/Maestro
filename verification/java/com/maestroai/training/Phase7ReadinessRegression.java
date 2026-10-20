@@ -76,13 +76,13 @@ public final class Phase7ReadinessRegression {
         return new Phase7SelfPlay.Participant(verified,graphs,scenarios);
     }
     private static Phase7SelfPlay.Transitions transitions(
-            Phase7Benchmark.Scenario root,String left,String right){
+            Phase7Benchmark.Scenario root,String left,String rightRoot,String rightPrefix){
         var nodes=new TreeMap<String,Phase7SelfPlay.Node>();
         for(int i=0;i<=3;i++){
             int turn=2+i;
             nodes.put("step"+i,new Phase7SelfPlay.Node("step"+i,
                     i==0?root.id():left+"_turn_"+turn,
-                    i==0?right:right+"_turn_"+turn,i==3));
+                    i==0?rightRoot:rightPrefix+"_turn_"+turn,i==3));
         }
         var edges=new ArrayList<Phase7SelfPlay.Edge>();
         for(int i=0;i<3;i++)
@@ -188,7 +188,7 @@ public final class Phase7ReadinessRegression {
             var secondStates=path(secondRoot,"second");
             var first=participant(root,"phase712_first",firstStates,artifact,921);
             var second=participant(root,"phase712_second",secondStates,artifact,921);
-            var t=transitions(firstScenario,"first",secondRoot.id());
+            var t=transitions(firstScenario,"first",secondRoot.id(),"second");
             var self=selfPolicy(root,t,first,second,921);
             KeyPair mechanicSigner=pair();
             KeyPair transitionSigner=pair();
