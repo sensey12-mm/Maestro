@@ -257,6 +257,8 @@ public final class Phase7TrustedIntake {
         return current;
     }
     private static String readPrivate(Path path,int max) throws IOException {
+        if(!Files.exists(path,LinkOption.NOFOLLOW_LINKS))
+            throw new NoSuchFileException("missing private file");
         if(Files.isSymbolicLink(path) || !Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS)
                 || Files.size(path)>max)
             throw new IOException("unavailable private file");
