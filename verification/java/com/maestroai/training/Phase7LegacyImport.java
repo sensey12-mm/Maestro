@@ -112,12 +112,12 @@ public final class Phase7LegacyImport {
         ChoiceReceipt choice=capture.choice();
         if(custody==null) return rejected(Status.NO_CUSTODY_REVIEW);
         if(!scenario.evidence().fresh()) return rejected(Status.STALE_TURN);
+        if(!scenario.evidence().publicOnly() || !scenario.evidence().mechanicsSupported())
+            return rejected(Status.UNKNOWN_PUBLIC_EVIDENCE);
         if(!choice.scenarioFingerprint().equals(Phase7Benchmark.stateFingerprint(scenario)))
             return rejected(Status.MISMATCHED_SCENARIO);
         if(choice.turn()!=scenario.snapshot().turn())
             return rejected(Status.STALE_TURN);
-        if(!scenario.evidence().publicOnly() || !scenario.evidence().mechanicsSupported())
-            return rejected(Status.UNKNOWN_PUBLIC_EVIDENCE);
         String action=choice.action();
         boolean legal=action.startsWith("move:")
                 ? scenario.snapshot().legalMoves().contains(action.substring(5))
