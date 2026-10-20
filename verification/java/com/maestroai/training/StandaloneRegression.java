@@ -399,6 +399,7 @@ public final class StandaloneRegression {
         PublicCompetitiveRobustnessAuditRegression.run();
         PublicOpponentBuildHypothesesRegression.run();
         PublicSpeciesBuildLegalityRegression.run();
+        PublicFormBuildReconciliationRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
