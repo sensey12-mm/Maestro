@@ -10,6 +10,7 @@ import com.maestroai.training.PublicProtocolFilter;
 import com.maestroai.training.PublicProtocolEvidence;
 import com.maestroai.training.PublicBattleCapture;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
+import com.maestroai.training.LegacyChoiceCapture;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
 import com.maestroai.training.MoveEffectModel;
@@ -309,9 +310,54 @@ public class MaestroBattleAI extends RCTBattleAI {
                 () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
                 null, null, false);
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            // Phase 7.3: opt-in observer of the ACTUAL returned Legacy action.
+            // Any capture failure is non-fatal; the chosen action is untouched.
+            try { observeReturnedLegacyChoice(activePokemon, battle, moveset, forceSwitch, response); }
+            catch (RuntimeException ignored) { /* capture cannot influence live control */ }
             return response;
         } finally {
             ownTransport.endChoice(); ownChoiceLease = null;
+        }
+    }
+
+    /** A return-path witness, not an opponent-state or live-selection hook. */
+    private void observeReturnedLegacyChoice(ActiveBattlePokemon activePokemon,
+            PokemonBattle battle, ShowdownMoveset moveset, boolean forceSwitch,
+            ShowdownActionResponse response) {
+        if (!legacyChoiceCapture.enabled() || activePokemon == null || battle == null
+                || response == null || activePokemon.getActor() == null
+                || ownChoiceLease == null || !ownChoiceLease.current()) return;
+        // Source-pinned Cobblemon 1.7.3 response properties. No UUID or nickname
+        // is exported: switches are restricted to a legal own-party slot index.
+        if (!response.isValid(activePokemon, moveset, forceSwitch)) return;
+        String action = null;
+        if (response instanceof MoveActionResponse move && !forceSwitch
+                && moveset != null && move.getGimmickID() == null) {
+            String moveId = move.getMoveName();
+            if (moveId != null && moveset.getMoves() != null
+                    && moveset.getMoves().stream().anyMatch(own ->
+                        own != null && moveId.equals(own.getId()) && own.canBeUsed())) {
+                action = "move:" + moveId;
+            }
+        } else if (response instanceof SwitchActionResponse change) {
+            var party = activePokemon.getActor().getPokemonList();
+            if (party != null && party.size() <= 6) {
+                for (int i = 0; i < party.size(); i++) {
+                    if (party.get(i) != null
+                            && change.getNewPokemonId().equals(party.get(i).getUuid())) {
+                        action = "switch:slot" + (i + 1);
+                        break;
+                    }
+                }
+            }
+        }
+        var proof = ownTransport.choiceProof(ownChoiceLease, battle.getBattleId());
+        LegacyChoiceCapture.Observation observed = legacyChoiceCapture.observe(
+                battle.getBattleId(), proof, battle.getShowdownMessages(), action);
+        if (observed.receipt() != null) {
+            // This opt-in output is *minimized*: only own move ID/party ordinal,
+            // fixed provenance markers and hashes. Raw history remains private.
+            System.out.println(observed.receipt().safeLine());
         }
     }
 
@@ -4407,6 +4453,7 @@ public class MaestroBattleAI extends RCTBattleAI {
      * so this history is incomplete if multiple moves occur between AI turns.
      */
     private final PublicBattleCapture shadowReplayCapture = new PublicBattleCapture();
+    private final LegacyChoiceCapture legacyChoiceCapture = LegacyChoiceCapture.installed();
 
     /**
      * Process only allowlisted public events from Cobblemon's Showdown

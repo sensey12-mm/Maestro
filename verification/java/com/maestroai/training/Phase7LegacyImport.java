@@ -181,6 +181,33 @@ public final class Phase7LegacyImport {
         }
     }
 
+    /**
+     * Phase 7.3 adapter: actual opt-in production receipts carry a returned
+     * Legacy action, but NO simulated benchmark state claim. Bind the observed
+     * action to the supplied scenario only under the existing independent
+     * custody callback. Never mistake the in-game diagnostic line itself for
+     * proof of reviewer custody or Minecraft acceptance.
+     */
+    public static ImportResult importObserved(LegacyChoiceCapture.Receipt observed,
+            UUID privateBattleId, List<String> privateHistory,
+            Phase7Benchmark.Scenario scenario, CustodyReviewer custody) {
+        if (observed==null || privateBattleId==null || privateHistory==null || scenario==null)
+            return rejected(Status.INVALID_PROVENANCE);
+        try {
+            if (!SOURCE.equals(observed.origin()))
+                return rejected(Status.INVALID_PROVENANCE);
+            var choice = new ChoiceReceipt(observed.captureId(), observed.origin(),
+                    observed.artifactSha256(), observed.ownRequestSha256(),
+                    observed.publicSha256(), Phase7Benchmark.stateFingerprint(scenario),
+                    observed.turn(), observed.action());
+            return importCapture(new Capture(privateBattleId,privateHistory,choice),
+                    scenario,custody);
+        } catch(RuntimeException invalid) {
+            // Never propagate private payloads or exception descriptions.
+            return rejected(Status.INVALID_PROVENANCE);
+        }
+    }
+
     /** Duplicate capture IDs cannot independently contribute multiple rows. */
     public static List<ImportResult> importBatch(List<Capture> captures,
             Map<String,Phase7Benchmark.Scenario> scenarios, CustodyReviewer custody) {

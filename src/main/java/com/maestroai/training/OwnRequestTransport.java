@@ -118,6 +118,47 @@ public final class OwnRequestTransport {
         }
         return new Lease(installed);
     }
+    /**
+     * Phase 7.3: a private, short-lived proof of the CURRENT owning request.
+     * The digest is process-salted so player identities, party members, stats
+     * and request text are never emitted, even as unsalted dictionary hashes.
+     * It is a correlation token, NOT an authentication signature.
+     */
+    private static final byte[] CHOICE_SALT = new byte[32];
+    static { new java.security.SecureRandom().nextBytes(CHOICE_SALT); }
+    public final class ChoiceProof {
+        private final Lease lease;
+        private final String requestDigest;
+        private final int turn;
+        private final UUID battleId;
+        private ChoiceProof(Lease lease, UUID battleId, String digest) {
+            this.lease = lease; this.turn = lease.turn(); this.battleId = battleId;
+            this.requestDigest = digest;
+        }
+        public boolean current() { return lease.current() && lease.belongsTo(OwnRequestTransport.this)
+                && lease.turn() == turn; }
+        public boolean currentFor(UUID otherBattleId) {
+            return current() && battleId.equals(otherBattleId);
+        }
+        public int turn() { return turn; }
+        public String requestDigest() { return requestDigest; }
+        @Override public String toString() { return "OwnChoiceProof[redacted]"; }
+    }
+    public ChoiceProof choiceProof(Lease lease, UUID battleId) {
+        if (battleId == null || lease == null || !lease.belongsTo(this)
+                || !lease.current() || receipt == null)
+            return null;
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            digest.update(CHOICE_SALT);
+            // Correlation only. No raw request fields are persisted/exported.
+            String material = SOURCE + "|" + lease.source() + "|" + battleId + "|" + side + "|" + receipt;
+            digest.update(material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return new ChoiceProof(lease, battleId, java.util.HexFormat.of().formatHex(digest.digest()));
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new AssertionError(impossible);
+        }
+    }
     public void endChoice() { epoch++; choiceOpen = false; }
     private static String nickname(String ident) {
         int colon = ident == null ? -1 : ident.indexOf(':');

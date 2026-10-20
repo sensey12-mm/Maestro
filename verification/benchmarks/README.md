@@ -104,3 +104,47 @@ decisions. A separately reviewed, privacy-safe own-choice receipt source is
 needed before any empirical comparisons can be reported. The tests use
 synthetic receipts and an explicitly synthetic trusted-review stub; **zero
 real Legacy decisions were evaluated**. No Minecraft testing occurred.
+
+## Phase 7.3 — opt-in actual Legacy return capture
+
+The production-only observer is disabled by default. To explicitly opt in
+for a **controlled local installation**, start the JVM with
+`-Dmaestroai.legacyChoiceCapture=true`. The ordinary
+`MaestroBattleAI.choose` return value remains the Legacy selection; the
+observer is called after that selection and cannot replace it. A capture
+failure is isolated and must not interrupt gameplay.
+
+A capture requires all of these, *at the moment Legacy returns*:
+a current owning `OwnRequestTransport.ChoiceProof` lease bound to the exact
+battle UUID and observed turn, an installed Maestro JAR SHA-256, an
+append-only, complete, framed public Showdown envelope with the same turn,
+no unsupported mechanics or ambiguous appearance (including Illusion and
+Transform), a source-validated response, and an eligible own move or
+own-party-slot action. Any missing/mismatched proof **abstains**.
+
+The opt-in line `LEGACY_CHOICE_RECEIPT` includes only a random opaque
+capture ID, an own move ID or positional `switch:slotN`, turn, public
+stream digest, process-salted own-request correlation digest and the
+installed artifact hash. It **never** includes player/opponent names,
+Pokémon UUIDs, raw request or battle packets, hidden builds, or raw public
+event text. Capture continuity hashes private history chunks under an
+ephemeral random salt but does not retain or export those chunks. The
+observer retains at most 64 receipts per battle; a second choice in the
+same turn or a rewritten prior history cannot create another accepted
+receipt. Capturing switches by slot is intentionally limited to current
+own-party ordering.
+
+`Phase7LegacyImport.importObserved` is the verification-only bridge
+into the Phase 7.2 importer. It additionally needs the private original
+history, a benchmark scenario and an **independent custody reviewer**
+that checks the actual choice-return evidence and source boundaries.
+The runtime line alone is NOT authentication; hashes are NOT signatures.
+Never put unreviewed private capture material or raw log files into
+Maestro or public GitHub. The existing Phase 7.1 utility criteria remain
+synthetic. Imported observations support only **action agreement**, not
+real win rate or demonstrated tactical improvement.
+
+Tests use a synthetic own-request ledger and public envelopes. They
+cannot establish that Cobblemon/RCT, the specific datapack or installed
+Minecraft wiring is functioning. No actual battles were requested.
+Runtime acceptance and independent custody assessment are pending.
