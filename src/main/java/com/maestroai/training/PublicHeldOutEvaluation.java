@@ -75,7 +75,7 @@ public final class PublicHeldOutEvaluation {
     public static Report evaluate(List<Replay> inputs, CompetitiveFormatNormalizer.Target target) {
         if (inputs == null || inputs.size() < 2 || inputs.size() > 1000 || target == null)
             throw invalid();
-        Set<String> ids = new HashSet<>(), hashes = new HashSet<>();
+        Set<String> ids = new HashSet<>(), hashes = new HashSet<>(), publicSequences = new HashSet<>();
         List<Verified> training = new ArrayList<>(), testing = new ArrayList<>();
         List<String> manifest = new ArrayList<>();
         for (Replay replay : inputs) {
@@ -84,7 +84,8 @@ public final class PublicHeldOutEvaluation {
             // gates run before any event is eligible for benchmarking.
             var admitted = PublicReplayCorpus.ingest(replay.source(), replay.spectatorLog());
             var normalized = CompetitiveFormatNormalizer.normalize(admitted, target);
-            if (!ids.add(admitted.replayId()) || !hashes.add(admitted.inputSha256()))
+            if (!ids.add(admitted.replayId()) || !hashes.add(admitted.inputSha256())
+                    || !publicSequences.add(publicSequenceDigest(replay.spectatorLog(), admitted.format())))
                 throw invalid();
             manifest.add(replay.partition() + "|" + admitted.replayId() + "|"
                     + admitted.inputSha256() + "|" + normalized.targetSourceScope());
@@ -142,6 +143,32 @@ public final class PublicHeldOutEvaluation {
         return new Segment(replays.size(), unsupported, skipped,
                 Metric.of(moveN, moveCandidate, moveBaseline, "FIRST_OBSERVED_NATIVE_MOVE"),
                 Metric.of(switchN, switchCandidate, switchBaseline, "ALWAYS_MOVE"));
+    }
+
+    /**
+     * Conservative clone barrier: strips nicknames/chat/player metadata and
+     * hashes an ordered public action/effect sequence. Two different battles
+     * with indistinguishable public sequences are rejected, not identified
+     * as the same opponent. The digest never leaves this method.
+     */
+    private static String publicSequenceDigest(String raw, String format) {
+        StringBuilder key = new StringBuilder(format);
+        for (String line : PublicProtocolFilter.publicEvents(List.of(raw))) {
+            String[] parts = line.split("\\|", -1);
+            if (parts.length < 2) continue;
+            String kind = parts[1];
+            String actor = parts.length > 2 ? slot(parts[2]) : "";
+            key.append('\n').append(kind).append('|').append(actor);
+            // A complete public replay event contains more than its nickname.
+            // Preserve state-relevant move/details/HP/status/effect content, but
+            // never actor nicknames or private protocol payloads in this key.
+            if (parts.length > 3)
+                key.append('|').append(parts[3].toLowerCase(Locale.ROOT)
+                        .replaceAll("[^a-z0-9]", ""));
+            if (kind.equals("turn") && parts.length > 2)
+                key.append('|').append(parts[2]);
+        }
+        return sha256(key.toString());
     }
 
     private static String slot(String raw) {
