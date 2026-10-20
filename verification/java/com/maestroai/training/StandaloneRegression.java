@@ -338,6 +338,7 @@ public final class StandaloneRegression {
         HealingRecoilRegression.run();
         RecoilContinuationRegression.run();
         PivotOutcomeRegression.run();
+        PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();
         ownMechanicsExecutionAudit();
         maestroWholeRosterCoverage();

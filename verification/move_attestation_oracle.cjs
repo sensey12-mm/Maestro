@@ -11,6 +11,11 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   const initial = capture(), original = JSON.parse(initial.json);
   const covered = JSON.parse(original.components.operationTables).Moves;
   for (const id of selectable) check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
+  const fieldDependencies=['psychicterrain'];
+  for(const id of fieldDependencies){
+    check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
+    check(!selectable.includes(id),'Field dependency became a selectable calculator action: '+id);
+  }
 
   // Trap the actual private surfaces. Restore descriptors for the remaining
   // integration fixtures, which may later create their own synthetic actors.
@@ -19,7 +24,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   for (const key of privateKeys) Object.defineProperty(battle, key, {configurable:true,
     get() { privateReads++; throw Error('private actor state read'); }});
   const badRegistries = [];
-  const restored = ['geomancy', 'thunder', 'psystrike', 'fireblast', 'spectralthief'];
+  const restored = ['geomancy', 'thunder', 'psystrike', 'fireblast', 'spectralthief',...fieldDependencies];
   try {
     // Every calculator move must accept genuine native normalization. Warmed
     // native definitions may have frozen nested fields; use the pinned clone.
@@ -77,6 +82,39 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       }
     }
 
+    // The field's nested callbacks execute even though its setter is not a
+    // selectable calculator move. Exact text cannot confer callback identity.
+    for(const id of fieldDependencies){
+      const definition=table[id];
+      for(const slot of Object.keys(definition.condition).filter(k=>typeof definition.condition[k]==='function')){
+        const native=registry.register({name:id,...modules.Utils.deepClone(definition)},id);
+        receipt=capture();check(receipt.current(),'Native field condition receipt missing: '+slot);
+        const altered=modules.Utils.deepClone(definition);
+        altered.condition[slot]=function(){callbackCalls++;};
+        registry.register({name:id,...altered},id);
+        const bad=JSON.parse(capture().json);
+        check(!bad.scopedRegistryEquivalent,'Foreign field registry callback accepted: '+slot);
+        badRegistries.push({id:id+'.condition.'+slot,registryEquivalent:bad.registryEquivalent,scopedRegistryEquivalent:bad.scopedRegistryEquivalent});
+        check(!receipt.current(),'Foreign field callback retained prior lease: '+slot);
+        registry.contents.set(id,native);
+        check(capture().current()&&!receipt.current(),'Field callback restoration revived old lease: '+slot);
+        const foreign=eval('({'+definition.condition[slot].toString()+'})')[slot];
+        check(foreign!==definition.condition[slot]&&foreign.toString()===definition.condition[slot].toString(),'Invalid nested same-text callback fixture');
+        receipt=capture();table[id]={...definition,condition:{...definition.condition,[slot]:foreign}};
+        let rejected=false;try{capture();}catch(unverified){rejected=true;}
+        check(rejected&&!receipt.current(),'Same-text foreign field source callback retained scope: '+slot);
+        table[id]=definition;
+        check(capture().current()&&!receipt.current(),'Source field callback restoration revived old lease: '+slot);
+        registry.reset();
+      }
+      receipt=capture();
+      table[id]={...definition,condition:{...definition.condition,duration:definition.condition.duration+1}};
+      check(!receipt.current(),'Altered field duration retained its lease');
+      check(JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Field lifecycle omitted from operation fingerprint');
+      table[id]=definition;
+      check(capture().current()&&!receipt.current(),'Field lifecycle restoration revived old lease');
+    }
+
     // An unused custom move may coexist, but receives no selected-operation
     // certificate. Its presence must not disable unrelated ordinary actions.
     table.unusedfixture = {name:'Unused Fixture', onHit() { callbackCalls++; }};
@@ -100,7 +138,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       else delete battle[key];
     });
   }
-  return JSON.stringify({checks, selected:selectable.length, badRegistries});
+  return JSON.stringify({checks, selected:selectable.length, fieldDependencies:fieldDependencies.length, badRegistries});
 };
 
 if (typeof process !== 'undefined' && process.argv && require.main === module) {
@@ -124,6 +162,6 @@ if (typeof process !== 'undefined' && process.argv && require.main === module) {
   const selectable = [...java.matchAll(/Map\.entry\("([a-z0-9]+)", new Move\(/g)].map(match => match[1]);
   if (!selectable.length) throw Error('No calculator move IDs found');
   const result = JSON.parse(module.exports(modules, anchor, probe, stream.battle, selectable));
-  console.log('Native selected-move attestation PASS: ' + result.selected + ' IDs; ' + result.checks +
+  console.log('Native selected-move attestation PASS: ' + result.selected + ' IDs + '+result.fieldDependencies+' field dependency; ' + result.checks +
     ' checks; altered definitions, foreign callbacks, irreversible leases, unused move isolation and privacy');
 }

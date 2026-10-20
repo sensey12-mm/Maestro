@@ -116,8 +116,9 @@
   };
   mark('PUBLIC_CONFIGURATION_REGISTRY_REJECTED');
   let registryEquivalent = true, scopedRegistryEquivalent = true, registryCount = 0;
-  // Cover every calculator move, plus the separately source-audited past-only
-  // history IDs. Native verification checks this against the Java calculator.
+  // Cover every calculator move, separately audited past-only history IDs,
+  // and the Psychic Terrain move whose nested condition executes field rules.
+  // Field dependencies do not become selectable calculator actions.
   // Unsupported entries are not certified; each selected actor/action must
   // still pass its operation prerequisites. No absent modifier inference.
   const relevant = {
@@ -127,7 +128,7 @@
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',
       'uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock','drainingkiss',
       'energyball','closecombat','rocktomb','geomancy','thunder','psystrike','fireblast','spectralthief',
-      'shadowball','hypervoice','aurasphere'])
+      'shadowball','hypervoice','aurasphere','psychicterrain'])
   };
   const registryAudit = {};
   for (const [group, table, ctor] of [['ability', 'Abilities', modules.Ability],

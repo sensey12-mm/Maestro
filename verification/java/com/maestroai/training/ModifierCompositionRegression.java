@@ -16,7 +16,7 @@ final class ModifierCompositionRegression {
     private static int checks;
     private static <T> Known<T> known(T v){return Known.of(v,SOURCE);}
     private static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
-    private record Case(JsonObject data) {
+    record Case(JsonObject data) {
         String s(String key){return data.get(key).getAsString();}
         int n(String key){return data.get(key).getAsInt();}
         boolean b(String key){return data.get(key).getAsBoolean();}
@@ -25,33 +25,37 @@ final class ModifierCompositionRegression {
         String target(){return b("enemy")?"self":"opponent";}
         String otherMove(){return data.has("replyMove")?s("replyMove"):"bulkup";}
         int userHp(){return data.has("userHp")?n("userHp"):500;}
+        int userSpeed(){return data.has("userSpeed")?n("userSpeed"):300;}
+        int targetSpeed(){return data.has("targetSpeed")?n("targetSpeed"):100;}
         String action(){return b("enemy")?otherMove():s("move");}
         String reply(){return b("enemy")?s("move"):otherMove();}
     }
-    private record Fixture(Case config,ScopedExecution execution,Map<String,Profile> profiles,State state,
+    record Fixture(Case config,ScopedExecution execution,Map<String,Profile> profiles,State state,
                            BattleSnapshot snapshot,PublicMechanics mechanics,OwnRequestTransport owner,
-                           AtomicBoolean current,PublicFieldEvidence fields) {}
-    private static Case shield(){return new Case(JsonParser.parseString("""
+                           AtomicBoolean current,PublicFieldEvidence fields,OwnRequestTransport.Lease lease,
+                           PublicProtocolEvidence protocol,PublicMechanicsEvidence provider,List<String> history) {}
+    static Case shield(){return new Case(JsonParser.parseString("""
         {"id":"declared","move":"psyshock","ability":"runaway","targetAbility":"shadowshield","item":"lifeorb","targetItem":"none",
          "attack":220,"defense":220,"attackStage":0,"defenseStage":0,"level":100,"types":["normal"],"targetTypes":["normal"],
          "status":"none","targetMax":1000,"targetHp":1000,"room":false,"weather":"none","enemy":false}
         """).getAsJsonObject());}
-    private static Case change(Case c,String key,String value){var d=c.data().deepCopy();d.addProperty(key,value);return new Case(d);}
-    private static Case enemy(Case c){var d=c.data().deepCopy();d.addProperty("enemy",true);return new Case(d);}
+    static Case change(Case c,String key,String value){var d=c.data().deepCopy();d.addProperty(key,value);return new Case(d);}
+    static Case enemy(Case c){var d=c.data().deepCopy();d.addProperty("enemy",true);return new Case(d);}
     private static Case aura(){return change(change(change(shield(),"move","drainingkiss"),"ability","technician"),"targetAbility","fairyaura");}
     private static Map<String,Integer> stages(int atk,int def){var s=new TreeMap<String,Integer>();STATS.forEach(k->s.put(k,0));s.put("atk",atk);s.put("spa",atk);s.put("def",def);s.put("spd",def);return s;}
-    private static Fixture fixture(Case c,String missing,Known<Interval> targetHp){
+    static Fixture fixture(Case c,String missing,Known<Interval> targetHp){
         var stats=new HashMap<String,Map<String,Integer>>();var profiles=new HashMap<String,Profile>();
         for(String role:List.of("self","opponent")){
             boolean user=role.equals(c.user());var values=new TreeMap<String,Integer>();
             values.put("atk",user?c.n("attack"):220);values.put("spa",user?c.n("attack"):220);
-            values.put("def",user?220:c.n("defense"));values.put("spd",user?220:c.n("defense"));values.put("spe",user?300:100);
+            values.put("def",user?220:c.n("defense"));values.put("spd",user?220:c.n("defense"));values.put("spe",user?c.userSpeed():c.targetSpeed());
             stats.put(role,values);var bounded=new TreeMap<String,Known<IntRange>>();values.forEach((key,n)->bounded.put(key,known(IntRange.exact(n))));
-            if(missing.equals("attack-stat")&&user)bounded.remove("spa");
+            if(missing.equals("attack-stat")&&user){var move=CobblemonMechanics.move(c.s("move"));bounded.remove(move==null?"spa":move.attackingStat());}
             var max=missing.equals("target-max")&&!user?Known.<IntRange>unknown():known(IntRange.exact(user?1000:c.n("targetMax")));
             if(missing.equals("bounded-target-max")&&!user)max=known(new IntRange(c.n("targetMax")-100,c.n("targetMax")+100));
+            boolean missingTypes=missing.equals("types")||missing.equals("attacker-types")&&user||missing.equals("target-types")&&!user;
             profiles.put(role,new Profile(role,missing.equals("level")&&user?Known.unknown():known(user?c.n("level"):100),max,bounded,
-                    missing.equals("types")?Known.unknown():known(c.types(user?"types":"targetTypes")),YES));
+                    missingTypes?Known.unknown():known(c.types(user?"types":"targetTypes")),YES));
         }
         String ownItem=c.b("enemy")?c.s("targetItem"):c.s("item"),ownAbility=c.b("enemy")?c.s("targetAbility"):c.s("ability");
         var ledger=new OwnRequestTransport();Object battle=new Object(),actor=new Object(),first=new Object(),second=new Object();
@@ -65,20 +69,34 @@ final class ModifierCompositionRegression {
         var lease=ledger.beginChoice(battle,actor,second,active,false,()->true);
         if(!lease.current())throw new AssertionError("Modifier fixture did not issue a real owner receipt");
         String foeItem=c.b("enemy")?c.s("item"):c.s("targetItem"),foeAbility=c.b("enemy")?c.s("ability"):c.s("targetAbility");
-        var events=new StringBuilder("update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L100|100/100\n|switch|p2a: Foe|Mew, L100|100/100\n");
+        var events=new StringBuilder("update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L")
+                .append(ownUser?c.n("level"):100).append("|100/100\n|switch|p2a: Foe|Mew, L")
+                .append(ownUser?100:c.n("level")).append("|100/100\n");
         if(!missing.equals("opponent-item"))events.append(foeItem.equals("none")?"|-enditem|p2a: Foe|Sitrus Berry\n":"|-item|p2a: Foe|"+foeItem+"\n");
         if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|").append(foeAbility).append('\n');
-        events.append("|turn|1\n|turn|2");
+        events.append("|turn|1");
+        if(c.data().has("witnessSetter")&&c.b("witnessSetter")){
+            events.append("\n|move|p2a: Foe|Psychic Terrain|p2a: Foe");
+            if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
+            events.append("\n|-fieldstart|move: Psychic Terrain");
+        }
+        events.append("\n|turn|2");
         if(c.b("room"))events.append("\n|-fieldstart|move: Magic Room");
         if(!c.s("weather").equals("none"))events.append("\n|-weather|").append(c.s("weather"));
-        if(c.data().has("terrain")&&!c.s("terrain").equals("none"))events.append("\n|-fieldstart|move: ").append(c.s("terrain"));
+        if(c.data().has("terrain")&&!c.s("terrain").equals("none")&&!(c.data().has("witnessSetter")&&c.b("witnessSetter")))events.append("\n|-fieldstart|move: ").append(c.s("terrain"));
+        if(c.data().has("terrainMode")&&Set.of("ended","restart").contains(c.s("terrainMode")))events.append("\n|-fieldend|move: Psychic Terrain");
+        if(c.data().has("terrainMode")&&c.s("terrainMode").equals("restart"))events.append("\n|-fieldstart|move: Psychic Terrain");
+        if(missing.equals("gravity"))events.append("\n|-fieldstart|move: Gravity");
+        if(missing.equals("magnet-rise"))events.append("\n|-start|p2a: Foe|Magnet Rise");
+        if(missing.equals("unsupported-terrain"))events.append("\n|-fieldstart|move: Electric Terrain");
         if(missing.equals("suppression"))events.append("\n|-endability|p2a: Foe|Shadow Shield");
         if(missing.equals("ambiguous"))events.append("\n|replace|p2a: Foe|Zoroark, L100");
         if(missing.equals("protect"))events.append("\n|-singleturn|").append(c.b("enemy")?"p1a: Own":"p2a: Foe").append("|Protect");
-        var protocol=new PublicProtocolEvidence();protocol.update(List.of(events.toString()));
+        var history=new ArrayList<>(List.of(events.toString()));
+        var protocol=new PublicProtocolEvidence();protocol.update(history);
         var provider=new PublicMechanicsEvidence(id->null);provider.update(protocol);
         var fields=new PublicFieldEvidence();var field=fields.update(protocol,provider);var current=new AtomicBoolean(true);
-        var scopes=ExecutionCoverage.Scopes.receipt(op->missing.equals("damage-scope")&&op==ExecutionCoverage.Operation.DAMAGE?Known.unknown():YES,current::get);
+        var scopes=ExecutionCoverage.Scopes.receipt(op->missing.equals(op.name().toLowerCase(Locale.ROOT)+"-scope")?Known.unknown():YES,current::get);
         var foe=provider.observation("p2a");
         var execution=new ScopedExecution(field,Map.of(
                 "self",new ScopedExecution.Binding(provider.observation("p1a"),missing.equals("own-item")?Known.unknown():known(ownItem),
@@ -92,17 +110,17 @@ final class ModifierCompositionRegression {
         var context=new PublicTransitionState.Context(selfHp,foeHp,c.b("enemy")?healthy:status,c.b("enemy")?status:healthy,hazards,hazards,Map.of(),Map.of(),Set.of());
         var mechanics=new PublicMechanics(Map.of(),foeFacts.knownBoosts(),Set.of(),false,false,false,0,new Evidence(context,Map.of(),Map.of()));
         var state=PublicStateSearchAdapter.project(snapshot,mechanics).states().get("root");
-        return new Fixture(c,execution,Map.copyOf(profiles),state,snapshot,mechanics,ledger,current,fields);
+        return new Fixture(c,execution,Map.copyOf(profiles),state,snapshot,mechanics,ledger,current,fields,lease,protocol,provider,history);
     }
     private static BattleSnapshot.Combatant facts(Known<Interval> hp,List<String> types,Map<String,Integer> stages,List<String> moves){
         return new BattleSnapshot.Combatant("Mew",hp.known()&&hp.value().low()==hp.value().high()?hp.value().low():BattleSnapshot.UNKNOWN_HP_FRACTION,types,stages,moves,null,null,false);
     }
-    private static Fixture fixture(Case c,String missing){double hp=c.n("targetHp")/(double)c.n("targetMax");return fixture(c,missing,known(new Interval(hp,hp)));}
+    static Fixture fixture(Case c,String missing){double hp=c.n("targetHp")/(double)c.n("targetMax");return fixture(c,missing,known(new Interval(hp,hp)));}
     private static Actor user(Fixture f){return f.config().b("enemy")?f.state().opponent():f.state().self();}
     private static Actor target(Fixture f){return f.config().b("enemy")?f.state().self():f.state().opponent();}
-    private static Damage damage(Fixture f,Critical critical){return f.execution().damage(f.config().s("move"),f.profiles().get(f.config().user()),user(f),f.profiles().get(f.config().target()),target(f),critical);}
-    private static ExecutionCoverage.Certificate coverage(Fixture f){return f.execution().damageCoverage(f.config().s("move"),f.profiles().get(f.config().user()),user(f),f.profiles().get(f.config().target()),target(f));}
-    private static ShadowMechanicsEvaluation.Ranking evaluate(Fixture f){
+    static Damage damage(Fixture f,Critical critical){return f.execution().damage(f.config().s("move"),f.profiles().get(f.config().user()),user(f),f.profiles().get(f.config().target()),target(f),critical);}
+    static ExecutionCoverage.Certificate coverage(Fixture f){return f.execution().damageCoverage(f.config().s("move"),f.profiles().get(f.config().user()),user(f),f.profiles().get(f.config().target()),target(f));}
+    static ShadowMechanicsEvaluation.Ranking evaluate(Fixture f){
         String action="move:"+f.config().action();var plan=new ShadowMechanicsEvaluation.Plan(action,List.of(List.of(new ShadowMechanicsEvaluation.Turn(action,f.config().reply(),null))),SOURCE);
         return ShadowMechanicsEvaluation.compare(f.snapshot(),f.mechanics(),f.profiles(),List.of(plan),known(false),Critical.BOTH,action,f.execution()).rankings().getFirst();
     }
@@ -128,7 +146,7 @@ final class ModifierCompositionRegression {
         for(String item:List.of("expertbelt","choiceband"))check(!damage(fixture(change(shield(),"item",item),""),Critical.BOTH).fraction().known(),"Unsupported item silently certified: "+item);
         check(!damage(fixture(change(shield(),"move","shadowball"),""),Critical.BOTH).fraction().known(),"Unsupported move gained composition coverage");
         var terrain=change(shield(),"terrain","psychicterrain");
-        check(!damage(fixture(terrain,""),Critical.BOTH).fraction().known(),"Unmodeled grounded Psychic Terrain boost became known");
+        check(damage(fixture(terrain,""),Critical.BOTH).points().known(),"Source-proven grounded Psychic Terrain boost lost coverage");
         check(damage(fixture(change(terrain,"ability","levitate"),""),Critical.BOTH).points().known(),"Source-proven Levitate terrain exception lost coverage");
         var stopped=damage(fixture(terrain,"protect"),Critical.BOTH);
         check(stopped.fraction().known()&&stopped.fraction().value().high()==0,"Proven Protect required an irrelevant terrain boost");
@@ -145,10 +163,6 @@ final class ModifierCompositionRegression {
                 for(var sample:row.getAsJsonArray("values")){var draw=sample.getAsJsonObject();boolean crit=draw.get("crit").getAsBoolean();
                     if(critical==Critical.BOTH||crit==(critical==Critical.CRITICAL))values.add(draw.get("damage").getAsInt());}
                 int low=Collections.min(values),high=Collections.max(values);var actual=damage(f,critical);
-                if(c.s("id").equals("psychic-terrain-grounded")){
-                    check(!actual.fraction().known()&&actual.unknown().contains("PSYCHIC_TERRAIN_DAMAGE_BOOST_OUTSIDE_SLICE"),"Unmodeled native terrain boost became known");
-                    continue;
-                }
                 check(actual.fraction().known(),"Native composition became UNKNOWN: "+c.s("id")+" "+actual.unknown());
                 if(high==0)check(actual.fraction().value().equals(new Interval(0,0)),"Immunity ran composed damage");
                 else check(actual.points().known()&&actual.points().value().equals(new IntRange(low,high)),"Native composition extrema differ: "+c.s("id")+" enemy="+c.b("enemy")+" "+critical+" "+actual+" native="+values);
@@ -160,7 +174,7 @@ final class ModifierCompositionRegression {
         for(var value:exchanges){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var result=evaluate(fixture(c,""));
             check(result.utility().known()&&result.lines().stream().anyMatch(line->matches(line,row)),"Composed queued native exchange excluded: "+c.s("id")+" enemy="+c.b("enemy")+" "+result+" / "+row);
         }
-        System.out.println("Modifier composition native differential PASS: 66 configurations, 2112 critical/roll outcomes, 8 queued exchanges; exact supported extrema and grounded-terrain abstention for both roles");
+        System.out.println("Modifier composition native differential PASS: 66 configurations, 2112 critical/roll outcomes, 8 queued exchanges; exact supported extrema including grounded Psychic Terrain for both roles");
     }
     private static boolean matches(ShadowMechanicsEvaluation.Line line,JsonObject row){
         double utility=row.get("utility").getAsDouble();if(utility<line.utility().value().low()-1e-10||utility>line.utility().value().high()+1e-10)return false;

@@ -147,15 +147,6 @@ public final class ScopedExecution {
             boolean blocked = active != null && active.volatiles().contains("protect")
                     || target.types().known() && effectiveness(m.type(), target.types().value()) == Integer.MIN_VALUE;
             if (!blocked) {
-                // Priority blocking is modeled separately. The terrain's
-                // offensive Psychic boost is not part of this modifier slice.
-                // A source-certified airborne attacker receives no such boost.
-                if(m.type().equals("psychic")&&field.terrain().known()&&field.terrain().value().equals("psychicterrain")) {
-                    var user=actors.get(a.id());
-                    boolean airborne=attacker.types().known()&&attacker.types().value().contains("flying")
-                            ||user!=null&&user.ability().known()&&user.ability().value().equals("levitate");
-                    c.need("PSYCHIC_TERRAIN_DAMAGE_BOOST_OUTSIDE_SLICE",airborne);
-                }
                 String atk = m.attackingStat(), def = m.defendingStat();
                 c.need(a.id() + ":LEVEL", attacker.level().known());
                 c.need(a.id() + ":" + atk, attacker.stat(atk).known() && a.stages().containsKey(atk));
@@ -167,7 +158,7 @@ public final class ScopedExecution {
                     // Certify the full supported critical domain, refusing zero-stat
                     // and engine-wrap domains before issuing a usable certificate.
                     var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
-                            Critical.BOTH,n,d,sourcePowerModifier(m,a.id(),t.id()),4096,
+                            Critical.BOTH,n,d,sourcePowerModifier(m,attacker,t.id()),4096,
                             finalDamageModifier(a.id(),t.id(),t),4096);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
@@ -234,7 +225,8 @@ public final class ScopedExecution {
         return new Profile(raw.actor(), raw.level(), raw.maxHp(), raw.stats(), raw.types(),
                 supported(raw.actor(), reserve) ? Known.of(true, field.token() + ":limited-conditional-scope") : Known.unknown());
     }
-    private int sourcePowerModifier(Move move,String a,String t) {
+    private int sourcePowerModifier(Move move,Profile attacker,String t) {
+        String a=attacker.actor();
         int modifier=4096;
         // Native BasePower priority 30: Technician tests power before Fairy
         // Aura's priority-20 contribution. This slice has no earlier BP hooks.
@@ -243,6 +235,10 @@ public final class ScopedExecution {
         // Aura is one field contribution even when both active actors have it.
         if(move.type().equals("fairy")&&(ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
             modifier=chainModifier(modifier,5448);
+        // Priority 6: Psychic Terrain modifies grounded ATTACKER base power,
+        // after the supported ability hooks and before the damage formula.
+        if(move.type().equals("psychic")&&field.terrain().value().equals("psychicterrain")&&grounded(attacker))
+            modifier=chainModifier(modifier,5325);
         return modifier;
     }
     private int finalDamageModifier(String a,String t,Actor target) {
@@ -272,7 +268,14 @@ public final class ScopedExecution {
         if (!role.equals(profile.actor())) throw new IllegalArgumentException("groundedness profile belongs to another actor");
         var c = new Check(Operation.ENTRY); c.actor(role, reserve);
         if (!c.finish().supported() || !profile.types().known()) return Known.unknown();
-        return Known.of(!profile.types().value().contains("flying") && !ability(role).equals("levitate"), field.token());
+        return Known.of(grounded(profile), field.token());
+    }
+    /** Caller must first certify its operation, current types and actor effects.
+     * Unsupported grounding items, Gravity, volatiles and ability suppression
+     * fail those gates; they are never reduced to this ordinary two-rule slice.
+     */
+    private boolean grounded(Profile profile) {
+        return !profile.types().value().contains("flying")&&!ability(profile.actor()).equals("levitate");
     }
     public Damage damage(String moveId, Profile attacker, Actor a, Profile target, Actor t, Critical critical) {
         bound(attacker, a); bound(target, t);
@@ -281,12 +284,10 @@ public final class ScopedExecution {
         Move m = move(moveId); if (m == null || m.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
         var targetActive = active(t.id());
         if (targetActive != null && targetActive.volatiles().contains("protect")) return zero("public Protect");
-        if (field.terrain().value().equals("psychicterrain") && effectivePriority(moveId, a.id()) > .1) {
-            var grounded = target.types().known() ? Known.of(!target.types().value().contains("flying")
-                    && !ability(t.id()).equals("levitate"), field.token()) : Known.<Boolean>unknown();
-            if (!grounded.known()) return Damage.unknown("TERRAIN_GROUNDEDNESS_UNKNOWN");
-            if (grounded.value()) return zero("public Psychic Terrain priority block");
-        }
+        // Native TryHit tests the move's priority, not its fractional queue
+        // ordering, and tests the TARGET's grounding independently of boost.
+        if(field.terrain().value().equals("psychicterrain")&&movePriority(moveId,a.id())>.1&&grounded(target))
+            return zero("public Psychic Terrain priority block");
         int n = 1, d = 1;
         if (m.type().equals("fire")) {
             if (field.weather().value().equals("sunnyday")) { n = 3; d = 2; }
@@ -295,7 +296,7 @@ public final class ScopedExecution {
         // Technician modifies base power before the level/stat formula. Never
         // multiply a final damage interval; the engine rounds at each stage.
         return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
-                n,d,sourcePowerModifier(m,a.id(),t.id()),4096,finalDamageModifier(a.id(),t.id(),t),4096);
+                n,d,sourcePowerModifier(m,attacker,t.id()),4096,finalDamageModifier(a.id(),t.id(),t),4096);
     }
     private static Damage zero(String why) {
         return new Damage(Known.unknown(), Known.of(new Interval(0, 0), PublicFieldEvidence.SOURCE + ":" + why), Set.of(), PublicFieldEvidence.SOURCE);
@@ -308,9 +309,13 @@ public final class ScopedExecution {
         var coverage = priorityCoverage(moveId, role);
         return coverage.supported() ? Known.of(effectivePriority(moveId, role), coverage.source()) : Known.unknown();
     }
-    private double effectivePriority(String id, String role) {
-        Move m = move(id); double p = m.priority();
+    private int movePriority(String id,String role) {
+        Move m=move(id);int p=m.priority();
         if (m.power() == 0 && ability(role).equals("prankster")) p++;
+        return p;
+    }
+    private double effectivePriority(String id, String role) {
+        double p=movePriority(id,role);
         if (ability(role).equals("stall") || item(role).equals("laggingtail")) p -= .1;
         return p;
     }
