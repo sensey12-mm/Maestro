@@ -247,8 +247,7 @@ final class PublicSignedCustodyRegression {
         reject(()->PublicSignedCustody.verifySuccessor(verified,
                 sign("reviewer-a",alice,secondLedger,T5,ZERO),
                 policy(1,3,"",keyA),T6));
-        var tamperedPrefix=ledger(b,a); // Invalid chronology intentionally rejected.
-        check(tamperedPrefix!=null);
+        reject(()->ledger(b,a)); // An invalid reversed history must fail.
         // Replaying the old manifest fails against a trusted higher revision.
         reject(()->PublicSignedCustody.verify(envelope,policy(1,3,"",keyA),T6));
 
