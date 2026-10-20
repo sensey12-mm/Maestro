@@ -386,6 +386,7 @@ public final class StandaloneRegression {
         reject(() -> new ShadowSearchEngine.Branch("move", "attack", List.of(
                 new ShadowSearchEngine.Outcome("synthetic", .5, 1, 0, "leaf"))));
         PublicReplayCorpusRegression.run();
+        CompetitiveFormatNormalizerRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
