@@ -29,7 +29,18 @@ public final class PublicHeldOutEvaluation {
             if (evaluated < 0 || candidateHits < 0 || baselineHits < 0
                     || candidateHits > evaluated || baselineHits > evaluated
                     || baseline == null || interpretation == null) throw invalid();
-            if (evaluated < 20 && (observedCandidateRate != null || observedBaselineRate != null))
+            boolean enough = evaluated >= 20;
+            if (!Set.of("FIRST_OBSERVED_NATIVE_MOVE","ALWAYS_MOVE").contains(baseline)
+                    || !interpretation.equals(enough ? "EMPIRICAL_ONLY_NOT_CALIBRATED"
+                    : "INSUFFICIENT_HORIZONS"))
+                throw invalid();
+            if (!enough && (observedCandidateRate != null || observedBaselineRate != null))
+                throw invalid();
+            if (enough && (observedCandidateRate == null || observedBaselineRate == null
+                    || !Double.isFinite(observedCandidateRate)
+                    || !Double.isFinite(observedBaselineRate)
+                    || Math.abs(observedCandidateRate - (double) candidateHits / evaluated) > 1e-12
+                    || Math.abs(observedBaselineRate - (double) baselineHits / evaluated) > 1e-12))
                 throw invalid();
         }
         static Metric of(int n, int candidate, int baseline, String label) {
@@ -57,7 +68,10 @@ public final class PublicHeldOutEvaluation {
         public Report {
             if (splitSha256 == null || !splitSha256.matches("[0-9a-f]{64}")
                     || sourceScope == null || trainReplays < 1 || heldOutReplays < 1
-                    || training == null || heldOut == null || replayOverlapDetected
+                    || training == null || heldOut == null
+                    || !(sourceScope.equals(CobblemonMechanics.SOURCE)
+                    || sourceScope.equals("OUTSIDE_PINNED_SOURCE_SCOPE"))
+                    || replayOverlapDetected
                     || crossReplayIdentityInferred || trainedParametersShared
                     || forecastProbabilityClaimed) throw invalid();
         }
