@@ -32,6 +32,7 @@ public final class PublicFormBuildReconciliation {
         SOURCE_LISTED_NONLEGAL_QUERY_ONLY,
         SOURCE_LISTED_NORMAL_ABILITY,
         SOURCE_LISTED_HIDDEN_ABILITY,
+        SOURCE_LISTED_NORMAL_AND_HIDDEN_ABILITY,
         SOURCE_NOT_LISTED,
         PUBLIC_EVENT_SOURCE_DISAGREEMENT,
         ABSTAIN_INCOMPLETE_SOURCE,
@@ -197,7 +198,8 @@ public final class PublicFormBuildReconciliation {
                     boolean normal=resolution.source().normalAbilities().contains(item.id());
                     boolean hidden=resolution.source().hiddenAbilities().contains(item.id());
                     if(normal && hidden) {
-                        finding=Finding.ABSTAIN_INCOMPLETE_SOURCE;
+                        listed=true;
+                        finding=Finding.SOURCE_LISTED_NORMAL_AND_HIDDEN_ABILITY;
                     } else if(normal) {
                         listed=true; finding=Finding.SOURCE_LISTED_NORMAL_ABILITY;
                     } else if(hidden) {
