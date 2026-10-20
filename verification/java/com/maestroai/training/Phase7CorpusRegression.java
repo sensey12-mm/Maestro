@@ -238,7 +238,7 @@ public final class Phase7CorpusRegression {
                         Phase7Corpus.writeLocalReport(root,"phase7_link.json",first);
                         throw new AssertionError("symlink report destination allowed");
                     } catch(java.io.IOException expected) { checks++; }
-                } catch(UnsupportedOperationException | java.nio.file.FileSystemException unsupported) {
+                } catch(UnsupportedOperationException | java.nio.file.FileSystemException unavailableFs) {
                     // Some test filesystems disallow symlinks; not a failure.
                 }
             } finally {
