@@ -393,6 +393,7 @@ public final class StandaloneRegression {
         Phase7RegressionGateRegression.run();
         Phase7StratifiedAuditRegression.run();
         Phase7ShadowReplayRegression.run();
+        Phase7SelfPlayRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();

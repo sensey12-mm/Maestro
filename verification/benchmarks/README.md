@@ -506,3 +506,82 @@ mismatch and privacy-safe output. Duplicate public-state identities
 remain forbidden by Phase 7.6. There is **no real Legacy capture
 approval or Minecraft test**, and Shadow remains **offline-only**.
 Do not use these results as real win-rate or simulator validation.
+
+## Phase 7.10 — evidence-gated observational simulation and bounded self-play
+
+`Phase7SelfPlay` is a **verification-only, offline dual-agent harness**
+which reuses the real bounded `ShadowSearchEngine` and version-pinned
+`Phase7ShadowReplay.PinnedPolicy` for **each** simulated participant.
+It is NOT a predictive Cobblemon simulator and contains no damage formula,
+field-effect model, hidden-opponent inference or simulated win-rate estimator.
+
+The harness only follows **separately reviewed, cryptographically signed,
+public-observation transitions**. Each party supplies its own version-pinned,
+public-projected `Phase7Benchmark.Scenario` and legal action universe:
+the two Shadow policies never receive each other's hidden request payload.
+Every transition fixes both selected legal actions, originating state,
+successor state, digest of a reviewed public event and an explicit
+`PUBLIC_OBSERVED_TRANSITION` versus `UNSUPPORTED_MECHANICS` outcome.
+The entire sorted graph binds each state's public-state fingerprints and
+all transition edges; a duplicate joint action, terminal-state continuation,
+unsupported/unverifiable public snapshot, illegal action, stale/skip-turn
+successor or changed model hash cannot silently advance the replay.
+
+### Independent mechanical evidence, not self-attested fixtures
+
+`Phase7SelfPlay.transitionsSha256(transitionGraph,firstScenarios,secondScenarios)`
+builds a canonical graph fingerprint. An **independently authorized
+reviewer** must audit the public observations and mechanics before signing
+`Phase7SelfPlay.signaturePayload(graphSha)` with Ed25519. The verifier
+public-key SPKI DER digest must be obtained via an **independent trust
+channel**; the `replay(...,attestation,externallyPinnedReviewerKeySha256)`
+API requires this value **separately**, not from the untrusted attestation
+object. An arbitrary self-generated key in the bundle does not establish
+trust. Genuine public mechanics verification is NOT supplied by this
+repository: there is currently no integrated Phase 4 verified transition
+model. Consequently, signed synthetic fixtures are **not** real evidence
+and no real turn-transition coverage is claimed.
+
+The policy `phase7.10.policy.v1` pins the entire transition graph,
+both public scenario manifests, both independently pinned Shadow policies,
+installed artifact SHA, seed, maximum own-turn decisions and node-search
+budget. Create using `define`, write once to ignored
+`run/phase7-corpus/selfplay/phase7_<revision>.json`, obtain exact-file
+SHA from a separate trusted channel and `load` with that pin. Unsupported
+versions/fields, duplicates, unsafe local paths, symlinks, seed/model/build
+drift and attempts to overwrite a revision fail closed.
+
+For **each** signed public state, both Shadow agents independently run
+deterministic, complete legal-action search twice. The harness chooses
+only the uniquely attested joint-action transition and checks both
+signed public continuations before advancing. A missing own branch is
+`INCOMPLETE_TRANSITION_MODEL`; a missing opponent-response combination is
+`UNKNOWN_OPPONENT_RESPONSE`; unknown mechanics,
+partial search, illegal actions, changed outcomes, unverified signer,
+non-monotonic turns and looped/unsupported observations explicitly abstain.
+No fallback transition or invented opponent behavior is permitted.
+Reaching an explicitly certified terminal means only the end of a
+reviewed *transcript*, **not a battle victory**. Reaching the configured
+turn limit is `HORIZON_REACHED`, never treated as a win.
+
+Reports are deterministic, bounded `phase7.10.v1` JSON with fixed status,
+public-model/policy/reviewer fingerprints, verified-step/attempt coverage,
+missing and unsupported transition counts and optional fixed-category
+step reasons. Traces for fewer than three attempts are suppressed. Nothing
+exports capture IDs, actor identifiers, action IDs, Pokémon information,
+raw events or private file paths. Graph and report IDs are content hashes
+of independently public-projected metadata; no private raw history is
+included. No live battle controller invokes the harness; verification
+classes do not ship in the mod JAR.
+
+The synthetic regression suite constructs two separately pinned Shadow
+search policies, four turn-indexed public-only scenarios per participant,
+a three-turn observed transition chain and a temporary test-only Ed25519
+reviewer. It checks stable canonical hashing, deterministic replay, full
+legal-action coverage, both sides' legality, public-turn continuity,
+missing or ambiguous responses, unsupported effects, forged reviewers,
+unsigned evidence, changed graphs, incomplete search, horizon exhaustion,
+small-cohort suppression, immutable/tampered local policies, wrong
+artifact/seed and symlink rejection. **This is only synthetic source-level
+validation. Minecraft testing is still required after trusted mechanics
+and Phases 4–6 are integrated. No additional battles are requested.**
