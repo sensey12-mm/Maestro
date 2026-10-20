@@ -387,6 +387,7 @@ public final class StandaloneRegression {
                 new ShadowSearchEngine.Outcome("synthetic", .5, 1, 0, "leaf"))));
         PublicReplayCorpusRegression.run();
         CompetitiveFormatNormalizerRegression.run();
+        PublicCompetitiveTendenciesRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
