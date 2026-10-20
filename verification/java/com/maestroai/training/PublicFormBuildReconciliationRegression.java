@@ -167,7 +167,7 @@ final class PublicFormBuildReconciliationRegression {
         check(find(h,MOVE,"happyhour").listedMethods().stream().allMatch(x->
                 !x.legalQueryMember() && x.name().equals("special")));
         check(find(h,ABILITY,"illusion").finding()
-                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_ABILITY);
+                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_AND_HIDDEN_ABILITY);
         check(find(h,ABILITY,"imposter").finding()==ABSENT);
         check(find(h,ITEM,"leftovers").finding()
                 ==PublicFormBuildReconciliation.Finding.ITEM_LEGALITY_UNKNOWN);
@@ -220,7 +220,7 @@ final class PublicFormBuildReconciliationRegression {
                 x.name().equals("level") && x.legalQueryMember()));
         check(find(m,MOVE,"swift").finding()==LISTED);
         check(find(m,ABILITY,"insomnia").finding()
-                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_ABILITY);
+                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_AND_HIDDEN_ABILITY);
         check(find(m,ABILITY,"pressure").finding()==ABSENT);
         check(find(m,ABILITY,"unnerve").finding()==ABSENT);
 
@@ -234,12 +234,12 @@ final class PublicFormBuildReconciliationRegression {
                 PublicFormBuildReconciliation.Field.MOVES))).appearances().get(0);
         check(find(ownOverride,MOVE,"shadowsneak").finding()==OVERRIDDEN);
         check(find(ownOverride,ABILITY,"illusion").finding()
-                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_ABILITY);
+                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_AND_HIDDEN_ABILITY);
         var overriddenMegaBase=mega.run(Set.of(notice("mewtwo",
                 PublicFormBuildReconciliation.Field.MOVES))).appearances().get(0);
         check(find(overriddenMegaBase,MOVE,"psystrike").finding()==OVERRIDDEN);
         check(find(overriddenMegaBase,ABILITY,"insomnia").finding()
-                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_ABILITY);
+                ==PublicFormBuildReconciliation.Finding.SOURCE_LISTED_NORMAL_AND_HIDDEN_ABILITY);
         var ownMega=mega.run(Set.of(notice("mewtwomegay",
                 PublicFormBuildReconciliation.Field.ABILITIES))).appearances().get(0);
         check(find(ownMega,ABILITY,"insomnia").finding()==OVERRIDDEN);
