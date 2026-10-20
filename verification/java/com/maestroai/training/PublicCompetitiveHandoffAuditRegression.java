@@ -111,9 +111,9 @@ final class PublicCompetitiveHandoffAuditRegression {
                 var e=PublicReplayCorpus.ingest(replay.source(),replay.spectatorLog());
                 decisions.add(new PublicReplayCustody.Decision(e.replayId(),e.format(),
                         e.inputSha256(),PublicReplayCustody.Status.APPROVED,
-                        NOW-100,NOW+1000,"c".repeat(64)));
+                        NOW-100+decisions.size(),NOW+1000,"c".repeat(64)));
             }
-            var ledger=new PublicReplayCustody.Ledger(1,1,decisions);
+            var ledger=new PublicReplayCustody.Ledger(1,decisions.size(),decisions);
             var kp=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
             var signing=Signature.getInstance("Ed25519");
             signing.initSign(kp.getPrivate());
@@ -125,7 +125,7 @@ final class PublicCompetitiveHandoffAuditRegression {
             var publicKey=new PublicSignedCustody.TrustedKey("phase520-test",
                     Base64.getEncoder().encodeToString(kp.getPublic().getEncoded()),
                     NOW-1000,0);
-            var trusted=new PublicSignedCustody.TrustedPolicy(1,1,1,NOW-1000,
+            var trusted=new PublicSignedCustody.TrustedPolicy(1,1,3,NOW-1000,
                     "",List.of(publicKey));
             var candidates=List.of(
                 sourceMove(2,"ditto","transform"),
