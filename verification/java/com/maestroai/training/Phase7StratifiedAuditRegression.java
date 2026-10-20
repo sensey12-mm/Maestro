@@ -204,8 +204,15 @@ public final class Phase7StratifiedAuditRegression {
                     ==Phase7StratifiedAudit.GroupStatus.PASS,
                     "pinpoints the affected action group");
             var reversed=new ArrayList<>(rows);Collections.reverse(reversed);
-            check(compare(installed,baseline,report(reversed,statuses(rows.size()))).json()
-                    .equals(stratified.json()),"input row permutation yields identical report");
+            var permuted=compare(installed,baseline,
+                    report(reversed,statuses(rows.size())));
+            check(permuted.status()==stratified.status()
+                    && permuted.groups().equals(stratified.groups())
+                    && permuted.evaluatedMixDriftBasisPoints()==stratified.evaluatedMixDriftBasisPoints(),
+                    "input row permutation yields identical grouped findings");
+            check(!permuted.candidateReportSha256().equals(
+                    stratified.candidateReportSha256()),
+                    "exact-byte evidence fingerprints preserve source row order");
 
             // Move's abstention goes down while Switch's goes up: aggregate
             // abstentions and agreements are constant, but switch coverage drops.
