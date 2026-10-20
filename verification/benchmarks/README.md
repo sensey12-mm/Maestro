@@ -191,3 +191,76 @@ private originals; both require an owner-approved trusted process.
 The tests use synthetic receipts and an explicitly synthetic independent
 reviewer stub. **No real Legacy decisions were imported or tested in
 Minecraft.** No new battles are required for this development batch.
+
+## Phase 7.5 — detached-signature trusted local intake
+
+The verification-only Java API `Phase7TrustedIntake.evaluateLocal(...)` reads
+privately held capture bundles solely from ignored
+`run/phase7-corpus/private-input/<bundle-id>/`, then delegates fully reviewed
+input to Phase 7.4. No upload, network call, server requirement, public file
+creation, runtime policy change or data export is performed.
+
+### Local layout
+
+Under the repository root, all of the following are local and Git-ignored:
+
+```text
+run/phase7-corpus/
+  trust/independent_review.pub      # base64 SPKI DER Ed25519 PUBLIC key only
+  private-input/bundle001/
+    manifest.json                   # signed exact-byte manifest
+    custody.json                    # detached Ed25519 custody approval
+    checkpoint-01.json             # {"chunks":["update\\n|turn|1", ...]}
+    checkpoint-02.json             # later COMPLETE append-only history
+```
+
+`manifest.json` requires exactly these fields:
+
+- `schema`: `phase7.5.v1`
+- `scenarioId`, `scenarioFingerprint`: externally supplied scenario binding
+- `captureId`, `battleId`, `turn`, `action`: actual Legacy return identity and own action
+- `artifactSha256`, `ownRequestSha256`, `publicSha256`: source-bound receipt values
+- `rawHistorySha256`, `choiceReceiptSha256`: hashes defined by `Phase7LegacyImport`
+- `checkpoints`: ordered objects `{"file":"checkpoint-01.json","sha256":"..."}`
+  referring to SHA-256 of the *exact UTF-8 JSON bytes* of each checkpoint.
+
+Each checkpoint is an object with exactly a `chunks` array of raw history
+chunks. It is PRIVATE input and must not be committed or included in reports.
+The final checkpoint must be byte-for-byte equivalent as an array to the raw
+history used by Phase 7.2, and previous checkpoints must be complete
+append-only prefixes.
+
+`custody.json` contains exactly `schema` = `phase7.5.custody.v1`,
+`keyId`, `manifestSha256`, and `signature` (base64 64-byte Ed25519
+signature). The custodian signs the UTF-8 bytes produced by
+`Phase7TrustedIntake.signaturePayload(manifestSha256)`, which are
+`MaestroAI-Phase7.5-Custody-v1\\n` + the lowercase exact-byte manifest
+SHA-256 + `\\n`. **Only an independently authorized custodian who
+actually reviewed the original Legacy return, battle actor, own request,
+artifact and capture chronology should sign.** Do not distribute a signing
+private key or put a private key in the repo.
+
+Call the API with the *separately obtained trusted SHA-256 of the SPKI DER
+public key*, a trusted scenario map, approved bundle IDs, fixed seed and
+optional OFFLINE Shadow callback. A public key bundled alongside a capture
+is never trusted, and a signature by an arbitrary key does not suffice.
+Signing a statement proves the configured custodian attested it, **not that
+an unreviewed runtime receipt is genuine**. Changing a checkpoint, scenario,
+action, public hash or manifest invalidates its binding. All signed inputs
+still pass Phase 7.4 replay and Phase 7.2 independent provenance gates.
+
+The API returns deterministic, sanitized JSON with fixed intake rejections,
+verified bundle counts, Phase 7.4 duplicate/replay/custody coverage and
+Legacy-vs-baseline/Shadow *action-agreement* only. Raw histories, UUIDs,
+capture IDs, nicknames, private requests, keys, file paths and exception
+payloads are excluded. Input count is bounded to 100; checkpoint sizes
+and JSON keys are tightly validated; traversal and symlinks are rejected.
+Private keys and original evidence must stay under the owner's separately
+controlled custody. The trust and input directories are intentionally
+ignored by the Git repository.
+
+The synthetic regression harness creates a temporary Ed25519 key and
+bundle, signs synthetic manifest bytes **in memory for tests only**, and
+checks tampering, forgery, unknown schemas, replay gaps, duplicate capture
+events, symlinks and no-review failures. **No real Legacy captures have
+been approved or Minecraft-tested.**
