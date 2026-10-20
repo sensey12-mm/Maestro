@@ -634,7 +634,11 @@ A pinned, explicit `Gate` requires minimum overall and per-group
 reviewed evidence; zero group minima mark a group optional but never
 excuse a missing record for a transition that actually exists.
 Any unknown/unsupported effect prevents offline eligibility regardless
-of configured tolerance. Missing, duplicate, stale, source-mismatched
+of configured tolerance. The auditor additionally rejects *every* illegal
+action on both sides and every edge whose existing Phase 7.10 mechanic
+marker says UNSUPPORTED, even when that branch is never selected and a
+reviewer's record incorrectly claims it is REVIEWED_PUBLIC.
+Missing, duplicate, stale, source-mismatched
 or miscategorized records fail closed; no inferred opponent responses
 or hidden information can substitute for absent public evidence.
 

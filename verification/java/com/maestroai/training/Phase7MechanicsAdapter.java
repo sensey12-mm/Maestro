@@ -32,7 +32,7 @@ public final class Phase7MechanicsAdapter {
     public enum Status {
         ELIGIBLE_OFFLINE_ONLY, SYNTHETIC_NOT_VERIFIED, UNTRUSTED_REVIEWER,
         INVALID_SIGNATURE, UNBOUND_SOURCE, POLICY_MISMATCH, VERSION_INCOMPATIBLE,
-        TRANSITION_DRIFT, DUPLICATE_RECORD, MISSING_EVIDENCE,
+        TRANSITION_DRIFT, DUPLICATE_RECORD, MISSING_EVIDENCE, ILLEGAL_ACTION,
         UNKNOWN_MECHANICS, UNSUPPORTED_MECHANICS, COVERAGE_INSUFFICIENT,
         REGRESSION, SOURCE_DRIFT
     }
@@ -419,7 +419,8 @@ public final class Phase7MechanicsAdapter {
             if(lookup.putIfAbsent(r.edgeSha256(),r)!=null)repeated.add(r.edgeSha256());
         }
         if(status==null && !repeated.isEmpty())status=Status.DUPLICATE_RECORD;
-        // Bounded summary always depends on the actual original transition set.
+        boolean illegal=false;
+        // Validate every public edge, including branches Shadow will not select.
         for(var edge:transitions.edges()){
             Group group=group(edge);
             int[] v=counters.get(group);v[0]++;
@@ -428,6 +429,17 @@ public final class Phase7MechanicsAdapter {
             if(evidence==null){v[4]++;continue;}
             if(repeated.contains(key))v[5]++;
             if(evidence.group()!=group){v[4]++;continue;}
+            var origin=transitions.nodes().get(edge.source());
+            var first=firstPublic.get(origin.firstScenario()).snapshot();
+            var second=secondPublic.get(origin.secondScenario()).snapshot();
+            if(!legal(first,edge.firstAction())||!legal(second,edge.secondAction()))
+                illegal=true;
+            // Explicit unsupported mechanics cannot be overridden by a
+            // signed but mistaken REVIEWED_PUBLIC entry.
+            if(edge.mechanic()!=Phase7SelfPlay.Mechanic.PUBLIC_OBSERVED_TRANSITION){
+                v[3]++;
+                continue;
+            }
             switch(evidence.verdict()){
                 case REVIEWED_PUBLIC -> v[1]++;
                 case UNKNOWN -> v[2]++;
@@ -436,7 +448,8 @@ public final class Phase7MechanicsAdapter {
         }
         Counts overall=totals(counters);
         if(status==null){
-            if(lookup.size()!=transitions.edges().size()
+            if(illegal)status=Status.ILLEGAL_ACTION;
+            else if(lookup.size()!=transitions.edges().size()
                     ||overall.missing()>0||overall.duplicates()>0)
                 status=Status.MISSING_EVIDENCE;
             else if(overall.unsupported()>p.gate().maximumUnsupported())
@@ -551,6 +564,12 @@ public final class Phase7MechanicsAdapter {
         // pinned participants, legal-action menus, turn continuity and budgets.
         return new GatedReplay(before,Phase7SelfPlay.replay(transitions,first,second,
                 selfPlayPolicy,publicTransitionApproval,independentPublicTransitionReviewerSha));
+    }
+    private static boolean legal(BattleSnapshot position,String action){
+        if(action.startsWith("move:"))
+            return position.legalMoves().contains(action.substring(5));
+        return action.startsWith("switch:")
+                &&position.legalSwitches().contains(action.substring(7));
     }
     private static boolean validName(String s){return s!=null&&NAME.matcher(s).matches();}
     private static boolean validSha(String s){return s!=null&&SHA.matcher(s).matches();}

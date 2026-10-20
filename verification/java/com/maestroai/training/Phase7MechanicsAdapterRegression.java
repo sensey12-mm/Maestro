@@ -137,9 +137,7 @@ public final class Phase7MechanicsAdapterRegression {
                  Phase7SelfPlay.Participant a,Phase7SelfPlay.Participant b) {
         try {
             var t=full(original);
-            var sourceReviewer=key();
-            var transitionReviewer=key();
-            var attacker=key();
+            var sourceReviewer=key(),transitionReviewer=key(),attacker=key();
             String reviewerSha=sha(sourceReviewer.getPublic().getEncoded());
             String transitionSha=sha(transitionReviewer.getPublic().getEncoded());
             var base=bundle(t,a.scenarios(),b.scenarios(),"mechanics_base",
@@ -254,6 +252,52 @@ public final class Phase7MechanicsAdapterRegression {
             check(audit(t,a,b,unsupported,sign(unsupported,sourceReviewer),
                     unsupportedPin).status()==Phase7MechanicsAdapter.Status.UNSUPPORTED_MECHANICS,
                     "unsupported transition fails independently of signature validity");
+
+            // Even an UNSLECTED branch cannot smuggle unsupported mechanics
+            // or an unrequestable action through the signed transcript.
+            var modifiedEdges=new ArrayList<>(t.edges());
+            int alternative=-1;
+            for(int i=0;i<modifiedEdges.size();i++)
+                if(modifiedEdges.get(i).firstAction().equals("switch:reserve")
+                        &&modifiedEdges.get(i).secondAction().equals("move:attack"))
+                    alternative=i;
+            check(alternative>=0,"synthetic model contains an unchosen switch/move branch");
+            var alternativeEdge=modifiedEdges.get(alternative);
+            modifiedEdges.set(alternative,new Phase7SelfPlay.Edge(
+                    alternativeEdge.source(),alternativeEdge.firstAction(),
+                    alternativeEdge.secondAction(),alternativeEdge.successor(),
+                    alternativeEdge.publicEventSha256(),
+                    Phase7SelfPlay.Mechanic.UNSUPPORTED_MECHANICS));
+            var unchosenUnsupported=new Phase7SelfPlay.Transitions(t.start(),
+                    t.nodes(),modifiedEdges);
+            var signedUnsupported=bundle(unchosenUnsupported,a.scenarios(),b.scenarios(),
+                    "unchosen_unsupported",base.source(),Map.of());
+            var unchosenPin=install(root,"unchosen_unsupported",signedUnsupported,
+                    reviewerSha,strict);
+            check(audit(unchosenUnsupported,a,b,signedUnsupported,
+                    sign(signedUnsupported,sourceReviewer),unchosenPin).status()
+                    ==Phase7MechanicsAdapter.Status.UNSUPPORTED_MECHANICS,
+                    "unsupported unchosen branch cannot be blessed by mechanics reviewer");
+            check(replay(unchosenUnsupported,a,b,self,publicSignature,transitionSha,
+                    signedUnsupported,sign(signedUnsupported,sourceReviewer),
+                    unchosenPin).observed()==null,
+                    "unsupported unchosen branch blocks all dual-agent replay");
+            var illegalEdges=new ArrayList<>(t.edges());
+            illegalEdges.set(alternative,new Phase7SelfPlay.Edge(
+                    alternativeEdge.source(),"switch:private_unavailable",
+                    alternativeEdge.secondAction(),alternativeEdge.successor(),
+                    alternativeEdge.publicEventSha256(),
+                    Phase7SelfPlay.Mechanic.PUBLIC_OBSERVED_TRANSITION));
+            var illegalTranscript=new Phase7SelfPlay.Transitions(t.start(),t.nodes(),illegalEdges);
+            var signedIllegal=bundle(illegalTranscript,a.scenarios(),b.scenarios(),
+                    "unchosen_illegal",base.source(),Map.of());
+            var illegalPin=install(root,"unchosen_illegal",signedIllegal,reviewerSha,strict);
+            check(audit(illegalTranscript,a,b,signedIllegal,sign(signedIllegal,sourceReviewer),
+                    illegalPin).status()==Phase7MechanicsAdapter.Status.ILLEGAL_ACTION,
+                    "illegally requested unchosen switch invalidates the whole graph");
+            check(replay(illegalTranscript,a,b,self,publicSignature,transitionSha,
+                    signedIllegal,sign(signedIllegal,sourceReviewer),illegalPin).observed()==null,
+                    "illegal unchosen transition cannot initiate self-play");
 
             var fewer=new ArrayList<>(base.entries());
             fewer.removeLast();
