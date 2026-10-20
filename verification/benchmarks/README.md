@@ -264,3 +264,53 @@ bundle, signs synthetic manifest bytes **in memory for tests only**, and
 checks tampering, forgery, unknown schemas, replay gaps, duplicate capture
 events, symlinks and no-review failures. **No real Legacy captures have
 been approved or Minecraft-tested.**
+
+## Phase 7.6 — deterministic, pinned corpus regression gates
+
+`Phase7RegressionGate` extends the **offline verification-only** Phase 7.5
+signed-custody corpus. It compares two independently reviewed, sanitized 7.5
+reports against a **versioned local baseline**. The baseline lives only at
+`run/phase7-corpus/baselines/phase7_<revision>.json` (Git-ignored). There is
+NO approved real Legacy baseline bundled in this public repository.
+
+To establish a baseline after an **independent custody review**, call
+`Phase7RegressionGate.define(revision, reviewedIntakeReport, limits)`, then
+`writeLocal(repositoryRoot, definition)`. The custodian must separately
+pin the exact-file SHA-256 using a trusted channel. Future regression checks
+must use `Phase7RegressionGate.load(repositoryRoot,revision,pinnedSha256)`.
+Never derive the pin from the untrusted file under evaluation. SHA-256 is an
+integrity check, **not a signature or source-authenticity attestation**.
+A newly generated file is *not* automatically a trusted baseline.
+
+Compare using
+`Phase7RegressionGate.compare(pinnedBaseline, referenceReport, candidateReport)`
+where **both reports** come from separately approved Phase 7.5 local
+replays. The reference report's sanitized JSON SHA-256 and fixed seed must
+match the baseline; both reports must have coherent, versioned aggregate
+counts. Only the *same* accepted public-state, public-envelope and Legacy
+action cohort can be compared. A changed public fingerprint, source
+eligibility, accepted-record count, Legacy decision, or ambiguous repeated
+accepted-state identity blocks a passing comparison. Reordered rows do
+not affect the cohort check.
+
+The baseline includes explicit per-batch integer tolerances for minimum
+accepted cases, coverage loss, action-agreement loss, increased Shadow
+abstentions and illegal choices, and increased provenance rejection counts.
+The gate reports actual signed changes to these counts, replay/duplicate/
+unknown evidence changes, and action agreement and provenance rejection
+rates in integer basis points. Undefined rates remain **JSON null**, not
+zero. The status is one of: PASS, BASELINE_MISMATCH, SCHEMA_MISMATCH,
+INVALID_REPORT, INSUFFICIENT_EVIDENCE, COHORT_DRIFT, EVIDENCE_REGRESSION
+or ACTION_REGRESSION. A PASS is *only* a statement about invariant
+evidence quality and observed **decision agreement**, never about
+winning battles, simulator accuracy, or tactical superiority.
+
+All baseline and gate reports are sanitized and contain **no private
+histories, player identifiers, capture IDs or raw event data**. The
+regression harness creates synthetic accepted/rejected reports and pinned
+baselines in a temporary local directory, tests malformed/edited metadata,
+private-data suppression, dropouts, duplicate cohorts, drift, abstention,
+illegal choices, rejection-rate and threshold changes. It does **not**
+authenticate a real custody approval or test in Minecraft. No new battles
+are required for this batch; final integrated evaluation still waits for
+Phases 4–6.
