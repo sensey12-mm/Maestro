@@ -63,6 +63,25 @@ public final class PublicSpeciesBuildLegality {
                          Map<String,Set<String>> learningMethods,
                          Set<String> normalAbilities,Set<String> hiddenAbilities,
                          boolean explicitMoves,boolean explicitAbilities) {}
+    /**
+     * Package-private, read-only source snapshot for the Phase 5.15 reconciler.
+     * It can never import caller-supplied species evidence or bypass the pinned
+     * normalized-resource SHA-256 validation performed by load().
+     */
+    static record SourceRecord(String id,String form,String blob,
+                               Map<String,Set<String>> learningMethods,
+                               Set<String> normalAbilities,Set<String> hiddenAbilities,
+                               boolean explicitMoves,boolean explicitAbilities) {}
+    static SourceRecord sourceRecord(String exactSpeciesOrForm) {
+        Entry entry=BUNDLED.get(exactSpeciesOrForm);
+        return entry==null?null:new SourceRecord(entry.id(),entry.form(),entry.blob(),
+                entry.learningMethods(),entry.normalAbilities(),entry.hiddenAbilities(),
+                entry.explicitMoves(),entry.explicitAbilities());
+    }
+    static boolean sourceSliceIntegrityVerified() {
+        return BUNDLED.keySet().equals(BLOBS.keySet());
+    }
+
     /** Source-confirmed method, NOT proof of player-game teachability. */
     public record Candidate(int appearanceIndex,PublicOpponentBuildHypotheses.Kind kind,
                             String id,Status sourceStatus,Set<String> listedMethods,
