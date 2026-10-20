@@ -176,9 +176,11 @@ public final class PublicHeldOutEvaluation {
             // A complete public replay event contains more than its nickname.
             // Preserve state-relevant move/details/HP/status/effect content, but
             // never actor nicknames or private protocol payloads in this key.
-            if (parts.length > 3)
-                key.append('|').append(parts[3].toLowerCase(Locale.ROOT)
-                        .replaceAll("[^a-z0-9]", ""));
+            if (parts.length > 3) {
+                String targetSlot=slot(parts[3]);
+                key.append('|').append(!targetSlot.isEmpty() ? targetSlot :
+                        parts[3].toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", ""));
+            }
             if (kind.equals("turn") && parts.length > 2)
                 key.append('|').append(parts[2]);
         }
