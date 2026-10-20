@@ -231,6 +231,7 @@ def main():
         subprocess.run(['node', 'verification/source_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/move_attestation_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/blocked_hit_oracle.cjs', folder], check=True)
+        subprocess.run(['node', 'verification/healing_recoil_oracle.cjs', folder], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                         'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
     assets = pack_sources(Path('src/main/resources/com/maestroai/training'))

@@ -72,6 +72,7 @@ public final class SourceVerification {
             engine.eval("js", Files.readString(simulator.resolve("index.js")));
             verifyNativeRecovery(engine);
             BlockedHitRegression.differential(engine);
+            HealingRecoilRegression.differential(engine);
             engine.eval("js", "var verificationStream=new BS.BattleStream(); battleMap.set('synthetic-verification',verificationStream);"
                     + "verificationStream.write('>start '+JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,"
                     + "ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'}}));");

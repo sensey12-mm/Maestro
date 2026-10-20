@@ -335,6 +335,7 @@ public final class StandaloneRegression {
     }
     public static void main(String[] args) {
         BlockedHitRegression.run();
+        HealingRecoilRegression.run();
         ownMechanicsExecutionAudit();
         maestroWholeRosterCoverage();
         calyrexMoveCoverage();

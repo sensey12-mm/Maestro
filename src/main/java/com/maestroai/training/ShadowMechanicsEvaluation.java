@@ -344,17 +344,45 @@ public final class ShadowMechanicsEvaluation {
         // missing or expired proof must never become a zero-damage shortcut.
         // Spectral Thief's pre-hit theft retains its separate ordering guard.
         if (d.high() == 0) return hurt(p, !own, d);
+        boolean recoil=execution!=null&&execution.currentItem(attacker.id()).equals("lifeorb")
+                &&!execution.currentAbility(attacker.id()).equals("magicguard")
+                &&damage.points().known()&&damage.points().value().high()>0;
+        // A possibly absent user/target cannot certify a successful follow-up.
+        if ((moveId.equals("drainingkiss") || recoil) && (possibleFaint(attacker) || possibleFaint(target)))
+            return unknown(p,"HEALING_OR_RECOIL_EXECUTION_SURVIVAL_UNKNOWN");
         if (possibleFaint(attacker)) d = new Interval(0, d.high()); // bound conditional nonexecution without an invented probability
         Progress result=hurt(p,!own,d);
-        if(execution!=null&&execution.currentItem(attacker.id()).equals("lifeorb")
-                &&!execution.currentAbility(attacker.id()).equals("magicguard")
-                &&damage.points().known()&&damage.points().value().high()>0) {
+        if(moveId.equals("drainingkiss")) {
+            Profile me=profiles.get(attacker.id()), them=profiles.get(target.id());
+            if(!me.maxHp().known()||!them.maxHp().known()||!damage.points().known()
+                    ||me.maxHp().value().low()!=me.maxHp().value().high())
+                return unknown(result,"DRAIN_OWN_EXACT_OR_OPPONENT_BOUNDED_HP_UNKNOWN");
+            int ownMax=me.maxHp().value().low();
+            // Opponent max HP is a justified PUBLIC INTERVAL, never an exact
+            // hidden IV/EV leak. Bound actual removed HP on both extremes.
+            int lowerOpponentHp=(int)Math.floor(target.hp().value().low()*them.maxHp().value().low());
+            int upperOpponentHp=(int)Math.ceil(target.hp().value().high()*them.maxHp().value().high());
+            int actualMin=Math.min(damage.points().value().low(),lowerOpponentHp);
+            int actualMax=Math.min(damage.points().value().high(),upperOpponentHp);
+            // Gen9 spreadDamage uses Math.round(3 * actual HP removed / 4).
+            // Bound actual removed HP, then heal BEFORE AfterMoveSecondarySelf recoil.
+            double healedMin=actualMin==0?0:((3L*actualMin+2)/4)/(double)ownMax;
+            double healedMax=actualMax==0?0:((3L*actualMax+2)/4)/(double)ownMax;
+            result=heal(result,own,new Interval(healedMin,healedMax));
+        }
+        if(recoil) {
             Profile holder=profiles.get(attacker.id());
             if(!holder.maxHp().known()||holder.maxHp().value().low()!=holder.maxHp().value().high())
                 return unknown(result,"LIFE_ORB_BASE_MAX_HP_UNKNOWN");
             int max=holder.maxHp().value().low();
             double chip=Math.max(1,max/10)/(double)max;
             result=hurt(result,own,new Interval(chip,chip));
+            Actor after=own?result.state().self():result.state().opponent();
+            Actor other=own?result.state().opponent():result.state().self();
+            // HP is bounded, but survival-dependent continuations/replacements
+            // are not resolved by this active-pair slice. Never heal a KO back up.
+            if(possibleFaint(after)&&(!zero(after)||!zero(other)))
+                return unknown(result,"POST_RECOIL_CONTINUATION_SURVIVAL_UNKNOWN");
         }
         if(execution!=null&&execution.currentAbility(attacker.id()).equals("asonespectrier")
                 &&(own?result.state().opponent():result.state().self()).hp().value().high()==0) {
@@ -368,23 +396,6 @@ public final class ShadowMechanicsEvaluation {
             if(!own)return unknown(result,"OPPONENT_U_TURN_PARTY_HIDDEN");
             if(d.high()==0)return result; // immunity or Protect prevents pivot
             result=pivotToSoleCertifiedReserve(result,mechanics,sourceLegalSwitches,profiles,execution);
-        }
-        if(moveId.equals("drainingkiss")) {
-            Profile me=profiles.get(attacker.id()), them=profiles.get(target.id());
-            if(!me.maxHp().known()||!them.maxHp().known()||!damage.points().known()
-                    ||me.maxHp().value().low()!=me.maxHp().value().high())
-                return unknown(result,"DRAIN_OWN_EXACT_OR_OPPONENT_BOUNDED_HP_UNKNOWN");
-            int ownMax=me.maxHp().value().low();
-            // Opponent max HP is a justified PUBLIC INTERVAL, never an exact
-            // hidden IV/EV leak. Bound actual removed HP on both extremes.
-            int lowerOpponentHp=(int)Math.floor(target.hp().value().low()*them.maxHp().value().low());
-            int upperOpponentHp=(int)Math.ceil(target.hp().value().high()*them.maxHp().value().high());
-            int actualMin=Math.min(damage.points().value().low(),lowerOpponentHp);
-            int actualMax=Math.min(damage.points().value().high(),upperOpponentHp);
-            // ceil(3 * actual HP removed / 4), bounded by both HP domains.
-            double healedMin=actualMin==0?0:((3L*actualMin+3)/4)/(double)ownMax;
-            double healedMax=actualMax==0?0:((3L*actualMax+3)/4)/(double)ownMax;
-            result=heal(result,own,new Interval(healedMin,healedMax));
         }
         if(moveId.equals("closecombat")) {
             boolean affectedOwn=own;
