@@ -137,7 +137,9 @@ public final class Phase7MechanicsAdapterRegression {
                  Phase7SelfPlay.Participant a,Phase7SelfPlay.Participant b) {
         try {
             var t=full(original);
-            var sourceReviewer=key(),transitionReviewer=key(),attacker=key();
+            var sourceReviewer=key();
+            var transitionReviewer=key();
+            var attacker=key();
             String reviewerSha=sha(sourceReviewer.getPublic().getEncoded());
             String transitionSha=sha(transitionReviewer.getPublic().getEncoded());
             var base=bundle(t,a.scenarios(),b.scenarios(),"mechanics_base",
