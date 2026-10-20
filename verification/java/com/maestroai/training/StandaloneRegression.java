@@ -396,6 +396,7 @@ public final class StandaloneRegression {
         PublicSignedCustodyRegression.run();
         PublicCustodyTrustStoreRegression.run();
         PublicCompetitiveCoverageAuditRegression.run();
+        PublicCompetitiveRobustnessAuditRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
