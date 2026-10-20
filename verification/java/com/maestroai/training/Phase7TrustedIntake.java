@@ -36,7 +36,7 @@ public final class Phase7TrustedIntake {
     public enum Status {
         VERIFIED_FOR_CORPUS, DUPLICATE_INPUT, TRUST_KEY_INVALID, SIGNATURE_INVALID,
         MANIFEST_INVALID, CHECKPOINT_INVALID, SCENARIO_UNAVAILABLE,
-        PATH_UNSAFE, CUSTODY_UNAVAILABLE
+        PATH_UNSAFE, CUSTODY_UNAVAILABLE, ARTIFACT_MISMATCH
     }
     private record Loaded(Phase7Corpus.Submission submission,
                           Phase7LegacyImport.ReviewRequest binding) {}
@@ -91,6 +91,16 @@ public final class Phase7TrustedIntake {
     public static Report evaluateLocal(Path repoRoot, List<String> bundleNames,
             Map<String,Phase7Benchmark.Scenario> trustedScenarios, String keyId,
             String expectedKeySha256, long seed, Phase7Benchmark.DecisionPolicy shadow) {
+        return evaluateLocal(repoRoot,bundleNames,trustedScenarios,keyId,
+                expectedKeySha256,seed,shadow,null);
+    }
+    /** A 7.8 evaluation may restrict every signed artifact to a pinned build SHA. */
+    public static Report evaluateLocal(Path repoRoot, List<String> bundleNames,
+            Map<String,Phase7Benchmark.Scenario> trustedScenarios, String keyId,
+            String expectedKeySha256, long seed, Phase7Benchmark.DecisionPolicy shadow,
+            String expectedArtifactSha256) {
+        if(expectedArtifactSha256!=null&&!validHash(expectedArtifactSha256))
+            throw new IllegalArgumentException("invalid pinned artifact");
         Objects.requireNonNull(repoRoot);
         Objects.requireNonNull(bundleNames);
         Objects.requireNonNull(trustedScenarios);
@@ -127,6 +137,10 @@ public final class Phase7TrustedIntake {
                 continue;
             }
             Attempt attempt=load(base,name,keyId,key,trustedScenarios);
+            if(attempt.loaded()!=null&&expectedArtifactSha256!=null
+                    &&!expectedArtifactSha256.equals(
+                            attempt.loaded().submission().capture().choice().artifactSha256()))
+                attempt=reject(Status.ARTIFACT_MISMATCH);
             statuses.add(attempt.status());
             if(attempt.loaded()!=null) {
                 admitted.add(attempt.loaded().submission());

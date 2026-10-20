@@ -388,3 +388,66 @@ tampered and re-pinned policies, disclosure suppression, cohort drift,
 undefined rates, symlink rejection and strict threshold boundaries.
 There is **no genuine Legacy corpus, no Minecraft testing, no tactical
 Shadow promotion, and no request for new battles** in this batch.
+
+## Phase 7.8 — version-pinned offline Shadow replay and disagreement attribution
+
+`Phase7ShadowReplay` is a **verification-only** adapter to the existing
+`ShadowSearchEngine.search`, not a new battle simulator. It requires:
+a `phase7.8.policy.v1` versioned manifest, separately pinned exact-file
+SHA-256, stable graph+scenario SHA-256, pinned installed Maestro artifact
+SHA-256, explicit search-node and trace budgets, uncertainty penalty and
+`requireCompleteSearch=true`. Its model input is an explicit public-only,
+bounded conditional graph; game damage calibration and unknown opponent
+responses are **not** invented. Conditional utilities remain proxies, not
+real win probabilities or move-quality proofs.
+
+The immutable policy lives **only** under the gitignored local
+`run/phase7-corpus/shadow-replay/phase7_<revision>.json`. Create with
+`Phase7ShadowReplay.define(...)`, store through `writeLocal(...)`, obtain
+the exact-file policy SHA-256 via an **independent trusted channel**, and
+reload through `load(..., pinnedSha)`. The policy binds `SHADOW_SEARCH_V1`,
+the canonical sorted graph fingerprint, the public-only scenario manifest
+and the configured installed artifact hash. Modifying a graph, response,
+branch, scenario, limit or version without a matching independently
+approved policy **fails closed**. No user-supplied arbitrary engine selector
+is permitted. Policy revisions cannot be overwritten. Strict local path,
+schema, size, key and symlink checks remain enforced.
+
+`replayLocal(repositoryRoot,bundleIds,trustedScenarios,custodianKeyId,
+pinnedCustodianSha,pinnedPolicy,graphs)` delegates to the **actual
+Phase 7.5 Ed25519 signed-custody intake** and Phase 7.4/7.2 replay pipeline.
+Before sending each accepted result to the offline evaluator, intake also
+checks that its signed `artifactSha256` matches the policy's pinned build.
+Unmatched artifacts yield `ARTIFACT_MISMATCH` and never trigger Shadow.
+No public `|move|` event or self-asserted receipt can satisfy custody.
+
+Every eligible Shadow evaluation runs through the real bounded
+`ShadowSearchEngine` **twice**, using the same exact public-only snapshot,
+versioned model and fixed configuration, and must return an identical
+result. Unsupported models, nonlegal root actions, incomplete searches,
+exceptions, unavailable/ambiguous public snapshots, missing custody
+or nondeterminism cause explicit **abstentions**, not fallback actions.
+There are no live battle hooks; the code is excluded from the mod JAR.
+
+Reports are deterministic machine-readable `phase7.8.v1` JSON and bind
+the signed intake report, exact policy, model graph, scenario manifest and
+replay configuration. Bounded per-case traces record only ordinal, fixed
+reason, move/switch group, fixed disagreement category, search node/rank
+counts and legality/abstention flags — no raw names, capture UUIDs, game
+events, opponent builds, private requests, unbounded exceptions or actual
+action IDs. Summary attribution separates `MOVE_TO_MOVE`,
+`MOVE_TO_SWITCH`, `SWITCH_TO_MOVE`, `SWITCH_TO_SWITCH`,
+exact agreements, unsupported results and abstentions. Groups with
+fewer than **three** accepted samples are suppressed in exported JSON,
+including per-case details. Trace exhaustion is explicitly recorded as
+`TRACE_BUDGET_EXCEEDED` instead of silently claiming a complete report.
+
+Tests use synthetic Ed25519-signed local capture bundles, approved test-only
+custody key, public-only Phase 7.1 scenarios and explicit conditional
+Shadow search graphs. They verify exact replay determinism, real search
+invocation, legal action rejection, exhaustion, configuration/graph/seed
+pinning, differing artifacts, tampering, no-custody behavior, small-cell
+privacy, bounded traces, immutable policies and malformed or re-pinned
+metadata. These tests provide **zero empirical Legacy battles, zero
+Minecraft acceptance claims and zero actual win-rate evidence**.
+Final integrated Phase 7 validation still waits for Phases 4–6 integration.
