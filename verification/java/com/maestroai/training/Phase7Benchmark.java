@@ -157,7 +157,7 @@ public final class Phase7Benchmark {
             if (!s.evidence().publicOnly() || !s.evidence().fresh()
                     || !s.evidence().mechanicsSupported()) {
                 rows.add(new Row(s.id(),fp,"UNKNOWN_EVIDENCE",null,null,null,null,null,
-                        legacyStatus,null,false,false));
+                        "MATCHED_CAPTURE".equals(legacyStatus) ? "INELIGIBLE_EVIDENCE" : legacyStatus,null,false,false));
                 continue;
             }
             String baseline=simpleBaseline(s.snapshot(),seedFor(suite.seed(),s.id(),s.version()));
