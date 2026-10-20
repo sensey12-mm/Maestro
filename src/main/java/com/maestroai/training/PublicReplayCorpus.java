@@ -61,8 +61,9 @@ public final class PublicReplayCorpus {
                     || line.startsWith("|queryresponse|") || line.startsWith("|teams|")
                     || line.startsWith("|seed|")) throw rejected();
             if (line.isEmpty() || line.equals("update")) continue;
-            if (!line.startsWith("|") || (line.indexOf('|',1)<0 && !line.equals("|tie"))) throw rejected();
-            String kind=line.equals("|tie") ? "tie" : line.substring(1,line.indexOf('|',1));
+            if (!line.startsWith("|") || line.length()<2) throw rejected();
+            int separator=line.indexOf("|",1);
+            String kind=separator<0 ? line.substring(1) : line.substring(1,separator);
             if (!METADATA_KINDS.contains(kind)
                     && !PublicProtocolFilter.publicEvents(List.of(line)).contains(line))
                 throw rejected();
