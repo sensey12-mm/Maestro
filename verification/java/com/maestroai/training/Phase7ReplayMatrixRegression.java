@@ -126,6 +126,10 @@ public final class Phase7ReplayMatrixRegression {
             var audit=strata(root,base.custodyReport(),"matrix_strata");
             var unchanged=install(root,"matrix_equivalent",artifact,921,20,8,0,
                     referenceGraphs,scenarios);
+            // Phase 7.12 executes the complete 7.5 → 7.8 → 7.9 → 7.11 → 7.10
+            // chain on the real synthetic signed-bundle test infrastructure.
+            Phase7ReadinessRegression.run(root,keyId,keySha,artifact,scenarios,
+                    signedBundles,gate,audit,v0,unchanged);
             var changed=install(root,"matrix_better",artifact,921,20,8,0,
                     models(scenarios.keySet(),"move:attack",0),scenarios);
             var versions=List.of(v0,unchanged,changed);

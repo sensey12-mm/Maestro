@@ -668,3 +668,31 @@ tampered metadata and actual gated replay. **There are still zero
 independently reviewed real Phase 4 mechanics, zero Minecraft runs and
 zero empirical win-rate observations.** Legacy retains exclusive live
 battle control; Shadow stays offline, and no new battles are requested.
+
+
+## Phase 7.12 — offline end-to-end readiness
+
+`Phase7Readiness` composes the existing Phase 7.5 signed local Legacy
+intake, Phase 7.8 bounded Shadow replay, Phase 7.9 version matrix and
+Phase 7.6/7.7 regression gates, Phase 7.11 mechanics review, and Phase
+7.10 bounded observational self-play. It checks installed artifact,
+seed, scenario and starting public-state identity, reviewer-approved
+mechanics, legal actions and source fingerprints across all stages.
+
+Every stage has an explicit fail-closed status. An early failure prevents
+subsequent execution. Reports include fixed stage statuses, hashes and
+minimum-size-suppressed counts; never raw battle data or individual
+actions. Tests reuse three locally signed synthetic Legacy examples and
+reviewed transition fixtures, and cover source drift, missing custody,
+unsupported mechanics, unbound public states, version regressions and
+unfinished observations.
+
+**Phase 7 stopping boundary:** independent infrastructure development
+is permitted. Final evaluation of the finished intelligent Shadow and
+Phase 7 completion must wait for completed and integrated Phases 4, 5,
+and 6, independent integration review, owner authorization and eventual
+Minecraft acceptance. Phase 6 currently depends on Phase 4/5 readiness.
+An offline readiness report always says `integrated=false`. Synthetic
+evidence always produces `SYNTHETIC_ONLY` even if all test fixtures pass;
+offline reviewed material remains
+`AWAITING_INTEGRATED_PHASES_4_5_6`.
