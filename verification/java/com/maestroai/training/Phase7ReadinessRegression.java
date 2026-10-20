@@ -238,9 +238,15 @@ public final class Phase7ReadinessRegression {
                     "all five evidence chain stages carry deterministic content fingerprints");
             var external=Phase7Readiness.evaluate(normal(fixture,
                     Phase7Readiness.EvidenceTier.EXTERNALLY_REVIEWED_OFFLINE));
-            check(external.status()==Phase7Readiness.Status.AWAITING_INTEGRATED_PHASES_4_5_6
-                    &&!external.integrated(),
-                    "even externally approved offline evidence does not bypass integration gate");
+            check(external.status()==Phase7Readiness.Status.EXTERNAL_REVIEW_UNVERIFIED
+                    &&!external.integrated()
+                    &&external.stages().get(Phase7Readiness.Stage.SIGNED_OBSERVATIONAL_SELF_PLAY)
+                            ==Phase7Readiness.Gate.SYNTHETIC_ONLY,
+                    "caller-controlled external-review label must never promote fixture evidence");
+            check(external.json().contains("\"claimedEvidenceTier\":\"EXTERNALLY_REVIEWED_OFFLINE\"")
+                    &&external.json().contains("\"independentlyVerifiedRealMechanics\":false")
+                    &&!external.json().contains("\"evidenceTier\":"),
+                    "source-asserted evidence tier stays explicitly untrusted in machine report");
             var empty=input(fixture,List.of("missing_private_bundle"),legacyScenarios,
                     fixture.versions(),first,second,self,tSignature,fixture.transitionSha(),
                     mechanics,mSignature,policy,Phase7Readiness.EvidenceTier.SYNTHETIC_TEST_ONLY);
@@ -265,6 +271,29 @@ public final class Phase7ReadinessRegression {
             check(Phase7Readiness.evaluate(wrongRoot).status()
                     ==Phase7Readiness.Status.CONFIGURATION_INCOMPATIBLE,
                     "modified public scenario/participant fingerprint rejected pre-custody");
+
+            // Search-budget exhaustion can produce complete trace ARRAYS
+            // with no selected action. Neither signed custody nor stable
+            // baseline comparison can promote an abstaining Shadow candidate.
+            var abstaining=Phase7ShadowReplay.define("phase713_all_abstain",
+                    artifact,921,baseline.graphs(),legacyScenarios,1,16,0);
+            Path abstainFile=Phase7ShadowReplay.writeLocal(root,abstaining);
+            var abstainPin=Phase7ShadowReplay.load(root,abstaining.revision(),
+                    sha(Files.readString(abstainFile)));
+            var abstainVersion=new Phase7ReplayMatrix.Version(abstainPin,baseline.graphs());
+            var abstainInput=input(fixture,signedBundles,legacyScenarios,
+                    List.of(abstainVersion,candidate),first,second,self,tSignature,
+                    fixture.transitionSha(),mechanics,mSignature,policy,
+                    Phase7Readiness.EvidenceTier.SYNTHETIC_TEST_ONLY);
+            var abstainResult=Phase7Readiness.evaluate(abstainInput);
+            check(abstainResult.status()==Phase7Readiness.Status.CROSS_VERSION_BLOCKED
+                    &&abstainResult.stages().get(Phase7Readiness.Stage.PINNED_SHADOW_REPLAY)
+                            ==Phase7Readiness.Gate.FAIL
+                    &&abstainResult.stages().get(Phase7Readiness.Stage.PUBLIC_MECHANICS)
+                            ==Phase7Readiness.Gate.NOT_RUN,
+                    "complete trace but all legal Shadow actions abstained must fail readiness");
+            check(abstainResult.json().equals(Phase7Readiness.evaluate(abstainInput).json()),
+                    "fail-closed abstention report reproducible without leaking action IDs");
 
             var staleMatrix=List.of(baseline,new Phase7ReplayMatrix.Version(
                     candidate.policy(),candidate.graphs()));

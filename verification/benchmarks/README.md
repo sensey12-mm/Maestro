@@ -696,3 +696,13 @@ An offline readiness report always says `integrated=false`. Synthetic
 evidence always produces `SYNTHETIC_ONLY` even if all test fixtures pass;
 offline reviewed material remains
 `AWAITING_INTEGRATED_PHASES_4_5_6`.
+
+## Phase 7.13 — infrastructure stabilization and integration handoff
+
+The public-safe [Phase 7.13 integration handoff](PHASE7_INTEGRATION_HANDOFF.md)
+records the inspected evidence interfaces, the Phase 7.13 verified risk fixes,
+privacy boundaries, and the independent integration acceptance criteria.
+It defines the STOP boundary: further Phase 7 independent feature development
+is paused after infrastructure stabilization; final intelligent-Shadow and
+Minecraft validation requires completed and owner-authorized integrated
+Phases 4, 5 and 6 and independent reviewer approval.

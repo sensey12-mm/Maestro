@@ -178,6 +178,12 @@ public final class Phase7MechanicsAdapterRegression {
                     "single transition groups have suppressed counts");
             check(!groups.getAsJsonObject("MOVE_MOVE").get("suppressed").getAsBoolean(),
                     "sufficiently represented stratum discloses aggregate counts only");
+            var privateSafeSummary=JsonParser.parseString(result.json()).getAsJsonObject()
+                    .getAsJsonObject("summary");
+            check(privateSafeSummary.get("suppressed").getAsBoolean()
+                    &&!privateSafeSummary.has("total")
+                    &&!privateSafeSummary.has("reviewed"),
+                    "complementary suppression hides totals when any action stratum is rare");
             check(pinned.value().originalBundleSha256().equals(
                     Phase7MechanicsAdapter.bundleSha256(base))
                     &&pinned.value().pinnedSourceCommitSha256().equals(COMMIT),

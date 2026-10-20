@@ -25,7 +25,7 @@ public final class Phase7Readiness {
     /** This label must come from independently assessed evidence provenance. */
     public enum EvidenceTier { SYNTHETIC_TEST_ONLY, EXTERNALLY_REVIEWED_OFFLINE }
     public enum Status {
-        SYNTHETIC_ONLY, CONFIGURATION_INCOMPATIBLE, CUSTODY_REJECTED,
+        SYNTHETIC_ONLY, EXTERNAL_REVIEW_UNVERIFIED, CONFIGURATION_INCOMPATIBLE, CUSTODY_REJECTED,
         PUBLIC_IDENTITY_MISMATCH, CROSS_VERSION_BLOCKED, MECHANICS_REJECTED,
         OBSERVATIONAL_REPLAY_BLOCKED, AWAITING_INTEGRATED_PHASES_4_5_6
     }
@@ -93,7 +93,8 @@ public final class Phase7Readiness {
         public String json(){
             JsonObject out=new JsonObject();
             out.addProperty("schema",schema);out.addProperty("status",status.name());
-            out.addProperty("evidenceTier",tier.name());
+            out.addProperty("claimedEvidenceTier",tier.name());
+            out.addProperty("independentlyVerifiedRealMechanics",false);
             out.addProperty("integrated",false);
             out.addProperty("chainFingerprint",chainFingerprint);
             out.addProperty("artifactSha256",artifactSha256);
@@ -221,6 +222,7 @@ public final class Phase7Readiness {
         String stateHash=Phase7Benchmark.stateFingerprint(rootOwn);
         for(var row:intake.corpus().rows())
             if(row.status()==Phase7Corpus.Status.ACCEPTED
+                    &&rootOwn.id().equals(row.scenario())
                     &&stateHash.equals(row.stateFingerprint()))bindings++;
         if(bindings!=1){
             status=Status.PUBLIC_IDENTITY_MISMATCH;
@@ -228,8 +230,27 @@ public final class Phase7Readiness {
             return report(input,status,stages,artifact,custody,shadow,matrix,mechanics,
                     observed,cases,reviewedCount,bindings);
         }
-        if(replay.replay().traceTruncated()
-                ||replay.replay().traces().size()!=intake.corpus().rows().size()){
+        // A complete trace is NOT the same thing as a selected legal action.
+        // All-abstain or mixed-abstain accepted cohorts are useful benchmarks,
+        // but they cannot establish readiness for a self-play continuation.
+        boolean completeDecisions=replay.replay().status()==Phase7ShadowReplay.Reason.SELECTED
+                &&!replay.replay().traceTruncated()
+                &&replay.replay().traces().size()==intake.corpus().rows().size();
+        if(completeDecisions) {
+            for(int i=0;i<intake.corpus().rows().size();i++){
+                var row=intake.corpus().rows().get(i);
+                var trace=replay.replay().traces().get(i);
+                if(row.status()!=Phase7Corpus.Status.ACCEPTED
+                        ||row.shadowAction()==null
+                        ||trace.ordinal()!=i||trace.reason()!=Phase7ShadowReplay.Reason.SELECTED
+                        ||trace.abstained()||!trace.legal()
+                        ||!Objects.equals(trace.legacyAgreement(),row.shadowAgreement())){
+                    completeDecisions=false;
+                    break;
+                }
+            }
+        }
+        if(!completeDecisions){
             status=Status.CROSS_VERSION_BLOCKED;
             stages.put(Stage.PINNED_SHADOW_REPLAY,Gate.FAIL);
             return report(input,status,stages,artifact,custody,shadow,matrix,mechanics,
@@ -253,10 +274,17 @@ public final class Phase7Readiness {
         }
         stages.put(Stage.VERSION_MATRIX,Gate.PASS);
         // Phase 7.11 entire graph audit, followed by Phase 7.10 itself.
-        var gated=Phase7MechanicsAdapter.replay(input.transitions(),input.first(),
-                input.second(),input.selfPlayPolicy(),input.transitionSignature(),
-                input.transitionReviewerKeySha256(),input.mechanics(),
-                input.mechanicsSignature(),input.mechanicsPolicy());
+        Phase7MechanicsAdapter.GatedReplay gated;
+        try {
+            gated=Phase7MechanicsAdapter.replay(input.transitions(),input.first(),
+                    input.second(),input.selfPlayPolicy(),input.transitionSignature(),
+                    input.transitionReviewerKeySha256(),input.mechanics(),
+                    input.mechanicsSignature(),input.mechanicsPolicy());
+        } catch(RuntimeException rejected){
+            stages.put(Stage.PUBLIC_MECHANICS,Gate.FAIL);
+            return report(input,Status.MECHANICS_REJECTED,stages,artifact,custody,
+                    shadow,matrix,mechanics,observed,cases,reviewedCount,bindings);
+        }
         var audit=gated.mechanics();
         mechanics=audit.reportFingerprint();
         reviewedCount=audit.totals().reviewed();
@@ -275,11 +303,13 @@ public final class Phase7Readiness {
         observed=gated.observed().runFingerprint();
         // Synthetic keys may pass cryptographic test checks, but no synthetic
         // fixture is ever "independently verified" for gameplay.
+        // The user-controlled tier is a CLAIM, not an independently audited
+        // proof of authentic Phase 4 source custody or Minecraft acceptance.
+        // This verification-only branch has no authoritative external
+        // integration attestation, so NEVER promote such a claim to PASS.
         status=input.tier()==EvidenceTier.SYNTHETIC_TEST_ONLY
-                ?Status.SYNTHETIC_ONLY:Status.AWAITING_INTEGRATED_PHASES_4_5_6;
-        stages.put(Stage.SIGNED_OBSERVATIONAL_SELF_PLAY,
-                input.tier()==EvidenceTier.SYNTHETIC_TEST_ONLY?
-                        Gate.SYNTHETIC_ONLY:Gate.PASS);
+                ?Status.SYNTHETIC_ONLY:Status.EXTERNAL_REVIEW_UNVERIFIED;
+        stages.put(Stage.SIGNED_OBSERVATIONAL_SELF_PLAY,Gate.SYNTHETIC_ONLY);
         return report(input,status,stages,artifact,custody,shadow,matrix,mechanics,
                 observed,cases,reviewedCount,bindings);
     }

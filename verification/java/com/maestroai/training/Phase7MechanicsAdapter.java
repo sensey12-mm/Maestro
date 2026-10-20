@@ -204,8 +204,13 @@ public final class Phase7MechanicsAdapter {
             j.add("groups",g);
             JsonObject summary=new JsonObject();
             // The overall count can reveal a small single observation.
-            summary.addProperty("suppressed",totals.total()<3);
-            if(totals.total()>=3){
+            // Complementary suppression: if a nonempty subgroup is too
+            // small, publishing the grand total permits subtraction attacks.
+            boolean smallChild=groups.values().stream().anyMatch(
+                    count->count.total()>0&&count.total()<3);
+            boolean discloseTotal=totals.total()>=3&&!smallChild;
+            summary.addProperty("suppressed",!discloseTotal);
+            if(discloseTotal){
                 summary.addProperty("total",totals.total());
                 summary.addProperty("reviewed",totals.reviewed());
                 summary.addProperty("unknown",totals.unknown());
