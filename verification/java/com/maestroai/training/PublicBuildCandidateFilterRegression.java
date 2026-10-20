@@ -201,7 +201,7 @@ final class PublicBuildCandidateFilterRegression {
                 simple(2,"zoroarkhisui","shadowsneak"),
                 build(2,"zoroarkhisui",new String[]{},new String[]{},
                         new String[]{"illusion"},new String[]{}),
-                simple(2,"zoroarkhisui","frustration")));
+                simple(2,"zoroarkhisui","happyhour")));
         expected(h,1,SUPPORTED);
         expected(h,2,SUPPORTED);
         expected(h,3,UNRESOLVED);
