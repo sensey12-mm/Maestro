@@ -31,7 +31,7 @@ public final class PublicSignedCustody {
     public record TrustedKey(String keyId, String encodedPublicKey,
                              long activeFromEpochSecond, long revokedAtEpochSecond) {
         public TrustedKey {
-            if (!keyId(keyId) || encodedPublicKey==null
+            if (!PublicSignedCustody.keyId(keyId) || encodedPublicKey==null
                     || activeFromEpochSecond<1
                     || (revokedAtEpochSecond!=0 && revokedAtEpochSecond<=activeFromEpochSecond)
                     || !canonicalB64(encodedPublicKey,32,100))
