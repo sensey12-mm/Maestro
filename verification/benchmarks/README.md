@@ -148,3 +148,46 @@ Tests use a synthetic own-request ledger and public envelopes. They
 cannot establish that Cobblemon/RCT, the specific datapack or installed
 Minecraft wiring is functioning. No actual battles were requested.
 Runtime acceptance and independent custody assessment are pending.
+
+## Phase 7.4 — private local benchmark corpus
+
+`Phase7Corpus.evaluate(submissions, seed, independentCustodyReviewer, offlineShadow)`
+provides a reusable, deterministic, bounded verification-only corpus (100
+entries, maximum 32 complete replay checkpoints per entry). Each submission
+contains a **locally retained** original, its existing
+`Phase7LegacyImport.Capture`, a versioned `Phase7Benchmark.Scenario`,
+and sequential complete raw-history prefixes. Private inputs are passed in
+memory and are not exported, uploaded, copied into Git or written to the
+report. Partial protocol splits and unsupported event envelopes are rejected;
+snapshots must be append-only, have explicit public turns, finish at the
+captured choice turn and exactly match the imported raw source.
+
+The corpus performs **independent replay checks** using the public protocol
+filter, provenance reconciliation, public evidence model and incremental
+`PublicBattleCapture` before delegating to the Phase 7.2 importer. A
+separate custody reviewer must attest the owning Legacy choice and held
+original; SHA strings, a runtime receipt, or synthetic fixtures alone do not
+prove authenticity. Null/missing or rejecting reviewers mean **zero accepted
+Legacy results**. To avoid first-wins bias, *all* submissions with a repeated
+capture ID, same source battle/turn, or same own-request/public-action
+fingerprints are rejected before the review callback. Every rejected row
+abstains; offline Shadow is never invoked for it.
+
+Reports contain schema `phase7.4.v1`, seed, deterministic sanitized digest,
+fixed eligibility statuses, verified Legacy/baseline/Shadow *action agreement*,
+abstentions, illegal-action counts, duplicate/replay/provenance rejections
+and scenario coverage metrics. They omit capture IDs, battle/party UUIDs,
+raw histories, actor names, private requests, effects and outcome claims.
+No hypothetical utility, score, win rate or Minecraft compatibility result
+is created.
+
+`Phase7Corpus.writeLocalReport(repositoryRoot, "phase7_<id>.json", report)`
+persists **only the sanitized report** atomically to the gitignored
+`run/phase7-corpus/` directory. Unsafe traversal and symlink targets are
+rejected. The original raw evidence stays in a separately controlled
+private local location and must be resupplied for each replay. The corpus
+does not create an authenticated capture reviewer or permanently archive
+private originals; both require an owner-approved trusted process.
+The tests use synthetic receipts and an explicitly synthetic independent
+reviewer stub. **No real Legacy decisions were imported or tested in
+Minecraft.** No new battles are required for this development batch.

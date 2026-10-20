@@ -12,7 +12,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 APACHE_SHA256 = '0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594'
 HIDDEN = ('.gradle/cache.bin', 'build/libs/mod.jar', 'out/classes/X.class',
-          'run/world/level.dat', 'logs/latest.log', 'local.properties',
+          'run/world/level.dat', 'run/phase7-corpus/phase7_private.json', 'logs/latest.log', 'local.properties',
           '.env', '.env.production', '.idea/workspace.xml', '.vscode/settings.json',
           'verification/__pycache__/check.cpython-311.pyc')
 VISIBLE = ('LICENSE', 'README.md', '.env.example', 'gradlew', 'gradlew.bat',
