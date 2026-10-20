@@ -27,10 +27,30 @@ public final class PublicReplayProvenance {
     public static final class CheckedReplay {
         private final CompetitiveFormatNormalizer.Result normalized;
         private final PublicCompetitiveTendencies.Report tendencies;
+        private final List<PublicReplayCustody.Reference> custodyReferences;
+        private final long custodyRevision;
         private CheckedReplay(CompetitiveFormatNormalizer.Result normalized,
                               PublicCompetitiveTendencies.Report tendencies) {
+            this(normalized,tendencies,List.of(),0);
+        }
+        private CheckedReplay(CompetitiveFormatNormalizer.Result normalized,
+                              PublicCompetitiveTendencies.Report tendencies,
+                              List<PublicReplayCustody.Reference> custodyReferences,long custodyRevision) {
             this.normalized = normalized;
             this.tendencies = tendencies;
+            this.custodyReferences=List.copyOf(custodyReferences);
+            this.custodyRevision=custodyRevision;
+        }
+        /**
+         * Custody is deliberately re-evaluated against an up-to-date complete
+         * ledger and a caller-supplied trusted clock/revision floor. An older
+         * receipt cannot bypass expiry or later revocation.
+         */
+        public boolean custodyCurrentlyEligible(PublicReplayCustody.Ledger ledger,
+                                                long evaluatedAtEpochSecond,
+                                                long requiredRevision) {
+            return PublicReplayCustody.eligible(ledger,custodyReferences,
+                    evaluatedAtEpochSecond,Math.max(custodyRevision,requiredRevision));
         }
         /** No replay ID, digest, nickname, move list, opponent identity or probability leaks. */
         public Set<Boundary> boundaries() {
@@ -55,9 +75,23 @@ public final class PublicReplayProvenance {
     /** Held-out metrics are aggregates, never a reusable actor-specific prediction. */
     public static final class CheckedSplit {
         private final int trainingReplays, evaluationReplays;
+        private final List<PublicReplayCustody.Reference> custodyReferences;
+        private final long custodyRevision;
         private CheckedSplit(int trainingReplays, int evaluationReplays) {
+            this(trainingReplays,evaluationReplays,List.of(),0);
+        }
+        private CheckedSplit(int trainingReplays,int evaluationReplays,
+                             List<PublicReplayCustody.Reference> custodyReferences,long custodyRevision) {
             this.trainingReplays=trainingReplays;
             this.evaluationReplays=evaluationReplays;
+            this.custodyReferences=List.copyOf(custodyReferences);
+            this.custodyRevision=custodyRevision;
+        }
+        public boolean custodyCurrentlyEligible(PublicReplayCustody.Ledger ledger,
+                                                long evaluatedAtEpochSecond,
+                                                long requiredRevision) {
+            return PublicReplayCustody.eligible(ledger,custodyReferences,
+                    evaluatedAtEpochSecond,Math.max(custodyRevision,requiredRevision));
         }
         public int trainingReplays() { return trainingReplays; }
         public int heldOutReplays() { return evaluationReplays; }
@@ -125,6 +159,66 @@ public final class PublicReplayProvenance {
         var reconstructed=PublicHeldOutEvaluation.evaluate(supplied,target);
         if (!reconstructed.equals(submitted)) throw rejected();
         return new CheckedSplit(reconstructed.trainReplays(), reconstructed.heldOutReplays());
+    }
+
+
+    /**
+     * Phase 5.8 gate: local custody approval MUST be checked in addition to
+     * Phase 5.7 deterministic recomputation. This is operator-provided review
+     * evidence, not an independently checked licensing or origin signature.
+     */
+    public static CheckedReplay ingestWithCustody(PublicReplayCorpus.Source source,
+                                                 String spectatorLog,
+                                                 CompetitiveFormatNormalizer.Target target,
+                                                 PublicReplayCustody.Ledger ledger,
+                                                 long evaluatedAtEpochSecond,
+                                                 long requiredRevision) {
+        var original=PublicReplayCorpus.ingest(source,spectatorLog);
+        var reference=PublicReplayCustody.require(ledger,source,original,
+                evaluatedAtEpochSecond,requiredRevision);
+        CheckedReplay consistent=ingest(source,spectatorLog,target);
+        return new CheckedReplay(consistent.normalized,consistent.tendencies,
+                List.of(reference),ledger.revision());
+    }
+
+    public static CheckedReplay verifyWithCustody(PublicReplayCorpus.Source source,
+                                                 String spectatorLog,
+                                                 CompetitiveFormatNormalizer.Target target,
+                                                 PublicReplayCorpus.Evidence evidence,
+                                                 CompetitiveFormatNormalizer.Result normalized,
+                                                 PublicCompetitiveTendencies.Report tendencies,
+                                                 PublicReplayCustody.Ledger ledger,
+                                                 long evaluatedAtEpochSecond,
+                                                 long requiredRevision) {
+        CheckedReplay consistent=verify(source,spectatorLog,target,evidence,normalized,tendencies);
+        var reference=PublicReplayCustody.require(ledger,source,evidence,
+                evaluatedAtEpochSecond,requiredRevision);
+        return new CheckedReplay(consistent.normalized,consistent.tendencies,
+                List.of(reference),ledger.revision());
+    }
+
+    /**
+     * Full held-out split must have CURRENT custody for ALL train and test
+     * records, never just a corpus aggregate or one approved example.
+     */
+    public static CheckedSplit verifySplitWithCustody(List<PublicHeldOutEvaluation.Replay> supplied,
+                                                      CompetitiveFormatNormalizer.Target target,
+                                                      PublicHeldOutEvaluation.Report submitted,
+                                                      PublicReplayCustody.Ledger ledger,
+                                                      long evaluatedAtEpochSecond,
+                                                      long requiredRevision) {
+        if (supplied==null || ledger==null || supplied.isEmpty())
+            throw rejected();
+        var refs=new ArrayList<PublicReplayCustody.Reference>();
+        for (var replay:supplied) {
+            if (replay==null) throw rejected();
+            var admitted=PublicReplayCorpus.ingest(replay.source(),replay.spectatorLog());
+            refs.add(PublicReplayCustody.require(ledger,replay.source(),admitted,
+                    evaluatedAtEpochSecond,requiredRevision));
+        }
+        CheckedSplit consistent=verifySplit(supplied,target,submitted);
+        return new CheckedSplit(consistent.trainingReplays,consistent.evaluationReplays,
+                refs,ledger.revision());
     }
 
     private static CheckedReplay issued(CompetitiveFormatNormalizer.Result normalized,
