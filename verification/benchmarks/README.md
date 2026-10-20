@@ -314,3 +314,77 @@ illegal choices, rejection-rate and threshold changes. It does **not**
 authenticate a real custody approval or test in Minecraft. No new battles
 are required for this batch; final integrated evaluation still waits for
 Phases 4–6.
+
+## Phase 7.7 — stratified coverage and robustness audits
+
+`Phase7StratifiedAudit` is a verification-only layer on top of the
+**exact-commit, independently pinned Phase 7.6 baseline**, consuming two
+sanitized, independently reviewed Phase 7.5 reports. It introduces **eight
+fixed, supported strata**:
+
+- Legacy decision type: `ACTION_MOVE` and `ACTION_SWITCH`, defined only
+  from the observed Legacy action (not guessed Pokémon roles or strategy).
+- Evidence outcome: `QUALITY_ACCEPTED`, `QUALITY_UNKNOWN` (unresolved
+  public state/turn/identity), `QUALITY_DUPLICATE`, `QUALITY_REPLAY`,
+  `QUALITY_PROVENANCE` and `QUALITY_INTAKE_REJECTED`.
+
+These strata deliberately form **two different views**, not eight disjoint
+battle situations: accepted samples appear once in an action category and
+once in `QUALITY_ACCEPTED`. Other outcomes are counted only by their own
+fixed evidence group. Rejected cases are never assigned synthetic actions.
+
+### Versioned policy, evidence pinning and fail-closed behavior
+
+Define a `phase7.7.policy.v1` policy through
+`Phase7StratifiedAudit.define(revision, reviewedReport, minimumDisclosureCount,
+maximumDominantActionBasisPoints, maximumEvaluatedMixDriftBasisPoints, rules)`.
+Every group requires an explicit typed `Rule` specifying mandatory/optional
+representation, minimum reference/candidate samples, count loss/increase
+limits, agreement loss tolerance, and abstention/illegal-choice tolerance.
+Required groups must have a positive minimum in **both** reports.
+No hidden categories or arbitrary evaluator-supplied stratification is used.
+
+Store the policy with `writeLocal(root, policy)` under the Git-ignored
+`run/phase7-corpus/strata/phase7_<revision>.json`. Policy revisions are
+immutable: a new policy must use a new revision, not silently overwrite an
+existing file. Obtain the **exact policy file's SHA-256 from an independently
+trusted channel**, then use `load(root,revision,pinnedSha256)`.
+This SHA confirms file integrity, not genuine custody; never pin a hash
+supplied by an untrusted bundle itself. Strict JSON validation rejects
+duplicate fields, unexpected/missing strata, wrong versions, bounds,
+malformed keys, and tampered policies. File traversal/symlinks are refused.
+
+`compare(pinnedPhase76Baseline, pinnedStrataPolicy, reviewedReference,
+reviewedCandidate)` first runs the **unchanged Phase 7.6 global gate**.
+Neither a change in the verified public-state/Legacy-action cohort nor a
+failed global evidence gate can be overridden by an attractive per-stratum
+score. Every group then receives explicit support, agreement, abstention,
+illegal-action and evidence-count checks. Net aggregate agreement can
+remain constant while a deterioration in switch decisions still causes a
+`GROUP_ACTION_REGRESSION`. Missing representation, sample dropouts, or
+increased rejections produce their own fail-closed statuses. Dominant
+Legacy action share and drift in the distribution of evaluated move/switch
+decisions highlight sampling bias and selective abstention. A comparison
+cannot pass with no evaluated decisions.
+
+### Private-data disclosure
+
+Output JSON contains only fixed group names, bounded aggregate counts,
+basis-point agreement rates, fixed statuses and SHA-256 bindings of
+already-sanitized reports/policies. It contains no raw histories, actor
+details, Pokémon IDs, private moves or capture IDs. Groups with fewer
+than `minimumDisclosureCount` samples (at least **3**) suppress the
+affected counts, deltas and rates as JSON `null`; dominance and mix
+percentages are suppressed if either action group falls below the same
+threshold. Suppression does **not** bypass internal gates, which still
+evaluate the actual counts. The report's PASS means only *the configured
+evidence and decision-agreement invariants held*; it is not proof of
+real competitive wins or Minecraft compatibility.
+
+Phase 7.7's synthetic regression suite covers grouped agreement masking,
+abstention shifts, sampling imbalance, insufficient strata, unknown/replay/
+provenance/duplicate evidence grouping, round-trip/revision integrity,
+tampered and re-pinned policies, disclosure suppression, cohort drift,
+undefined rates, symlink rejection and strict threshold boundaries.
+There is **no genuine Legacy corpus, no Minecraft testing, no tactical
+Shadow promotion, and no request for new battles** in this batch.
