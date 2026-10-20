@@ -296,7 +296,7 @@ public final class Phase7StratifiedAuditRegression {
             var immutable=Phase7StratifiedAudit.define("synthetic_roundtrip",baseline,3,
                     6500,0,rules(3,3,0,0));
             reject(()->{
-                try{Phase7StratifiedAudit.writeLocal(root,immutable);}
+                try{Phase7StratifiedAudit.writeLocal(local,immutable);}
                 catch(java.io.IOException prevented){throw new IllegalStateException(prevented);}
             },"pinned revision cannot be silently overwritten");
             check(Files.readString(file).equals(intact),
@@ -304,7 +304,7 @@ public final class Phase7StratifiedAuditRegression {
             check(Phase7StratifiedAudit.load(root,"synthetic_roundtrip",hash)
                     .value().json().equals(intact),"versioned policy round-trip");
             reject(()->{
-                try{Phase7StratifiedAudit.load(root,"synthetic_roundtrip","0".repeat(64));}
+                try{Phase7StratifiedAudit.load(local,"synthetic_roundtrip","0".repeat(64));}
                 catch(java.io.IOException unavailable){throw new IllegalStateException(unavailable);}
             },"externally pinned policy SHA cannot be bypassed");
             for(String edited:List.of(
@@ -322,7 +322,7 @@ public final class Phase7StratifiedAuditRegression {
                             "\""+SECRET+"\":\"PRIVATE\",\"referenceReportSha256\":"))) {
                 Files.writeString(file,edited);
                 reject(()->{
-                    try{Phase7StratifiedAudit.load(root,"synthetic_roundtrip",sha(edited));}
+                    try{Phase7StratifiedAudit.load(local,"synthetic_roundtrip",sha(edited));}
                     catch(java.io.IOException invalid){throw new IllegalStateException(invalid);}
                 },"re-pinned invalid policy/schema/duplicate keys fail closed");
             }
@@ -334,7 +334,7 @@ public final class Phase7StratifiedAuditRegression {
                 Path linked=root.resolve("run/phase7-corpus/strata/phase7_symlink.json");
                 Files.createSymbolicLink(linked,file);
                 reject(()->{
-                    try{Phase7StratifiedAudit.load(root,"symlink",hash);}
+                    try{Phase7StratifiedAudit.load(local,"symlink",hash);}
                     catch(java.io.IOException invalid){throw new IllegalStateException(invalid);}
                 },"symbolic link policy refused");
             } catch(UnsupportedOperationException | java.nio.file.FileSystemException notAvailable) {
