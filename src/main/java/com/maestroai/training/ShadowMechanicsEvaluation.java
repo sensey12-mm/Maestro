@@ -263,9 +263,18 @@ public final class ShadowMechanicsEvaluation {
         if (!p.unknown().isEmpty()) return p;
         Actor attacker = own ? p.state().self() : p.state().opponent();
         Actor target = own ? p.state().opponent() : p.state().self();
-        if (zero(attacker) || zero(target)) return p; // KO suppresses the slower action, never exposes a reserve
+        if (zero(attacker)) return p; // A fainted actor never executes its queued move.
+        // A proven own replacement keeps this battle open, but does not put
+        // its reserve on the field before the remaining queued action.
+        if (zero(target) && !p.state().forcedReplacement()) return p;
         Move move = move(moveId);
         if (move == null) return unknown(p, "UNSUPPORTED_MOVE:" + moveId);
+        if (zero(target) && move.power() > 0) {
+            if (execution == null) return unknown(p,"NO_TARGET_EXECUTION_SCOPE_UNKNOWN");
+            var coverage=execution.damageCoverage(moveId,profiles.get(attacker.id()),attacker,profiles.get(target.id()),target);
+            // No successful hit means no drain, recoil, self-drop, secondary or pivot.
+            return coverage.supported()?p:unknown(p,String.join(",",coverage.missing()));
+        }
         if (move.power() == 0) {
             if(move.id().equals("geomancy") && (execution==null || !execution.activePowerHerb(attacker.id())))
                 return unknown(p, "GEOMANCY_POWER_HERB_OR_CHARGE_DOMAIN_UNKNOWN");
@@ -378,10 +387,7 @@ public final class ShadowMechanicsEvaluation {
             double chip=Math.max(1,max/10)/(double)max;
             result=hurt(result,own,new Interval(chip,chip));
             Actor after=own?result.state().self():result.state().opponent();
-            Actor other=own?result.state().opponent():result.state().self();
-            // HP is bounded, but survival-dependent continuations/replacements
-            // are not resolved by this active-pair slice. Never heal a KO back up.
-            if(possibleFaint(after)&&(!zero(after)||!zero(other)))
+            if(possibleFaint(after)&&!zero(after))
                 return unknown(result,"POST_RECOIL_CONTINUATION_SURVIVAL_UNKNOWN");
         }
         if(execution!=null&&execution.currentAbility(attacker.id()).equals("asonespectrier")
@@ -392,7 +398,8 @@ public final class ShadowMechanicsEvaluation {
             result=replace(result,state(result.state(),own?boosted:result.state().self(),
                     own?result.state().opponent():boosted,result.state().actionKind(),result.state().action()));
         }
-        if(moveId.equals("uturn")&&!zero(own?result.state().opponent():result.state().self())){
+        if(moveId.equals("uturn")&&!zero(own?result.state().opponent():result.state().self())
+                &&!zero(own?result.state().self():result.state().opponent())){
             if(!own)return unknown(result,"OPPONENT_U_TURN_PARTY_HIDDEN");
             if(d.high()==0)return result; // immunity or Protect prevents pivot
             result=pivotToSoleCertifiedReserve(result,mechanics,sourceLegalSwitches,profiles,execution);
@@ -405,7 +412,52 @@ public final class ShadowMechanicsEvaluation {
             result=replace(result,state(result.state(),affectedOwn?modified:result.state().self(),
                     affectedOwn?result.state().opponent():modified,result.state().actionKind(),result.state().action()));
         }
+        // Native faintMessages clears boosts after the move (including its
+        // self effects) and before the surviving actor's queued action.
+        result=clearFaintedStages(result);
+        // A modeled pivot may have changed this role's actor. Recoil proof
+        // belongs to its original user, never the incoming reserve.
+        if(recoil&&(own?result.state().self():result.state().opponent()).id().equals(attacker.id())) {
+            Actor after=own?result.state().self():result.state().opponent();
+            Actor other=own?result.state().opponent():result.state().self();
+            if(zero(after)&&!zero(other)) {
+                if(!own||!certifiedOwnReserve(mechanics,profiles,execution))
+                    return unknown(result,"POST_RECOIL_PARTY_CONTINUATION_UNKNOWN");
+                result=pendingOwnReplacement(result);
+            }
+        }
         return result;
+    }
+    /** Positive own-reserve evidence only. An empty list never proves party
+     * exhaustion; opponent roster size and identity are never consulted.
+     * Voluntary trapping does not prevent a later forced replacement.
+     */
+    private static boolean certifiedOwnReserve(PublicMechanics mechanics,Map<String,Profile> profiles,ScopedExecution execution) {
+        if(execution==null)return false;
+        for(var entry:mechanics.transitions().context().switchTargets().entrySet()) {
+            String id=entry.getKey();var target=entry.getValue();
+            if(Set.of("self","opponent").contains(id)||target.facts().fainted()
+                    ||!target.facts().hpKnown()||target.facts().hpFraction()<=0)continue;
+            Profile reserve=profiles.get(id);
+            if(reserve==null||!reserve.actor().equals(id))continue;
+            var max=reserve.maxHp().known()&&reserve.maxHp().value().low()==reserve.maxHp().value().high()
+                    ?Known.of(reserve.maxHp().value().low(),reserve.maxHp().source()):Known.<Integer>unknown();
+            if(execution.entryCoverage(mechanics.transitions().context().selfHazards(),max,reserve).supported())return true;
+        }
+        return false;
+    }
+    private static Progress clearFaintedStages(Progress p) {
+        var zeroStages=new TreeMap<String,Integer>();STATS.forEach(k->zeroStages.put(k,0));
+        Actor self=p.state().self(),foe=p.state().opponent();
+        if(zero(self))self=actor(self,self.hp().value(),zeroStages);
+        if(zero(foe))foe=actor(foe,foe.hp().value(),zeroStages);
+        return replace(p,state(p.state(),self,foe,p.state().actionKind(),p.state().action()));
+    }
+    private static Progress pendingOwnReplacement(Progress p) {
+        var s=p.state();var unresolved=new TreeSet<>(s.unresolved());
+        unresolved.add("OWN_REPLACEMENT_REQUEST_AND_ENTRY_AFTER_QUEUE_AND_RESIDUALS");
+        return replace(p,new State(s.self(),s.opponent(),s.selfHazards(),s.opponentHazards(),s.ambiguity(),unresolved,
+                Kind.FORCED_CONTINUATION,s.action(),List.of(),List.of(),false,false,true,false));
     }
     /** Only the sole legal, current owner-side reserve can be a deterministic
      * conditional U-turn target. No invented opponent party or chosen teammate.
@@ -479,7 +531,7 @@ public final class ShadowMechanicsEvaluation {
         Set<String> unresolved = new TreeSet<>(s.unresolved());
         unresolved.add("CONDITIONAL_SUPPLIED_REPLY_AND_SUCCESS"); unresolved.add("RESIDUALS_AND_REPLACEMENTS_UNMODELED");
         return new State(self, foe, s.selfHazards(), s.opponentHazards(), s.ambiguity(), unresolved,
-                kind, action, List.of(), List.of(), false, false, false, false);
+                kind, action, List.of(), List.of(), false, false, s.forcedReplacement(), false);
     }
     private static Progress replace(Progress p, State s) {
         return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown(),p.skipNext());
