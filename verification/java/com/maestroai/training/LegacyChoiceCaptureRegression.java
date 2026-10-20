@@ -144,7 +144,7 @@ public final class LegacyChoiceCaptureRegression {
                         scenario.snapshot().legalSwitches(),Map.of(),false,null),
                 scenario.criteria(),new Phase7Benchmark.Evidence(true,true,true,2),null);
         check(Phase7LegacyImport.importObserved(receipt,battleId,privateHistory,mismatchScenario,
-                request->true).status()==Phase7LegacyImport.Status.MISMATCHED_SCENARIO,
+                request->true).status()==Phase7LegacyImport.Status.STALE_TURN,
                 "stale turn or incompatible scenario never imports");
 
         var noArtifact=new LegacyChoiceCapture(true,"UNKNOWN");
