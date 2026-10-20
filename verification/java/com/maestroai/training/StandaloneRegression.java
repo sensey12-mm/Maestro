@@ -390,6 +390,7 @@ public final class StandaloneRegression {
         PublicCompetitiveTendenciesRegression.run();
         PublicHeldOutEvaluationRegression.run();
         CompetitiveEvidenceHardeningRegression.run();
+        PublicCompetitiveShadowContractRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
