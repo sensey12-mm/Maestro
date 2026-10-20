@@ -210,7 +210,7 @@ final class PublicReplayProvenanceRegression {
 
         // Same replay ID and nominal schema are insufficient without exact input.
         reject(()->PublicReplayProvenance.verify(source("12345678"),
-                LOG.replace("MysteryNick","RenamedEnemy"),PIN,e,n,t));
+                LOG.replace("Hidden","RenamedEnemy"),PIN,e,n,t));
         reject(()->PublicReplayProvenance.verify(source("23456789"),LOG,PIN,e,n,t));
         reject(()->PublicReplayProvenance.verify(source("12345678"),LOG,PIN,null,n,t));
         reject(()->PublicReplayProvenance.verify(source("12345678"),LOG,PIN,e,null,t));
