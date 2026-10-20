@@ -173,7 +173,7 @@ public final class Phase7LegacyImportRegression {
                     ==Phase7LegacyImport.Status.STALE_TURN,
                     "post-turn events cannot retrospectively certify choice timing");
             check(Phase7LegacyImport.compare(scenario,
-                    new Phase7LegacyImport.ImportResult(Phase7LegacyImport.Status.STALE_TURN,null,null),
+                    Phase7LegacyImport.importCapture(capture,scenario,request->false),
                     33L,(snap,seed)->{throw new AssertionError("must not invoke shadow");})
                     .shadowAction()==null,"reject never invokes offline candidate");
 

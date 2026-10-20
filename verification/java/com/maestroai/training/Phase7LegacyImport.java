@@ -67,15 +67,35 @@ public final class Phase7LegacyImport {
         STALE_TURN, AMBIGUOUS_IDENTITY, MISMATCHED_SCENARIO, ILLEGAL_ACTION,
         DUPLICATE_CAPTURE
     }
-    public record ImportResult(Status status, Phase7Benchmark.LegacyRecord legacy,
-                               String publicSha256) {
-        public ImportResult {
+    /**
+     * Opaque proof-bearing result: callers cannot directly manufacture an
+     * ACCEPTED result, even if they can construct a LegacyRecord themselves.
+     */
+    public static final class ImportResult {
+        private final Status status;
+        private final Phase7Benchmark.LegacyRecord legacy;
+        private final String publicSha256;
+        private ImportResult(Status status, Phase7Benchmark.LegacyRecord legacy,
+                             String publicSha256) {
+            this.status=Objects.requireNonNull(status);
             if (status != Status.ACCEPTED && legacy != null)
                 throw new IllegalArgumentException("rejected import cannot contain a decision");
-            if (status == Status.ACCEPTED && legacy == null)
-                throw new IllegalArgumentException("accepted import lacks decision");
+            if (status == Status.ACCEPTED && (legacy == null || !validHash(publicSha256)))
+                throw new IllegalArgumentException("accepted import lacks evidence");
+            this.legacy=legacy;
+            this.publicSha256=publicSha256;
         }
+        public Status status() { return status; }
+        public Phase7Benchmark.LegacyRecord legacy() { return legacy; }
+        public String publicSha256() { return publicSha256; }
         public boolean accepted() { return status == Status.ACCEPTED; }
+        @Override public boolean equals(Object other) {
+            return other instanceof ImportResult r && status==r.status
+                    && Objects.equals(legacy,r.legacy)
+                    && Objects.equals(publicSha256,r.publicSha256);
+        }
+        @Override public int hashCode() { return Objects.hash(status,legacy,publicSha256); }
+        @Override public String toString() { return "LegacyImportResult[status="+status+"]"; }
     }
     private static ImportResult rejected(Status status) {
         return new ImportResult(status,null,null);
