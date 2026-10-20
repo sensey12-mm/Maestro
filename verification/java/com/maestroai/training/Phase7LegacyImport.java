@@ -111,9 +111,10 @@ public final class Phase7LegacyImport {
         Objects.requireNonNull(scenario);
         ChoiceReceipt choice=capture.choice();
         if(custody==null) return rejected(Status.NO_CUSTODY_REVIEW);
+        if(!scenario.evidence().fresh()) return rejected(Status.STALE_TURN);
         if(!choice.scenarioFingerprint().equals(Phase7Benchmark.stateFingerprint(scenario)))
             return rejected(Status.MISMATCHED_SCENARIO);
-        if(choice.turn()!=scenario.snapshot().turn() || !scenario.evidence().fresh())
+        if(choice.turn()!=scenario.snapshot().turn())
             return rejected(Status.STALE_TURN);
         if(!scenario.evidence().publicOnly() || !scenario.evidence().mechanicsSupported())
             return rejected(Status.UNKNOWN_PUBLIC_EVIDENCE);
