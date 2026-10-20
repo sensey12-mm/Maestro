@@ -15,6 +15,16 @@ import kotlin.Unit;
  */
 @Mixin(value = RequestInstruction.class, remap = false)
 public abstract class OwnRequestDispatchMixin {
+    // RETURN matters: upstream clears responses AFTER setRequest. Choosing at
+    // the existing observation injection would immediately erase the retry.
+    @Inject(method = "invoke$lambda$0", at = @At("RETURN"), require = 0)
+    private static void maestroCorrected(RequestInstruction instruction, ShowdownActionRequest request,
+                                        PokemonBattle battle, CallbackInfoReturnable<Unit> ci) {
+        if (instruction.getBattleActor() instanceof AIBattleActor actor && actor.getBattleAI() instanceof MaestroBattleAI ai) {
+            ai.ownRequestCorrected(battle, actor, request);
+        }
+    }
+
     @Inject(method = "invoke$lambda$0", at = @At(value = "INVOKE", target =
             "Lcom/cobblemon/mod/common/api/battles/model/actor/BattleActor;setRequest(Lcom/cobblemon/mod/common/battles/ShowdownActionRequest;)V", shift = At.Shift.AFTER), require = 0)
     private static void maestroOwnInstalled(RequestInstruction instruction, ShowdownActionRequest request,
