@@ -276,7 +276,8 @@ public final class Phase7ReplayMatrix {
                 exhausted=0,unsupported=0,uncertainty=0,penalty=0,
                 agreementLoss=0,agreementGain=0;
         for(int i=0;i<Math.min(a.size(),b.size());i++){
-            var x=a.get(i),y=b.get(i);
+            var x=a.get(i);
+            var y=b.get(i);
             if(x.status()!=Phase7Corpus.Status.ACCEPTED
                     ||y.status()!=Phase7Corpus.Status.ACCEPTED)continue;
             accepted++;
@@ -289,7 +290,8 @@ public final class Phase7ReplayMatrix {
             if(!Boolean.TRUE.equals(x.shadowAgreement())
                     &&Boolean.TRUE.equals(y.shadowAgreement()))agreementGain++;
             if(i<traceOld.size()&&i<traceNew.size()){
-                var oldTrace=traceOld.get(i),newTrace=traceNew.get(i);
+                var oldTrace=traceOld.get(i);
+                var newTrace=traceNew.get(i);
                 if(newTrace.reason()==Phase7ShadowReplay.Reason.ILLEGAL_DECISION
                         &&oldTrace.reason()!=Phase7ShadowReplay.Reason.ILLEGAL_DECISION)illegal++;
                 if(newTrace.reason()==Phase7ShadowReplay.Reason.SEARCH_INCOMPLETE
