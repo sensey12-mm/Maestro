@@ -42,6 +42,10 @@ Therefore:
 - Mega Mewtwo Y inherits Mewtwo's moves and overrides abilities with its
   explicit form ability list. Base `pressure` must not be silently
   ascribed to the Mega Y form.
+- A single ability can be listed in both normal and hidden slots (for
+  example, `illusion` on Zoroark or `insomnia` on Mega Mewtwo Y).
+  These are distinct valid eligibility entries, not a source conflict;
+  the reconciler preserves a separate `NORMAL_AND_HIDDEN` finding.
 
 `Learnset.kt` interprets numeric `level:move`, `egg`, `tm`, `tutor`,
 `legacy`, `special` and `form_change`. `LearnsetQuery.LEGAL` includes
