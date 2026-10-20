@@ -389,6 +389,7 @@ public final class StandaloneRegression {
         CompetitiveFormatNormalizerRegression.run();
         PublicCompetitiveTendenciesRegression.run();
         PublicHeldOutEvaluationRegression.run();
+        CompetitiveEvidenceHardeningRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
