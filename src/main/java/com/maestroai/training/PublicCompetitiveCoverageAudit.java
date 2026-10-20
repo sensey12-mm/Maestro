@@ -245,12 +245,17 @@ public final class PublicCompetitiveCoverageAudit {
                                         PublicCompetitiveTendencies.Report trends) {
         // Exclusive precedence makes all group totals auditable without
         // accidentally counting one replay as several independent samples.
-        if (norm.appearances().stream().anyMatch(CompetitiveFormatNormalizer.Appearance::transformed))
+        // Phase 5 hypotheses concern p2a only. The player's own p1a
+        // Transform/unknown moves cannot change the opponent's evidence stratum.
+        if (norm.appearances().stream().anyMatch(a->
+                "p2a".equals(a.slot()) && a.transformed()))
             return Uncertainty.TRANSFORM_OBSERVED;
-        if (norm.appearances().stream().anyMatch(a->a.observedMoves().values().stream()
-                .anyMatch(t->t.sourcePresence()!=CompetitiveFormatNormalizer.Status.PINNED_SOURCE_VERIFIED)))
+        if (norm.appearances().stream().anyMatch(a->"p2a".equals(a.slot())
+                && a.observedMoves().values().stream().anyMatch(t->
+                    t.sourcePresence()!=CompetitiveFormatNormalizer.Status.PINNED_SOURCE_VERIFIED)))
             return Uncertainty.UNKNOWN_MOVE_SOURCE;
-        if (trends.sides().values().stream().anyMatch(s->s.repeatedDisplayCandidates()>0))
+        var opponent=trends.sides().get("p2a");
+        if (opponent!=null && opponent.repeatedDisplayCandidates()>0)
             return Uncertainty.RETURN_DISPLAY_AMBIGUOUS;
         return Uncertainty.ORDINARY_IDENTITY_UNCONFIRMED;
     }
