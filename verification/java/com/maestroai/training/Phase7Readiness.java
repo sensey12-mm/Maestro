@@ -179,7 +179,10 @@ public final class Phase7Readiness {
         String custody=null,shadow=null,matrix=null,mechanics=null,observed=null;
         int cases=0,reviewedCount=0,bindings=0;
         Status status;
-        if(!compatible(input)){
+        boolean aligned;
+        try { aligned=compatible(input); }
+        catch(RuntimeException invalid) { aligned=false; }
+        if(!aligned){
             status=Status.CONFIGURATION_INCOMPATIBLE;
             return report(input,status,stages,artifact,custody,shadow,matrix,mechanics,
                     observed,cases,reviewedCount,bindings);
