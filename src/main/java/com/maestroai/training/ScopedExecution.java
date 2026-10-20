@@ -136,25 +136,10 @@ public final class ScopedExecution {
         bound(attacker, a); bound(target, t); var c = new Check(Operation.DAMAGE);
         c.actor(a.id(), reserve(a.id())); c.actor(t.id(), reserve(t.id()));
         Move m = move(moveId); c.need("SUPPORTED_DAMAGE_MOVE", m != null && m.power() > 0);
-        if(m!=null&&m.type().equals("fairy")) {
-            // Fairy Aura and Technician both modify source base power. Only
-            // their separately source-verified domains are presently certified.
-            boolean aura=actors.values().stream().anyMatch(b->
-                    b.ability().known()&&b.ability().value().equals("fairyaura")
-                    &&b.observation()!=null);
-            boolean technician=actors.containsKey(a.id())&&actors.get(a.id()).ability().known()
-                    &&actors.get(a.id()).ability().value().equals("technician")&&m.power()<=60;
-            c.need("FAIRY_AURA_TECHNICIAN_COMPOSITION",!(aura&&technician));
-        }
         var defender=actors.get(t.id());
         if(defender!=null&&defender.ability().known()&&defender.ability().value().equals("shadowshield"))
             c.need("SHADOW_SHIELD_FULL_HP_CERTIFICATE",t.hp().known()
                     &&(t.hp().value().low()==1.0||t.hp().value().high()<1.0));
-        var offense=actors.get(a.id());
-        if(defender!=null&&offense!=null&&defender.ability().known()&&offense.item().known())
-            c.need("LIFE_ORB_SHADOW_SHIELD_COMPOSITION",!(
-                    defender.ability().value().equals("shadowshield")&&offense.item().value().equals("lifeorb")
-                    &&t.hp().known()&&t.hp().value().low()==1.0));
         c.need("WEATHER", field.weather().known()); c.need("TERRAIN", field.terrain().known());
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {
@@ -162,6 +147,15 @@ public final class ScopedExecution {
             boolean blocked = active != null && active.volatiles().contains("protect")
                     || target.types().known() && effectiveness(m.type(), target.types().value()) == Integer.MIN_VALUE;
             if (!blocked) {
+                // Priority blocking is modeled separately. The terrain's
+                // offensive Psychic boost is not part of this modifier slice.
+                // A source-certified airborne attacker receives no such boost.
+                if(m.type().equals("psychic")&&field.terrain().known()&&field.terrain().value().equals("psychicterrain")) {
+                    var user=actors.get(a.id());
+                    boolean airborne=attacker.types().known()&&attacker.types().value().contains("flying")
+                            ||user!=null&&user.ability().known()&&user.ability().value().equals("levitate");
+                    c.need("PSYCHIC_TERRAIN_DAMAGE_BOOST_OUTSIDE_SLICE",airborne);
+                }
                 String atk = m.attackingStat(), def = m.defendingStat();
                 c.need(a.id() + ":LEVEL", attacker.level().known());
                 c.need(a.id() + ":" + atk, attacker.stat(atk).known() && a.stages().containsKey(atk));
@@ -173,10 +167,8 @@ public final class ScopedExecution {
                     // Certify the full supported critical domain, refusing zero-stat
                     // and engine-wrap domains before issuing a usable certificate.
                     var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
-                            Critical.BOTH,n,d,sourcePowerNumerator(m,a.id(),t.id()),
-                            sourcePowerDenominator(m,a.id(),t.id()),
-                            finalDamageNumerator(a.id(),t.id(),t),
-                            finalDamageDenominator(a.id(),t.id(),t));
+                            Critical.BOTH,n,d,sourcePowerModifier(m,a.id(),t.id()),4096,
+                            finalDamageModifier(a.id(),t.id(),t),4096);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -242,23 +234,28 @@ public final class ScopedExecution {
         return new Profile(raw.actor(), raw.level(), raw.maxHp(), raw.stats(), raw.types(),
                 supported(raw.actor(), reserve) ? Known.of(true, field.token() + ":limited-conditional-scope") : Known.unknown());
     }
-    private int sourcePowerNumerator(Move move,String a,String t) {
-        if(move.type().equals("fairy") && (ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
-            return 5448; // source Fairy Aura 5448/4096, before formula
-        return ability(a).equals("technician")&&move.power()<=60?3:1;
+    private int sourcePowerModifier(Move move,String a,String t) {
+        int modifier=4096;
+        // Native BasePower priority 30: Technician tests power before Fairy
+        // Aura's priority-20 contribution. This slice has no earlier BP hooks.
+        if(ability(a).equals("technician")&&move.power()<=60)
+            modifier=chainModifier(modifier,6144);
+        // Aura is one field contribution even when both active actors have it.
+        if(move.type().equals("fairy")&&(ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
+            modifier=chainModifier(modifier,5448);
+        return modifier;
     }
-    private int sourcePowerDenominator(Move move,String a,String t) {
-        if(move.type().equals("fairy") && (ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
-            return 4096;
-        return ability(a).equals("technician")&&move.power()<=60?2:1;
+    private int finalDamageModifier(String a,String t,Actor target) {
+        int modifier=4096;
+        if(ability(t).equals("shadowshield")&&target.hp().value().low()==1.0)
+            modifier=chainModifier(modifier,2048);
+        if(item(a).equals("lifeorb"))modifier=chainModifier(modifier,5324);
+        return modifier;
     }
-    private int finalDamageNumerator(String a,String t,Actor target) {
-        if(item(a).equals("lifeorb"))return 5324; // pinned native Life Orb ModifyDamage
-        return ability(t).equals("shadowshield")&&target.hp().value().low()==1.0?1:1;
-    }
-    private int finalDamageDenominator(String a,String t,Actor target) {
-        if(item(a).equals("lifeorb"))return 4096;
-        return ability(t).equals("shadowshield")&&target.hp().value().low()==1.0?2:1;
+    private static int chainModifier(int previous,int next) {
+        // Native chainModify rounds the 12-bit modifier half UP. Applying
+        // the completed chain to power/damage later rounds half DOWN.
+        return (int)(((long)previous*next+2048)>>12);
     }
     private String item(String role) { return field.magicRoom().known() && field.magicRoom().value() ? "none" : actors.get(role).item().value(); }
     private String ability(String role) { return actors.get(role).ability().value(); }
@@ -298,8 +295,7 @@ public final class ScopedExecution {
         // Technician modifies base power before the level/stat formula. Never
         // multiply a final damage interval; the engine rounds at each stage.
         return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
-                n,d,sourcePowerNumerator(m,a.id(),t.id()),sourcePowerDenominator(m,a.id(),t.id()),
-                finalDamageNumerator(a.id(),t.id(),t),finalDamageDenominator(a.id(),t.id(),t));
+                n,d,sourcePowerModifier(m,a.id(),t.id()),4096,finalDamageModifier(a.id(),t.id(),t),4096);
     }
     private static Damage zero(String why) {
         return new Damage(Known.unknown(), Known.of(new Interval(0, 0), PublicFieldEvidence.SOURCE + ":" + why), Set.of(), PublicFieldEvidence.SOURCE);

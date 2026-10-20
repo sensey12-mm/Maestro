@@ -103,6 +103,7 @@ final class PackSourceRegression {
             if (!layoutOnly) HealingRecoilRegression.differential(engine);
             if (!layoutOnly) RecoilContinuationRegression.differential(engine);
             if (!layoutOnly) PivotOutcomeRegression.differential(engine);
+            if (!layoutOnly) ModifierCompositionRegression.differential(engine);
             engine.eval("js","var verificationStream=new BS.BattleStream();"
                     +"verificationStream.write('>start '+JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,"
                     +"ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'}}));");
