@@ -32,7 +32,7 @@ public final class Phase7Benchmark {
         }
     }
     public record Evidence(boolean publicOnly, boolean fresh, boolean mechanicsSupported, int turn) {}
-    /** Not a proof of provenance. A trusted upstream importer must attest custody. */
+    /** Legacy boolean retained for compatibility, but NEVER establishes genuine provenance. */
     public record LegacyRecord(String captureId, int turn, String publicStateFingerprint,
                                String action, boolean externallyVerified) {
         public LegacyRecord {
@@ -149,10 +149,12 @@ public final class Phase7Benchmark {
             LegacyRecord legacy=s.legacy();
             String legacyStatus="ABSENT";
             if (legacy!=null) {
+                // A self-declared boolean cannot authenticate a real Legacy return.
+                // Only Phase7LegacyImport's externally reviewed path may say ACCEPTED.
                 legacyStatus = legacy.externallyVerified() && legacy.turn()==s.snapshot().turn()
                         && fp.equals(legacy.publicStateFingerprint())
                         && legalActions(s.snapshot()).contains(legacy.action())
-                        ? "MATCHED_CAPTURE" : "REJECTED_PROVENANCE";
+                        ? "SELF_ASSERTED_UNVERIFIED" : "REJECTED_PROVENANCE";
             }
             if (!s.evidence().publicOnly() || !s.evidence().fresh()
                     || !s.evidence().mechanicsSupported()) {
@@ -178,8 +180,7 @@ public final class Phase7Benchmark {
             Double baseRegret=best-s.criteria().get(baseline).utility();
             Double candRegret=candidate==null?null:best-s.criteria().get(candidate).utility();
             Double unc=candidate==null?null:s.criteria().get(candidate).uncertainty();
-            Boolean disagreement="MATCHED_CAPTURE".equals(legacyStatus)
-                    ? !legacy.action().equals(baseline) : null;
+            Boolean disagreement=null; // Never compare a self-asserted Legacy receipt.
             rows.add(new Row(s.id(),fp,"SCORED",baseline,candidate,baseRegret,
                     candRegret,unc,legacyStatus,disagreement,illegal,
                     candRegret!=null && candRegret>baseRegret+1e-9));

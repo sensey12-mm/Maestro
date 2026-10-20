@@ -141,7 +141,7 @@ public final class Phase7BenchmarkRegression {
                     s.criteria(),s.evidence(),record);
             var withLegacy=new Phase7Benchmark.Suite(suite.schema(),suite.seed(),
                     suite.configurationFingerprint(),List.of(matched));
-            check(row(Phase7Benchmark.run(withLegacy,null),s.id()).legacy().equals("MATCHED_CAPTURE"),
+            check(row(Phase7Benchmark.run(withLegacy,null),s.id()).legacy().equals("SELF_ASSERTED_UNVERIFIED"),
                     "externally verified matching capture can be compared without claiming authenticity");
             var forged=new Phase7Benchmark.LegacyRecord("capture-001",s.snapshot().turn(),
                     Phase7Benchmark.stateFingerprint(s),"move:attack",false);

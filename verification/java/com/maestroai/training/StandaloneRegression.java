@@ -386,6 +386,7 @@ public final class StandaloneRegression {
         reject(() -> new ShadowSearchEngine.Branch("move", "attack", List.of(
                 new ShadowSearchEngine.Outcome("synthetic", .5, 1, 0, "leaf"))));
         Phase7BenchmarkRegression.run();
+        Phase7LegacyImportRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();

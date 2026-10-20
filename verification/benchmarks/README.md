@@ -68,3 +68,39 @@ Future phases may wire in separately validated and version-scoped sources
 only after review. Legacy remains the sole live battle controller and
 Shadow remains observational. Phase 7 final integration must wait until
 Phases 4–6 are ready and integrated.
+
+## Phase 7.2 — reviewed Legacy decision intake
+
+The offline Java API `Phase7LegacyImport.importCapture` reconstructs public events through
+`PublicProtocolFilter`, `PublicEnvelopeProvenance`, `PublicProtocolEvidence` and
+`PublicBattleCapture`. It also requires an externally reviewed `LEGACY_CHOOSE_RETURN`
+action receipt bound to the own-request hash, capture origin, artifact hash,
+public-stream hash, benchmark state and exact turn. The `CustodyReviewer`
+callback receives only opaque IDs and SHA-256 digests. It must consult an
+independently retained original and verify that the receipt really records
+the returned Legacy action and current own request. The importer does not
+authenticate that original by itself; hashes and caller-authored flags are
+**not signatures**. No review means **rejection**. Original raw/private
+battle data remain outside the repository and never enter reports.
+
+The `importBatch` API rejects repeated capture IDs. Evidence checks fail closed
+on unframed/partial public envelopes, split errors, missing public turns,
+identity ambiguity, stale turns, unsupported mechanics, legal-action mismatches,
+tampered history, missing custody review and malformed receipts. Successful
+offline comparisons return only Legacy-vs-baseline and Legacy-vs-Shadow **action
+agreement**, uncertainty/abstention and fixed statuses in machine-readable
+JSON; they do not claim independent decision quality or real match outcomes.
+
+The older Phase 7.1 `LegacyRecord.externallyVerified` boolean is intentionally
+downgraded to `SELF_ASSERTED_UNVERIFIED` in its generic runner. It cannot
+manufacture a `MATCHED_CAPTURE`. Use the reviewed importer for genuinely
+provenance-gated action comparisons.
+
+**Current limitation:** the existing controlled envelope capture contains public
+events and terminal metadata, not an authenticated `chooseLegacy` return
+receipt. This batch adds the strict importer/comparison contract but does not
+retroactively convert public moves or synthetic selections into actual Legacy
+decisions. A separately reviewed, privacy-safe own-choice receipt source is
+needed before any empirical comparisons can be reported. The tests use
+synthetic receipts and an explicitly synthetic trusted-review stub; **zero
+real Legacy decisions were evaluated**. No Minecraft testing occurred.
