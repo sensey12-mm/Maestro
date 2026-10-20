@@ -339,6 +339,11 @@ public final class ShadowMechanicsEvaluation {
                 : execution.damage(moveId, profiles.get(attacker.id()), attacker, profiles.get(target.id()), target, critical);
         if (!damage.fraction().known()) return unknown(p, String.join(",", damage.unknown()));
         Interval d = damage.fraction().value();
+        // In this supported slice a certified zero is a blocked/immune hit,
+        // not a successful hit with follow-ups. Keep the evidence check above:
+        // missing or expired proof must never become a zero-damage shortcut.
+        // Spectral Thief's pre-hit theft retains its separate ordering guard.
+        if (d.high() == 0) return hurt(p, !own, d);
         if (possibleFaint(attacker)) d = new Interval(0, d.high()); // bound conditional nonexecution without an invented probability
         Progress result=hurt(p,!own,d);
         if(execution!=null&&execution.currentItem(attacker.id()).equals("lifeorb")

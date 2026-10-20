@@ -334,6 +334,7 @@ public final class StandaloneRegression {
         check(!MaestroOwnMoveAudit.completelySimulated("uturn"));
     }
     public static void main(String[] args) {
+        BlockedHitRegression.run();
         ownMechanicsExecutionAudit();
         maestroWholeRosterCoverage();
         calyrexMoveCoverage();
