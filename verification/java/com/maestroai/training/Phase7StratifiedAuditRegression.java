@@ -99,7 +99,9 @@ public final class Phase7StratifiedAuditRegression {
             int min=group==Phase7StratifiedAudit.Group.ACTION_MOVE?moveMin:
                     group==Phase7StratifiedAudit.Group.ACTION_SWITCH?switchMin:
                     group==Phase7StratifiedAudit.Group.QUALITY_ACCEPTED?6:0;
-            rules.put(group,new Phase7StratifiedAudit.Rule(act || min>0,min,min,0,0,
+            // A zero minimum explicitly marks an OPTIONAL category, even
+            // when the category is a move/switch action in a synthetic test.
+            rules.put(group,new Phase7StratifiedAudit.Rule(min>0,min,min,0,0,
                     maxLoss,maxAbstain,0));
         }
         return rules;
