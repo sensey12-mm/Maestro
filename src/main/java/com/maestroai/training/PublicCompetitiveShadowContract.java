@@ -87,6 +87,7 @@ public final class PublicCompetitiveShadowContract {
         boolean scopeMatched=normalized.rules().equals(tendencies.rules())
                 && normalized.targetSourceScope().equals(tendencies.targetSourceScope())
                 && validRules(normalized.rules())
+                && normalized.provenance().replayId().startsWith("gen9"+normalized.rules().showdownTier()+"-")
                 && !normalized.minecraftRuntimeAttested()
                 && tendencies.interpretation()
                 ==PublicCompetitiveTendencies.Interpretation.OBSERVATION_ONLY_NOT_FORECAST
@@ -134,7 +135,7 @@ public final class PublicCompetitiveShadowContract {
     }
     private static boolean validRules(CompetitiveFormatNormalizer.Rules r) {
         return r.generation()==9 && "singles".equals(r.gameType())
-                && Set.of("ou","ubers").contains(r.showdownTier())
+                && r.showdownTier()!=null && Set.of("ou","ubers").contains(r.showdownTier())
                 && !r.completeShowdownRulesKnown()
                 && r.cobblemonTierTransfer()==CompetitiveFormatNormalizer.Status.UNKNOWN;
     }
@@ -145,7 +146,8 @@ public final class PublicCompetitiveShadowContract {
         for (int i=0;i<normalized.size();i++) {
             var a=normalized.get(i);
             var b=reported.get(i);
-            if (a==null || b==null || a.displayed()==null || a.observedMoves()==null
+            if (a==null || b==null || a.slot()==null || b.slot()==null
+                    || b.displayedSpecies()==null || a.displayed()==null || a.observedMoves()==null
                     || a.index()!=i+1 || b.index()!=a.index() || !a.slot().equals(b.slot())
                     || !a.displayed().id().equals(b.displayedSpecies())
                     || a.transformed()!=b.transformed()
@@ -178,6 +180,7 @@ public final class PublicCompetitiveShadowContract {
                 else if (entry.entry()==PublicCompetitiveTendencies.EntryKind.DRAG_PUBLICLY_FORCED)
                     drags++;
                 else return false;
+                if (entry.displayedSpecies()==null) return false;
                 if (!"unknown".equals(entry.displayedSpecies())
                         && !seen.add(entry.displayedSpecies())) repeats++;
             }
