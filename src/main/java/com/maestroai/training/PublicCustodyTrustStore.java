@@ -61,6 +61,9 @@ public final class PublicCustodyTrustStore {
                          PublicSignedCustody.SignedManifest manifest,
                          PublicSignedCustody.TrustedPolicy policy,
                          PublicSignedCustody.Verified verified) {}
+    /** One immutable in-process view, resolved from a SINGLE verified file read. */
+    record Resolved(PublicSignedCustody.SignedManifest manifest,
+                    PublicSignedCustody.TrustedPolicy policy) {}
 
     /** Immutable canonical policy bytes; keys sorted by ID, never caller order. */
     public static byte[] policyBytes(PublicSignedCustody.TrustedPolicy policy) {
@@ -225,6 +228,12 @@ public final class PublicCustodyTrustStore {
      * Package-private receipt for offline provenance callers. Full verification
      * happens BEFORE any Phase 5.7 custody verification.
      */
+    static Resolved resolve(Path directory,PublicSignedCustody.TrustedPolicy root,
+                            Checkpoint anchored,long when) {
+        var checked=load(directory,root,anchored,when);
+        return new Resolved(checked.manifest,checked.policy);
+    }
+
     static PublicSignedCustody.SignedManifest validatedManifest(Path directory,
             PublicSignedCustody.TrustedPolicy root,Checkpoint anchored,long when) {
         return load(directory,root,anchored,when).manifest;
@@ -404,7 +413,8 @@ public final class PublicCustodyTrustStore {
         }
         try (FileChannel file=FileChannel.open(pending,StandardOpenOption.CREATE_NEW,
                 StandardOpenOption.WRITE,LinkOption.NOFOLLOW_LINKS)) {
-            file.write(ByteBuffer.wrap(data));
+            ByteBuffer payload=ByteBuffer.wrap(data);
+            while(payload.hasRemaining()) file.write(payload);
             file.force(true);
         } catch(IOException ex) { throw invalid(); }
         restrictPermissions(pending);
