@@ -219,7 +219,8 @@ public final class PublicSignedCustody {
         try {
             PublicKey key=KeyFactory.getInstance("Ed25519")
                     .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(encoded)));
-            if (!"Ed25519".equalsIgnoreCase(key.getAlgorithm())) throw invalid();
+            if (!(key instanceof java.security.interfaces.EdECPublicKey ed)
+                    || !"Ed25519".equals(ed.getParams().getName())) throw invalid();
             return key;
         } catch (java.security.GeneralSecurityException | IllegalArgumentException error) {
             throw invalid();
