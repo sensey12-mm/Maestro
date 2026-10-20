@@ -484,10 +484,12 @@ public final class Phase7ShadowReplay {
                 int[] a=e.getValue();
                 groups.put(e.getKey(),new Count(a[0],a[1],a[2],a[3],a[4],a[5]));
             }
+            int selected=groups.get("MOVE").agreed()+groups.get("MOVE").disagreed()
+                    +groups.get("SWITCH").agreed()+groups.get("SWITCH").disagreed();
             Reason status=rows.size()>policy.maxTraceEntries()
                     ?Reason.TRACE_BUDGET_EXCEEDED:rows.stream()
                     .noneMatch(row->row.status()==Phase7Corpus.Status.ACCEPTED)
-                    ?Reason.NO_CUSTODY_ACCEPTED:Reason.SELECTED;
+                    ?Reason.NO_CUSTODY_ACCEPTED:selected==0?Reason.NO_DECISION:Reason.SELECTED;
             // Hash sanitized metadata only; no raw event, UUID or action enters.
             String material=policy.json()+"|"+custody.json()+"|"+groups+"|"+traces;
             return new Report(SCHEMA,status,policy.revision(),pinned.fileSha256(),

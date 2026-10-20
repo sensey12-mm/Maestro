@@ -263,6 +263,8 @@ public final class Phase7ShadowReplayRegression {
 
             var low=install(f,"shadow_budget",model,scenarios,1,8);
             var limited=run(f,List.of(ids.get(1),ids.get(2)),low,model);
+            check(limited.replay().status()==Phase7ShadowReplay.Reason.NO_DECISION,
+                    "all accepted but abstained decisions cannot claim any selection");
             check(limited.custodyReport().corpus().coverage().accepted()==2
                     && limited.replay().attribution().get("MOVE").abstained()==2
                     && limited.replay().traces().stream().allMatch(t->
