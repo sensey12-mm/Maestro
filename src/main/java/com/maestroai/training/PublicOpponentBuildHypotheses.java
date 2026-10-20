@@ -28,7 +28,8 @@ public final class PublicOpponentBuildHypotheses {
                              boolean sourceEffectSupported,boolean speciesLegalityVerified) {
         public Hypothesis {
             if (kind==null || strength==null || id==null
-                    || !id.matches("[a-z0-9]{1,40}")
+                    || !(kind==Kind.ROLE ? id.matches("[a-z0-9-]{1,48}")
+                            : id.matches("[a-z0-9]{1,40}"))
                     || currentBuildConfirmed || speciesLegalityVerified
                     || (strength==Strength.PUBLICLY_OBSERVED_EVENT && !publicEvent)
                     || (strength==Strength.SOURCE_MOVE_EXISTS_LEARNABILITY_UNKNOWN
