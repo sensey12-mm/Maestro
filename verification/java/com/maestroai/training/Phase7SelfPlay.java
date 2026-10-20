@@ -202,7 +202,8 @@ public final class Phase7SelfPlay {
         all.addProperty("start",graph.start());
         JsonArray ns=new JsonArray();
         for(var n:graph.nodes().values()){
-            var a=first.get(n.firstScenario()),b=second.get(n.secondScenario());
+            var a=first.get(n.firstScenario());
+            var b=second.get(n.secondScenario());
             if(a==null||b==null)
                 throw new IllegalArgumentException("unbound public continuation state");
             JsonObject j=new JsonObject();
@@ -443,7 +444,8 @@ public final class Phase7SelfPlay {
             Map<String,Phase7Benchmark.Scenario> second){
         // The side's own-request menus are never cross-shared with the agent.
         for(Node n:t.nodes().values()){
-            var a=first.get(n.firstScenario()),b=second.get(n.secondScenario());
+            var a=first.get(n.firstScenario());
+            var b=second.get(n.secondScenario());
             if(a==null||b==null
                     ||!eligible(a)||!eligible(b)
                     ||a.snapshot().turn()!=b.snapshot().turn())
@@ -452,8 +454,10 @@ public final class Phase7SelfPlay {
         for(Edge e:t.edges()){
             var before=t.nodes().get(e.source());
             var after=t.nodes().get(e.successor());
-            var a=first.get(before.firstScenario()),b=second.get(before.secondScenario());
-            var nextA=first.get(after.firstScenario()),nextB=second.get(after.secondScenario());
+            var a=first.get(before.firstScenario());
+            var b=second.get(before.secondScenario());
+            var nextA=first.get(after.firstScenario());
+            var nextB=second.get(after.secondScenario());
             if(nextA.snapshot().turn()!=a.snapshot().turn()+1
                     ||nextB.snapshot().turn()!=b.snapshot().turn()+1)
                 return Status.UNVERIFIABLE_SUCCESSOR;
