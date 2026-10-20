@@ -96,7 +96,9 @@ final class PublicCompetitiveHandoffAuditRegression {
                     +"|turn|2\n"+move("Transform")+WIN;
             String c=START+enter("Mewtwo-Mega-Y")+"|turn|1\n"
                     +move("Psystrike")+"|turn|2\n"+move("Swift")+WIN;
-            var training=source(seed),selected=source(seed+1),other=source(seed+2);
+            var training=source(seed);
+            var selected=source(seed+1);
+            var other=source(seed+2);
             var replays=List.of(
                     new PublicHeldOutEvaluation.Replay(training,a,
                             PublicHeldOutEvaluation.Partition.TRAIN),
