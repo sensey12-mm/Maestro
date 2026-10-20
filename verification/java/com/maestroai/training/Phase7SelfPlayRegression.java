@@ -154,6 +154,10 @@ public final class Phase7SelfPlayRegression {
             var pin=policy(f,"observational_v1",f.transitions(),3,20);
             var attestation=attest(f,f.transitions());
             var report=run(f,f.transitions(),pin,attestation);
+            // Phase 7.11 consumes the very same signed observational fixture.
+            // Test-only signer keys NEVER establish authentic Phase 4 mechanics.
+            Phase7MechanicsAdapterRegression.run(f.root(),f.transitions(),
+                    f.first(),f.second());
             check(report.status()==Phase7SelfPlay.Status.VERIFIED_OBSERVATIONAL_SEQUENCE
                     &&report.verified()&&report.endedAtExplicitTerminal(),
                     "fully signed three-step observational path reaches explicit terminal");

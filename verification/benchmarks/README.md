@@ -585,3 +585,82 @@ small-cohort suppression, immutable/tampered local policies, wrong
 artifact/seed and symlink rejection. **This is only synthetic source-level
 validation. Minecraft testing is still required after trusted mechanics
 and Phases 4–6 are integrated. No additional battles are requested.**
+
+## Phase 7.11 — independently pinned public mechanics adapter and transition gates
+
+`Phase7MechanicsAdapter` is a **verification-only**, versioned interface
+between the existing Phase 7.10 observational self-play harness and a
+*future, separately approved* Phase 4 public-mechanics evidence source.
+**No Phase 4 code has been imported or guessed in this branch.** The
+adapter deliberately uses no Phase 4 implementation classes; it consumes
+a typed `phase7.11.mechanics.v1` package containing the reviewed source
+commit/corpus hashes, installation artifact hash, exactly bound public
+transition fingerprint, mechanic-receipt fingerprints and per-edge
+`REVIEWED_PUBLIC`, `UNKNOWN` or `UNSUPPORTED` status.
+
+### Custody, evidence levels and trust
+
+A source package **cannot authorize itself**. An Ed25519 detached approval
+must verify against the reviewer key independently pinned in a
+`phase7.11.policy.v1` local baseline. Separately, the pinned policy
+must bind the exact reference bundle, source commit, source corpus,
+artifact and canonical transition graph. The source contract must equal
+`PHASE4_PUBLIC_MECHANICS_V1` with version 1. Never use an external
+bundle's own key hash as the trusted key. Policies live only under
+ignored `run/phase7-corpus/mechanics/phase7_<revision>.json`;
+create via `define`, store with `writeLocal`, obtain its exact-file SHA
+via a distinct custodian channel and load using
+`load(repositoryRoot,revision,trustedSha)`. The loader refuses
+duplicate/extra/missing JSON fields, tampering, unsupported versions,
+symlinks, wrong revisions and policy overwrites.
+
+**Cryptographic review proves an authorized key signed these bytes,
+not that a mechanics formula is correct.** Source code, runtime
+compatibility, independent source verification and real Cobblemon
+acceptance still require Phase 4 integration review. The adapter returns
+`ELIGIBLE_OFFLINE_ONLY`, never a claim of verified Minecraft support.
+Anything explicitly tagged `SYNTHETIC_TEST_ONLY` is ineligible even
+when signed by the pinned test key. No generic or self-asserted
+`verified=true` field exists.
+
+### Whole-graph coverage and regression safety
+
+Every public transition edge—**including unchosen branches**—must
+have exactly one independently reviewed record with the same canonical
+edge hash, recorded action-pair group, mechanic evidence receipt and
+public-state graph binding. Joint-action groups:
+`MOVE_MOVE`, `MOVE_SWITCH`, `SWITCH_MOVE`, `SWITCH_SWITCH`.
+A pinned, explicit `Gate` requires minimum overall and per-group
+reviewed evidence; zero group minima mark a group optional but never
+excuse a missing record for a transition that actually exists.
+Any unknown/unsupported effect prevents offline eligibility regardless
+of configured tolerance. Missing, duplicate, stale, source-mismatched
+or miscategorized records fail closed; no inferred opponent responses
+or hidden information can substitute for absent public evidence.
+
+`audit(...)` produces a deterministic `phase7.11.v1` aggregate JSON
+report with fixed statuses and per-stratum counts. Any group with fewer
+than three reviewed public transition candidates suppresses its
+counts. `compare(...)` compares separately signed source revisions on
+the same **exact** public graph, source corpus, source commit and
+installed artifact; it detects reviewed-to-unknown/unsupported
+downgrades, changed mechanics receipts, unauthorized source changes,
+relabelled groups and unverifiable candidate signers.
+`replay(...)` calls the mechanics audit **before** Phase 7.10 search.
+If the audit fails, the returned `GatedReplay` contains no self-play
+result; successful adapter review only grants permission for **offline
+observational replay**, whose own signature/legality/turn checks remain
+mandatory.
+
+Phase 7.11 adversarial tests reuse Phase 7.10's privately generated
+synthetic three-turn transcript and *extend it* to exercise all four
+joint-action categories. These tests use new ephemeral keys and
+a **deliberately fictional Phase 4 source**, strictly to verify contract
+logic. They verify signature and trust pins, ignored local policy
+lifecycle, public-transition integrity, duplicate/missing records,
+source/corpus drift, support downgrades, complete-group minima,
+changed mechanics receipts, actor legality, small-cell redaction,
+tampered metadata and actual gated replay. **There are still zero
+independently reviewed real Phase 4 mechanics, zero Minecraft runs and
+zero empirical win-rate observations.** Legacy retains exclusive live
+battle control; Shadow stays offline, and no new battles are requested.
