@@ -116,16 +116,18 @@
   };
   mark('PUBLIC_CONFIGURATION_REGISTRY_REJECTED');
   let registryEquivalent = true, scopedRegistryEquivalent = true, registryCount = 0;
-  // These IDs exactly match ScopedExecution's modifier/move slice. Unsupported
-  // entries are not certified; a selected actor/action still has to pass every
-  // operation-specific prerequisite in Java. No absent opponent modifier inference.
+  // Cover every calculator move, plus the separately source-audited past-only
+  // history IDs. Native verification checks this against the Java calculator.
+  // Unsupported entries are not certified; each selected actor/action must
+  // still pass its operation prerequisites. No absent modifier inference.
   const relevant = {
     ability: new Set(['runaway','magicguard','pressure','levitate','prankster','stall','download','technician','multitype','fairyaura']),
     heldItem: new Set(['none','heavydutyboots','choicescarf','laggingtail','powerherb','marshadiumz','leftovers']),
     move: new Set(['tackle','swift','scratch','quickattack','extremespeed','shadowclaw','shadowsneak',
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',
       'uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock','drainingkiss',
-      'energyball','closecombat','rocktomb','shadowball','hypervoice','aurasphere'])
+      'energyball','closecombat','rocktomb','geomancy','thunder','psystrike','fireblast','spectralthief',
+      'shadowball','hypervoice','aurasphere'])
   };
   const registryAudit = {};
   for (const [group, table, ctor] of [['ability', 'Abilities', modules.Ability],

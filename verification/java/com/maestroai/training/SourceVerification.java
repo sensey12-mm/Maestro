@@ -82,6 +82,7 @@ public final class SourceVerification {
             var probe=engine.eval("js",Files.readString(resources.resolve("runtime-domain-probe.js")));
             var publicBattle=engine.eval("js","verificationStream.battle");
             var modules=engine.eval("js","("+moduleExpression+")");
+            var anchor=engine.eval("js",Files.readString(resources.resolve("runtime-source-anchor.js"))).execute(modules);
             var clean = JsonParser.parseString(probe.execute(publicBattle,modules,false,null).asString()).getAsJsonObject();
             var observed = new TreeMap<String,String>();
             for (var value : clean.getAsJsonObject("components").entrySet()) {
@@ -89,6 +90,7 @@ public final class SourceVerification {
                 observed.put(value.getKey(), HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data)));
             }
             if (!observed.equals(expected)) throw new AssertionError("Initialized source components differ: "+observed);
+            MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);
             var sourceDomain = new RuntimeDomain(new RuntimeDomain.Snapshot(
                     clean.get("mod").getAsString().equals("cobblemon") && clean.get("gen").getAsInt()==9
                             && clean.get("gameType").getAsString().equals("singles"),

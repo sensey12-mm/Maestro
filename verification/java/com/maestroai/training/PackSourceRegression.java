@@ -111,6 +111,7 @@ final class PackSourceRegression {
             var expected=pins(resources.resolve("runtime-pack-components.tsv"));
             check(observed.equals(expected),"Pack initialized components differ: "+observed);
             if(layoutOnly){System.out.println("Pinned LF/CRLF initialized operation fingerprint equivalence PASS");return;}
+            MoveAttestationRegression.run(engine,probe,battle,modules,anchor,expected);
             engine.eval("js","verificationStream.battle.dex.dataCache.Moves.unsupported={name:'Unsupported',onHit(){return 1;}};Cobblemon.registries.move.register({name:'Unsupported',onHit(){return 1;}},'unsupported');");
             var scoped=capture.get();
             check(!scoped.get("registryEquivalent").getAsBoolean() && scoped.get("scopedRegistryEquivalent").getAsBoolean(),"Unused custom move granted globally or blocked supported slice");

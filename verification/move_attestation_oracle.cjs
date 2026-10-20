@@ -1,0 +1,129 @@
+'use strict';
+
+// Execute the real pinned registry/constructors and production probe. No battle
+// actors or requests are needed to test public move configuration provenance.
+module.exports = function (modules, anchor, probe, battle, selectable) {
+  let checks = 0, privateReads = 0, callbackCalls = 0;
+  const check = (ok, why) => { checks++; if (!ok) throw Error(why); };
+  const capture = () => probe(battle, modules, false, null, anchor, true);
+  const registry = modules.Cobblemon.registries.move;
+  const table = battle.dex.dataCache.Moves;
+  const initial = capture(), original = JSON.parse(initial.json);
+  const covered = JSON.parse(original.components.operationTables).Moves;
+  for (const id of selectable) check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
+
+  // Trap the actual private surfaces. Restore descriptors for the remaining
+  // integration fixtures, which may later create their own synthetic actors.
+  const privateKeys = ['p1', 'p2', 'sides', 'log', 'inputLog', 'activePokemon', 'activeTarget'];
+  const descriptors = privateKeys.map(key => Object.getOwnPropertyDescriptor(battle, key));
+  for (const key of privateKeys) Object.defineProperty(battle, key, {configurable:true,
+    get() { privateReads++; throw Error('private actor state read'); }});
+  const badRegistries = [];
+  const restored = ['geomancy', 'thunder', 'psystrike', 'fireblast', 'spectralthief'];
+  try {
+    // Every calculator move must accept genuine native normalization. Warmed
+    // native definitions may have frozen nested fields; use the pinned clone.
+    for (const id of selectable) {
+      const native = registry.register({name:id, ...modules.Utils.deepClone(table[id])}, id);
+      check(native instanceof modules.DataMove && native.id === id, 'Native move normalization changed: ' + id);
+    }
+    let receipt = capture();
+    check(JSON.parse(receipt.json).registryEquivalent, 'Genuine selected move registrations rejected');
+    check(receipt.current(), 'Genuine selected move lease unavailable');
+    registry.reset();
+    check(!receipt.current(), 'Registry reset retained selected move lease');
+    check(capture().current(), 'Fresh receipt unavailable after native registry reset');
+
+    for (const id of restored) {
+      const definition = table[id];
+      const native = registry.register({name:id, ...modules.Utils.deepClone(definition)}, id);
+      receipt = capture();
+      check(JSON.parse(receipt.json).registryEquivalent && receipt.current(), 'Original move rejected: ' + id);
+
+      registry.register({name:id, ...modules.Utils.deepClone(definition), basePower:definition.basePower + 1}, id);
+      const altered = JSON.parse(capture().json);
+      check(!altered.registryEquivalent && !altered.scopedRegistryEquivalent, 'Altered selected move retained scope: ' + id);
+      badRegistries.push({id, registryEquivalent:altered.registryEquivalent, scopedRegistryEquivalent:altered.scopedRegistryEquivalent});
+      check(!receipt.current(), 'Altered registry retained old lease: ' + id);
+      registry.contents.set(id, native);
+      check(capture().current() && !receipt.current(), 'Restoration revived old registry lease: ' + id);
+
+      registry.register({name:id, ...modules.Utils.deepClone(definition), onHit() { callbackCalls++; }}, id);
+      check(!JSON.parse(capture().json).scopedRegistryEquivalent, 'Foreign selected-move callback accepted: ' + id);
+      registry.reset();
+
+      // Source metadata is independently fingerprinted. Replacing a table row
+      // must expire its lease even when the old source object remains alive.
+      receipt = capture();
+      table[id] = {...definition, basePower:definition.basePower + 1};
+      check(!receipt.current(), 'Selected source replacement retained lease: ' + id);
+      check(JSON.parse(capture().json).components.operationTables !== original.components.operationTables,
+        'Selected source metadata omitted from fingerprint: ' + id);
+      table[id] = definition;
+      check(capture().current() && !receipt.current(), 'Source restoration revived old lease: ' + id);
+
+      // Test a foreign closure with identical function text in the actual
+      // callback position whenever the native definition has one.
+      const slot = Object.keys(definition).find(key => typeof definition[key] === 'function');
+      if (slot) {
+        const foreign = eval('({' + definition[slot].toString() + '})')[slot];
+        check(foreign !== definition[slot] && foreign.toString() === definition[slot].toString(),
+          'Same-text foreign callback fixture invalid: ' + id);
+        table[id] = {...definition, [slot]:foreign};
+        let rejected = false;
+        try { capture(); } catch (unverified) { rejected = true; }
+        check(rejected, 'Same-text source callback gained provenance: ' + id);
+        table[id] = definition;
+      }
+    }
+
+    // An unused custom move may coexist, but receives no selected-operation
+    // certificate. Its presence must not disable unrelated ordinary actions.
+    table.unusedfixture = {name:'Unused Fixture', onHit() { callbackCalls++; }};
+    registry.register(table.unusedfixture, 'unusedfixture');
+    receipt = capture();
+    const unused = JSON.parse(receipt.json);
+    check(!unused.registryEquivalent && unused.scopedRegistryEquivalent && receipt.current(),
+      'Unused custom move isolation changed');
+    check(!Object.hasOwn(JSON.parse(unused.components.operationTables).Moves, 'unusedfixture'),
+      'Unused custom move acquired operation-table coverage');
+    check(unused.components.operationTables === original.components.operationTables,
+      'Unused custom move changed supported operation fingerprint');
+    registry.reset(); delete table.unusedfixture;
+    check(!receipt.current(), 'Custom registry reset retained old receipt');
+    check(capture().current(), 'Fresh supported receipt not restored');
+    check(privateReads === 0 && callbackCalls === 0, 'Proof read private state or executed a move callback');
+  } finally {
+    registry.reset(); delete table.unusedfixture;
+    privateKeys.forEach((key, i) => {
+      if (descriptors[i]) Object.defineProperty(battle, key, descriptors[i]);
+      else delete battle[key];
+    });
+  }
+  return JSON.stringify({checks, selected:selectable.length, badRegistries});
+};
+
+if (typeof process !== 'undefined' && process.argv && require.main === module) {
+  const fs = require('fs'), path = require('path'), vm = require('vm');
+  const root = path.resolve(process.argv[2]);
+  const res = path.resolve(__dirname, '../src/main/resources/com/maestroai/training');
+  global.require = require('module').createRequire(path.join(root, 'index.js'));
+  const js = source => vm.runInThisContext(source);
+  js(fs.readFileSync(path.join(root, 'index.js'), 'utf8'));
+  const modules = js(`({Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,
+    BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,
+    Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,DataMove:require('./sim/dex-moves').DataMove,
+    BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,
+    Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon})`);
+  const anchor = js(fs.readFileSync(path.join(res, 'runtime-source-anchor.js'), 'utf8'))(modules);
+  const probe = js(fs.readFileSync(path.join(res, 'runtime-domain-probe.js'), 'utf8'));
+  const stream = js('new BS.BattleStream()');
+  stream.write('>start ' + JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,
+    ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'}}));
+  const java = fs.readFileSync(path.join(__dirname, '../src/main/java/com/maestroai/training/CobblemonMechanics.java'), 'utf8');
+  const selectable = [...java.matchAll(/Map\.entry\("([a-z0-9]+)", new Move\(/g)].map(match => match[1]);
+  if (!selectable.length) throw Error('No calculator move IDs found');
+  const result = JSON.parse(module.exports(modules, anchor, probe, stream.battle, selectable));
+  console.log('Native selected-move attestation PASS: ' + result.selected + ' IDs; ' + result.checks +
+    ' checks; altered definitions, foreign callbacks, irreversible leases, unused move isolation and privacy');
+}

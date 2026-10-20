@@ -99,6 +99,8 @@ public final class CobblemonMechanics {
     private static final Set<String> TYPES = Set.of("normal", "fire", "water", "electric", "grass", "ice",
             "fighting", "poison", "ground", "flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy");
     public static Move move(String id) { return MOVES.get(id); }
+    /** Calculator IDs only; each selected operation still requires its current evidence certificate. */
+    public static Set<String> supportedMoveIds() { return MOVES.keySet(); }
     public record Damage(Known<IntRange> points, Known<Interval> fraction, Set<String> unknown, String source) {
         public Damage { unknown = Set.copyOf(unknown); }
         public static Damage unknown(String reason) {
