@@ -29,17 +29,25 @@ public final class PublicReplayProvenance {
         private final PublicCompetitiveTendencies.Report tendencies;
         private final List<PublicReplayCustody.Reference> custodyReferences;
         private final long custodyRevision;
+        private final boolean signedCustodyIssued;
         private CheckedReplay(CompetitiveFormatNormalizer.Result normalized,
                               PublicCompetitiveTendencies.Report tendencies) {
-            this(normalized,tendencies,List.of(),0);
+            this(normalized,tendencies,List.of(),0,false);
         }
         private CheckedReplay(CompetitiveFormatNormalizer.Result normalized,
                               PublicCompetitiveTendencies.Report tendencies,
                               List<PublicReplayCustody.Reference> custodyReferences,long custodyRevision) {
+            this(normalized,tendencies,custodyReferences,custodyRevision,false);
+        }
+        private CheckedReplay(CompetitiveFormatNormalizer.Result normalized,
+                              PublicCompetitiveTendencies.Report tendencies,
+                              List<PublicReplayCustody.Reference> custodyReferences,long custodyRevision,
+                              boolean signedCustodyIssued) {
             this.normalized = normalized;
             this.tendencies = tendencies;
             this.custodyReferences=List.copyOf(custodyReferences);
             this.custodyRevision=custodyRevision;
+            this.signedCustodyIssued=signedCustodyIssued;
         }
         /**
          * Custody is deliberately re-evaluated against an up-to-date complete
@@ -51,6 +59,23 @@ public final class PublicReplayProvenance {
                                                 long requiredRevision) {
             return PublicReplayCustody.eligible(ledger,custodyReferences,
                     evaluatedAtEpochSecond,Math.max(custodyRevision,requiredRevision));
+        }
+        /**
+         * A signed-issued receipt must be revalidated against the current
+         * trusted keyring, revocation policy, checkpoint and evaluation time.
+         * Unsigned Phase 5.7/5.8 receipts are NEVER upgraded by this method.
+         */
+        public boolean signedCustodyCurrentlyEligible(PublicSignedCustody.SignedManifest latest,
+                                                      PublicSignedCustody.TrustedPolicy policy,
+                                                      long evaluatedAtEpochSecond) {
+            if (!signedCustodyIssued || policy==null) return false;
+            try {
+                var checked=PublicSignedCustody.verify(latest,policy,evaluatedAtEpochSecond);
+                return PublicReplayCustody.eligible(checked.ledger(),custodyReferences,
+                        evaluatedAtEpochSecond,Math.max(custodyRevision,policy.minimumRevision()));
+            } catch (IllegalArgumentException invalid) {
+                return false;
+            }
         }
         /** No replay ID, digest, nickname, move list, opponent identity or probability leaks. */
         public Set<Boundary> boundaries() {
@@ -77,21 +102,40 @@ public final class PublicReplayProvenance {
         private final int trainingReplays, evaluationReplays;
         private final List<PublicReplayCustody.Reference> custodyReferences;
         private final long custodyRevision;
+        private final boolean signedCustodyIssued;
         private CheckedSplit(int trainingReplays, int evaluationReplays) {
-            this(trainingReplays,evaluationReplays,List.of(),0);
+            this(trainingReplays,evaluationReplays,List.of(),0,false);
         }
         private CheckedSplit(int trainingReplays,int evaluationReplays,
                              List<PublicReplayCustody.Reference> custodyReferences,long custodyRevision) {
+            this(trainingReplays,evaluationReplays,custodyReferences,custodyRevision,false);
+        }
+        private CheckedSplit(int trainingReplays,int evaluationReplays,
+                             List<PublicReplayCustody.Reference> custodyReferences,long custodyRevision,
+                             boolean signedCustodyIssued) {
             this.trainingReplays=trainingReplays;
             this.evaluationReplays=evaluationReplays;
             this.custodyReferences=List.copyOf(custodyReferences);
             this.custodyRevision=custodyRevision;
+            this.signedCustodyIssued=signedCustodyIssued;
         }
         public boolean custodyCurrentlyEligible(PublicReplayCustody.Ledger ledger,
                                                 long evaluatedAtEpochSecond,
                                                 long requiredRevision) {
             return PublicReplayCustody.eligible(ledger,custodyReferences,
                     evaluatedAtEpochSecond,Math.max(custodyRevision,requiredRevision));
+        }
+        public boolean signedCustodyCurrentlyEligible(PublicSignedCustody.SignedManifest latest,
+                                                      PublicSignedCustody.TrustedPolicy policy,
+                                                      long evaluatedAtEpochSecond) {
+            if (!signedCustodyIssued || policy==null) return false;
+            try {
+                var checked=PublicSignedCustody.verify(latest,policy,evaluatedAtEpochSecond);
+                return PublicReplayCustody.eligible(checked.ledger(),custodyReferences,
+                        evaluatedAtEpochSecond,Math.max(custodyRevision,policy.minimumRevision()));
+            } catch (IllegalArgumentException invalid) {
+                return false;
+            }
         }
         public int trainingReplays() { return trainingReplays; }
         public int heldOutReplays() { return evaluationReplays; }
@@ -219,6 +263,60 @@ public final class PublicReplayProvenance {
         CheckedSplit consistent=verifySplit(supplied,target,submitted);
         return new CheckedSplit(consistent.trainingReplays,consistent.evaluationReplays,
                 refs,ledger.revision());
+    }
+
+
+    /** Phase 5.9: require signature, caller-pinned trust and deterministic
+     * public replay reconstruction before creating a signed-issued receipt. */
+    public static CheckedReplay ingestWithSignedCustody(PublicReplayCorpus.Source source,
+                                  String spectatorLog,CompetitiveFormatNormalizer.Target target,
+                                  PublicSignedCustody.SignedManifest signed,
+                                  PublicSignedCustody.TrustedPolicy policy,long evaluatedAtEpochSecond) {
+        var receipt=PublicSignedCustody.verify(signed,policy,evaluatedAtEpochSecond);
+        var admitted=PublicReplayCorpus.ingest(source,spectatorLog);
+        var ref=PublicReplayCustody.require(receipt.ledger(),source,admitted,
+                evaluatedAtEpochSecond,policy.minimumRevision());
+        var checked=ingest(source,spectatorLog,target);
+        return new CheckedReplay(checked.normalized,checked.tendencies,
+                List.of(ref),receipt.revision(),true);
+    }
+
+    public static CheckedReplay verifyWithSignedCustody(PublicReplayCorpus.Source source,
+                                  String spectatorLog,CompetitiveFormatNormalizer.Target target,
+                                  PublicReplayCorpus.Evidence evidence,
+                                  CompetitiveFormatNormalizer.Result normalized,
+                                  PublicCompetitiveTendencies.Report tendencies,
+                                  PublicSignedCustody.SignedManifest signed,
+                                  PublicSignedCustody.TrustedPolicy policy,long evaluatedAtEpochSecond) {
+        var receipt=PublicSignedCustody.verify(signed,policy,evaluatedAtEpochSecond);
+        var checked=verify(source,spectatorLog,target,evidence,normalized,tendencies);
+        var ref=PublicReplayCustody.require(receipt.ledger(),source,evidence,
+                evaluatedAtEpochSecond,policy.minimumRevision());
+        return new CheckedReplay(checked.normalized,checked.tendencies,
+                List.of(ref),receipt.revision(),true);
+    }
+
+    /** Every source in both held-out partitions must pass current signed
+     * custody, as well as Phase 5.4 duplication and provenance gates. */
+    public static CheckedSplit verifySplitWithSignedCustody(
+                                  List<PublicHeldOutEvaluation.Replay> supplied,
+                                  CompetitiveFormatNormalizer.Target target,
+                                  PublicHeldOutEvaluation.Report submitted,
+                                  PublicSignedCustody.SignedManifest signed,
+                                  PublicSignedCustody.TrustedPolicy policy,
+                                  long evaluatedAtEpochSecond) {
+        var receipt=PublicSignedCustody.verify(signed,policy,evaluatedAtEpochSecond);
+        if (supplied==null || supplied.isEmpty()) throw rejected();
+        var refs=new ArrayList<PublicReplayCustody.Reference>();
+        for (var replay:supplied) {
+            if (replay==null) throw rejected();
+            var admitted=PublicReplayCorpus.ingest(replay.source(),replay.spectatorLog());
+            refs.add(PublicReplayCustody.require(receipt.ledger(),replay.source(),admitted,
+                    evaluatedAtEpochSecond,policy.minimumRevision()));
+        }
+        var checked=verifySplit(supplied,target,submitted);
+        return new CheckedSplit(checked.trainingReplays,checked.evaluationReplays,
+                refs,receipt.revision(),true);
     }
 
     private static CheckedReplay issued(CompetitiveFormatNormalizer.Result normalized,
