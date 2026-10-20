@@ -70,6 +70,8 @@ public final class PublicReplayCorpus {
             // A public log must be chronological, and cannot contain
             // additional observations after its terminal result.
             if (finished) throw rejected();
+            if (started && Set.of("gen","gametype","tier","player","teamsize",
+                    "rule","rated").contains(kind)) throw rejected();
             if (line.equals("|start")) {
                 if (started) throw rejected();
                 started=true;
@@ -78,9 +80,7 @@ public final class PublicReplayCorpus {
                 if (!started || turns==0) throw rejected();
                 finished=true;
             }
-            if (Set.of("move","switch","drag","replace","detailschange","-transform",
-                    "-formechange","-mega","-terastallize").contains(kind) && !started)
-                throw rejected();
+            if (!METADATA_KINDS.contains(kind) && !started) throw rejected();
             if (line.equals("|gen|9")) gen++;
             else if (line.startsWith("|gen|")) throw rejected();
             if (line.equals("|gametype|singles")) game++;
