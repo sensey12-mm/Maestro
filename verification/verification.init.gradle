@@ -14,6 +14,16 @@ allprojects {
                     p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
             mainClass = 'com.maestroai.training.StandaloneRegression'
         }
+        p.tasks.register('phase7Benchmark', JavaExec) {
+            dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            classpath = p.sourceSets.verification.output +
+                    p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
+                    p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
+            mainClass = 'com.maestroai.training.Phase7Benchmark'
+            args(p.hasProperty('phase7Fixture')
+                    ? p.property('phase7Fixture').toString()
+                    : 'verification/benchmarks/phase7_1_synthetic.json')
+        }
         p.tasks.register('sourceVerification', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
             classpath = p.sourceSets.verification.output +
