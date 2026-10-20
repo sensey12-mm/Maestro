@@ -28,11 +28,11 @@ jobs:
           python3 verification/check_repository.py --self-test
           python3 verification/check_repository.py
       - name: Build and run standalone regressions
-        run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression --stacktrace
+        run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression phase7Benchmark --stacktrace
       - name: Check JAR and checker regressions
         run: |
           python3 verification/check_jar.py --self-test
-          python3 verification/check_jar.py build/libs/maestroai-1.0.0.jar
+          python3 verification/check_jar.py
       - name: Verify pinned simulator source and relocated engine
         run: |
           node --version

@@ -27,7 +27,11 @@ public class MaestroAI implements ModInitializer {
 
         ControlledBattleCaptureRegistry.install();
 
-        System.out.println("[MaestroAI] Loaded.");
+        String version = net.fabricmc.loader.api.FabricLoader.getInstance()
+                .getModContainer(MOD_ID)
+                .map(container -> container.getMetadata().getVersion().getFriendlyString())
+                .orElse("UNKNOWN");
+        System.out.println("[MaestroAI] Loaded version " + version + ".");
         System.out.println("[MaestroAI] Registered AI type: maestro");
     }
 }

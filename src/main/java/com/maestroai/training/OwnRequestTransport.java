@@ -32,15 +32,18 @@ public final class OwnRequestTransport {
     private int turn, receiptTurn = -1;
     private long epoch;
     private boolean choiceOpen, used, turnDispatchOpen;
+    private final Set<UUID> initialReserves = new HashSet<>();
     private final Set<String> reasons = new TreeSet<>();
+
+    private boolean turnReceipt;
 
     public void owner(Object battle, Object actor, String side) {
         if (this.battle == battle && this.actor == actor && Objects.equals(this.side, side)) return;
         this.battle = battle; this.actor = actor; this.side = side;
-        turn = 0; turnDispatchOpen = false; previous = null; invalidate("OWN_DISPATCH_NOT_OBSERVED");
+        turn = 0; turnDispatchOpen = false; turnReceipt = false; previous = null; initialReserves.clear(); invalidate("OWN_DISPATCH_NOT_OBSERVED");
     }
     public void invalidate(String reason) {
-        epoch++; choiceOpen = false; turnDispatchOpen = false; token = null; receipt = null; reasons.clear(); reasons.add(reason);
+        epoch++; choiceOpen = false; turnDispatchOpen = false; turnReceipt = false; token = null; receipt = null; reasons.clear(); reasons.add(reason);
     }
     /** The lazy parser is NEVER invoked for a foreign actor, battle or side. */
     public void dispatched(Object battle, Object actor, String side, Object installedToken, Supplier<Request> parser) {
@@ -51,6 +54,7 @@ public final class OwnRequestTransport {
             if (installedToken == null || r == null || !Set.of("p1", "p2").contains(side) || !side.equals(r.side()))
                 throw new IllegalArgumentException();
             if (r.equals(previous) && receiptTurn == turn) { reasons.add("DUPLICATE_OWN_DISPATCH"); return; }
+            boolean first = previous == null;
             previous = r; receiptTurn = turn;
             if (r.mode() == Mode.WAIT) { reasons.add("OWN_WAIT_REQUEST"); return; }
             var uuids = new HashSet<UUID>(); int active = 0;
@@ -61,20 +65,34 @@ public final class OwnRequestTransport {
             }
             if (active != 1 || r.pokemon().isEmpty() || r.pokemon().size() > 6) throw new IllegalArgumentException();
             receipt = r;
+            // The initial construction receipt remains evidence for a reserve
+            // that has never entered. Its current stats/item/HP still come from
+            // THIS dispatch; this stores identities, never stale numeric data.
+            if (first && turn == 0 && r.mode() == Mode.MOVE)
+                for (Pokemon p : r.pokemon()) if (!p.dto().active() && !p.special()
+                        && p.dto().condition() != null && p.dto().condition().matches("[1-9][0-9]*/[1-9][0-9]*"))
+                    initialReserves.add(p.dto().uuid());
         } catch (RuntimeException invalid) { reasons.add("OWN_REQUEST_SCHEMA_OR_IDENTITY_UNSUPPORTED"); }
     }
     /** Called at entry to the real TurnInstruction dispatch, BEFORE its choice packet. */
     public void turnDispatched(Object battle, int nextTurn) {
         if (this.battle != battle) return;
         epoch++; choiceOpen = false;
-        if (nextTurn != turn + 1) { invalidate("OWN_TURN_SEQUENCE_UNSUPPORTED"); turn = Math.max(turn, nextTurn); return; }
-        turn = nextTurn; turnDispatchOpen = true;
+        if (nextTurn != turn + 1) { initialReserves.clear(); invalidate("OWN_TURN_SEQUENCE_UNSUPPORTED"); turn = Math.max(turn, nextTurn); return; }
+        turn = nextTurn; turnDispatchOpen = true; turnReceipt = true;
     }
     public void turnFinished(Object battle, int dispatchedTurn) {
         if (this.battle == battle && dispatchedTurn == turn) turnDispatchOpen = false;
     }
     public boolean observedTurnAllowed(int actualBattleTurn) {
         return turn > 0 && (actualBattleTurn == turn || turnDispatchOpen && actualBattleTurn == turn - 1);
+    }
+    /** Stable turn from the owning TurnInstruction receipt, including its
+     * source-verified window before PokemonBattle.turn writes the Java field.
+     * Never invent a +1 turn from an arbitrary caller's Java counter.
+     */
+    public int dispatchedTurn(Object battle, Object actor, int actualBattleTurn) {
+        return turnReceipt && this.battle == battle && this.actor == actor && observedTurnAllowed(actualBattleTurn) ? turn : -1;
     }
     public final class Lease {
         private final long generation;
@@ -99,6 +117,47 @@ public final class OwnRequestTransport {
             choiceOpen = true; used = true;
         }
         return new Lease(installed);
+    }
+    /**
+     * Phase 7.3: a private, short-lived proof of the CURRENT owning request.
+     * The digest is process-salted so player identities, party members, stats
+     * and request text are never emitted, even as unsalted dictionary hashes.
+     * It is a correlation token, NOT an authentication signature.
+     */
+    private static final byte[] CHOICE_SALT = new byte[32];
+    static { new java.security.SecureRandom().nextBytes(CHOICE_SALT); }
+    public final class ChoiceProof {
+        private final Lease lease;
+        private final String requestDigest;
+        private final int turn;
+        private final UUID battleId;
+        private ChoiceProof(Lease lease, UUID battleId, String digest) {
+            this.lease = lease; this.turn = lease.turn(); this.battleId = battleId;
+            this.requestDigest = digest;
+        }
+        public boolean current() { return lease.current() && lease.belongsTo(OwnRequestTransport.this)
+                && lease.turn() == turn; }
+        public boolean currentFor(UUID otherBattleId) {
+            return current() && battleId.equals(otherBattleId);
+        }
+        public int turn() { return turn; }
+        public String requestDigest() { return requestDigest; }
+        @Override public String toString() { return "OwnChoiceProof[redacted]"; }
+    }
+    public ChoiceProof choiceProof(Lease lease, UUID battleId) {
+        if (battleId == null || lease == null || !lease.belongsTo(this)
+                || !lease.current() || receipt == null)
+            return null;
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            digest.update(CHOICE_SALT);
+            // Correlation only. No raw request fields are persisted/exported.
+            String material = SOURCE + "|" + lease.source() + "|" + battleId + "|" + side + "|" + receipt;
+            digest.update(material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return new ChoiceProof(lease, battleId, java.util.HexFormat.of().formatHex(digest.digest()));
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new AssertionError(impossible);
+        }
     }
     public void endChoice() { epoch++; choiceOpen = false; }
     private static String nickname(String ident) {
@@ -143,19 +202,19 @@ public final class OwnRequestTransport {
             if (!reserve && active.types().known() && !active.types().value().equals(selected.dto().types().stream().map(t -> t.toLowerCase(Locale.ROOT)).toList()))
                 missing.add("OWN_PUBLIC_CURRENT_TYPING_MISMATCH");
             if (reserve) {
-                String target = selected.dto().uuid().toString(), previous = null; boolean exited = false; int switches = 0;
+                String target = selected.dto().uuid().toString(), previous = null; boolean exited = false, everEntered = false; int switches = 0;
                 for (String line : protocol.mechanicsEvents()) {
                     String[] p = line.split("\\|", -1);
                     if (Set.of("switch", "drag").contains(p[1]) && p[2].startsWith(side + "a: ")) {
                         String incoming = nickname(p[2]); switches++;
                         if (target.equals(previous) && !target.equals(incoming)) exited = true;
-                        if (target.equals(incoming)) exited = false;
+                        if (target.equals(incoming)) { exited = false; everEntered = true; }
                         previous = incoming;
                     } else if (p[1].equals("replace") && p[2].startsWith(side + "a: ")) {
                         missing.add("OWN_RESERVE_REVEAL_LIFECYCLE_UNSUPPORTED");
                     }
                 }
-                boolean initial = lease.turn() == 1 && receiptTurn == 0 && receipt.mode() == Mode.MOVE && switches == 1;
+                boolean initial = initialReserves.contains(uuid) && !everEntered && switches >= 1;
                 if (!exited && !initial) missing.add("OWN_RESERVE_CLEAR_LIFECYCLE_UNJUSTIFIED");
                 // A fainted/reviving record is not the source's unfainted clearVolatile branch.
                 if (!selected.dto().condition().matches("[1-9][0-9]*/[1-9][0-9]*( (brn|par|psn|tox|slp|frz))?"))

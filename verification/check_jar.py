@@ -112,9 +112,12 @@ def main():
     resources = {p.relative_to(root / 'src/main/resources').as_posix(): p.read_bytes()
                  for p in (root / 'src/main/resources').rglob('*') if p.is_file()}
     version = next(line.split('=', 1)[1] for line in (root / 'gradle.properties').read_text().splitlines() if line.startswith('version='))
-    data = Path(sys.argv[1]).read_bytes()
+    jar = Path(sys.argv[1]) if len(sys.argv) == 2 else root / 'build/libs' / f'maestroai-{version}.jar'
+    if len(sys.argv) > 2:
+        raise ValueError('Expected at most one JAR path')
+    data = jar.read_bytes()
     class_count, entries = inspect(data, classes, resources, version, (root / 'LICENSE').read_bytes())
-    print(json.dumps({'jar_sha256': hashlib.sha256(data).hexdigest(), 'java21_classes': class_count,
+    print(json.dumps({'version': version, 'jar_name': jar.name, 'jar_sha256': hashlib.sha256(data).hexdigest(), 'java21_classes': class_count,
                       'jar_files': entries, 'standalone_tests_packaged': False}))
     return 0
 
