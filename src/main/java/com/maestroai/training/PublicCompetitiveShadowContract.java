@@ -15,6 +15,7 @@ public final class PublicCompetitiveShadowContract {
 
     public enum Blocker {
         INPUT_ABSENT_OR_INVALID,
+        EXTERNALLY_CONSTRUCTED_RECORDS_NOT_AUTHENTICATED,
         REPLAY_PROVENANCE_MISMATCH,
         FORMAT_OR_VERSION_SCOPE_MISMATCH,
         APPEARANCE_OR_MOVE_EVIDENCE_MISMATCH,
@@ -61,6 +62,7 @@ public final class PublicCompetitiveShadowContract {
                               PublicCompetitiveTendencies.Report tendencies,
                               PublicHeldOutEvaluation.Report heldOut) {
         EnumSet<Blocker> problems=EnumSet.of(
+                Blocker.EXTERNALLY_CONSTRUCTED_RECORDS_NOT_AUTHENTICATED,
                 Blocker.HISTORICAL_REPLAY_NOT_ACTIVE_BATTLE,
                 Blocker.NO_FRESH_ACTOR_AND_TURN_BINDING,
                 Blocker.NO_CURRENT_PUBLIC_BATTLE_STATE,
