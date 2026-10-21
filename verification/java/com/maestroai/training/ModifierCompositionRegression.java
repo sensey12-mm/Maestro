@@ -116,7 +116,8 @@ final class ModifierCompositionRegression {
             if(c.data().has("weatherMode")&&c.s("weatherMode").equals("upkeep"))events.append("|[upkeep]");
         }
         if(c.data().has("weatherMode")&&Set.of("ended","restart").contains(c.s("weatherMode")))events.append("\n|-weather|none");
-        if(c.data().has("weatherMode")&&c.s("weatherMode").equals("restart"))events.append("\n|-weather|Sandstorm");
+        if(c.data().has("weatherMode")&&c.s("weatherMode").equals("restart"))events.append("\n|-weather|").append(c.data().has("restartWeather")?c.s("restartWeather"):"Sandstorm");
+        if(c.data().has("weatherMode")&&c.s("weatherMode").equals("changed"))events.append("\n|-weather|").append(c.s("weatherNext"));
         if(c.data().has("terrain")&&!c.s("terrain").equals("none")&&!(c.data().has("witnessSetter")&&c.b("witnessSetter")))events.append("\n|-fieldstart|move: ").append(c.s("terrain"));
         if(c.data().has("terrainMode")&&Set.of("ended","restart").contains(c.s("terrainMode")))events.append("\n|-fieldend|move: Psychic Terrain");
         if(c.data().has("terrainMode")&&c.s("terrainMode").equals("restart"))events.append("\n|-fieldstart|move: Psychic Terrain");

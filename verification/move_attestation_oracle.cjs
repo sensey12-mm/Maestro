@@ -165,6 +165,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
 
     for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating'],
         ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating'],
+        ['Abilities','chlorophyll','onModifySpe','rating'],['Abilities','swiftswim','onModifySpe','rating'],
         ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num'],
         ['Abilities','airlock','onStart','suppressWeather'],['Abilities','cloudnine','onStart','suppressWeather']]){
       const effects=battle.dex.dataCache[tableName],definition=effects[id];
@@ -178,6 +179,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
     }
     for(const [group,tableName,id,metadata] of [['ability','Abilities','sandrush','rating'],['ability','Abilities','sandforce','rating'],
+        ['ability','Abilities','chlorophyll','rating'],['ability','Abilities','swiftswim','rating'],
         ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num'],
         ['ability','Abilities','airlock','suppressWeather'],['ability','Abilities','cloudnine','suppressWeather']]){
       const registryEffect=modules.Cobblemon.registries[group],definition=battle.dex.dataCache[tableName][id];
@@ -215,6 +217,12 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       receipt=capture();prototype[slot]=foreign;let rejected=false;try{capture();}catch(unverified){rejected=true;}
       check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign effective-weather dispatch retained scope: '+slot);
       prototype[slot]=method;check(capture().current()&&!receipt.current(),'Effective-weather dispatch restoration revived receipt: '+slot);
+    }
+    {
+      const prototype=modules.Pokemon.prototype,method=prototype.effectiveWeather,foreign=eval('({'+method.toString()+'})').effectiveWeather;
+      receipt=capture();prototype.effectiveWeather=foreign;let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign actor effective-weather dispatch retained scope');
+      prototype.effectiveWeather=method;check(capture().current()&&!receipt.current(),'Actor effective-weather restoration revived receipt');
     }
 
     for(const id of ['rocktomb','thunder','fireblast']){

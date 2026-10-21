@@ -75,6 +75,12 @@ public final class ScopedExecution {
     String currentItem(String role){return item(role);}
     String currentAbility(String role){return ability(role);}
     private static boolean weatherSuppressor(String ability){return Set.of("airlock","cloudnine").contains(ability);}
+    private static String speedWeather(String ability){return switch(ability){
+        case "sandrush" -> "sandstorm";
+        case "chlorophyll" -> "sunnyday";
+        case "swiftswim" -> "raindance";
+        default -> null;
+    };}
     /** Raw weather and its clock remain public field facts. Suppression only
      * changes effective weather, and never proves a native faint flag or entry.
      * Current single-actor queries use the other fresh public observation;
@@ -166,7 +172,7 @@ public final class ScopedExecution {
             need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
             need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !Set.of("download","airlock","cloudnine").contains(b.ability().value()));
@@ -277,8 +283,12 @@ public final class ScopedExecution {
                 && Set.of("none","par","slp","frz","brn","psn","tox").contains(a.status().value()));
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         c.need(a.id() + ":TAILWIND", b != null && b.observation() != null && field.tailwind(b.observation().slot()).known());
-        if (actors.get(a.id()) != null && actors.get(a.id()).ability().known() && ability(a.id()).equals("sandrush"))
-            c.need(a.id() + ":SAND_RUSH_WEATHER", weather(c,participants(a,others)).known());
+        if (actors.get(a.id()) != null && actors.get(a.id()).ability().known() && speedWeather(ability(a.id()))!=null)
+            c.need(a.id() + ":" + switch(ability(a.id())){
+                case "sandrush" -> "SAND_RUSH_WEATHER";
+                case "chlorophyll" -> "CHLOROPHYLL_WEATHER";
+                default -> "SWIFT_SWIM_WEATHER";
+            }, weather(c,participants(a,others)).known());
         if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a,others).known());
         return c.finish();
     }
@@ -439,11 +449,11 @@ public final class ScopedExecution {
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         Known<Boolean> wind = b == null || b.observation() == null ? Known.unknown() : field.tailwind(b.observation().slot());
         if (!base.known() || !wind.known()) return Known.unknown();
-        boolean rush = ability(a.id()).equals("sandrush");
-        var weather=rush?weather(new Check(Operation.SPEED),participants(a,others)):field.weather();
-        if(rush&&!weather.known())return Known.unknown();
+        String boostWeather=speedWeather(ability(a.id()));
+        var weather=boostWeather!=null?weather(new Check(Operation.SPEED),participants(a,others)):field.weather();
+        if(boostWeather!=null&&!weather.known())return Known.unknown();
         int[] modifiers={item(a.id()).equals("choicescarf")?6144:4096,
-                wind.value()?8192:4096,rush&&weather.value().equals("sandstorm")?8192:4096};
+                wind.value()?8192:4096,boostWeather!=null&&weather.value().equals(boostWeather)?8192:4096};
         int low=Integer.MAX_VALUE, high=0;
         // Paralysis flushes the preceding modifier chain, floors speed / 2,
         // then lets the remaining callbacks form a new chain. Actor callbacks
