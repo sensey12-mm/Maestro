@@ -110,6 +110,15 @@ public final class ScopedExecution {
         return c.missing.isEmpty()?Known.of(suppressed?"none":field.weather().value(),field.token()+":effective-weather"):Known.unknown();
     }
     Known<String> effectiveWeather(Actor... participants){var c=new Check(Operation.DAMAGE);c.actor("self",false);c.actor("opponent",false);return weather(c,participants);}
+    /** Native sun/rain checks may be actor-specific. Damage and Thunder use
+     * the defender; Chlorophyll/Swift Swim use their holder. Callers first
+     * certify current item/suppression evidence. Global weather stays intact. */
+    private Known<String> actorWeather(Check c,String role,Actor... participants){
+        var weather=weather(c,participants);
+        return weather.known()&&Set.of("sunnyday","raindance").contains(weather.value())&&item(role).equals("utilityumbrella")
+                ?Known.of("none",field.token()+":actor-effective-weather"):weather;
+    }
+    private Known<String> effectiveActorWeather(String role,Actor... participants){var c=new Check(Operation.DAMAGE);c.actor("self",false);c.actor("opponent",false);return actorWeather(c,role,participants);}
     private static Actor[] participants(Actor actor,Actor... others){var all=new Actor[others.length+1];all[0]=actor;System.arraycopy(others,0,all,1,others.length);return all;}
     /** Residuals reuse the damage source domain: its attestation includes the
      * native event/faint dispatch and complete condition/item/ability tables. */
@@ -169,7 +178,7 @@ public final class ScopedExecution {
                 need(role + ":OWN_TRANSPORT_FRESHNESS", yes(b.ownTransportCurrent()) && (b.lease() == null || b.lease().turn() == field.turn()));
                 if (b.lease() != null) leases.add(b.lease());
             }
-            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles").contains(b.item().value()));
+            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles", "utilityumbrella").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
             need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim").contains(b.ability().value()));
@@ -200,7 +209,7 @@ public final class ScopedExecution {
         if(defender!=null&&defender.ability().known()&&defender.ability().value().equals("shadowshield"))
             c.need("SHADOW_SHIELD_FULL_HP_CERTIFICATE",t.hp().known()
                     &&(t.hp().value().low()==1.0||t.hp().value().high()<1.0));
-        var weather=weather(c,a,t); c.need("WEATHER", weather.known()); c.need("TERRAIN", field.terrain().known());
+        var weather=actorWeather(c,t.id(),a,t); c.need("WEATHER", weather.known()); c.need("TERRAIN", field.terrain().known());
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {
             var active = active(t.id());
@@ -233,7 +242,7 @@ public final class ScopedExecution {
         bound(attacker,a); bound(target,t); var c=new Check(Operation.DAMAGE);
         c.actor(a.id(),reserve(a.id())); c.actor(t.id(),reserve(t.id()));
         Move m=move(moveId); c.need("SUPPORTED_ACCURACY_MOVE",m!=null&&m.power()>0);
-        var weather=weather(c,a,t);c.need("ACCURACY_WEATHER",weather.known());
+        var weather=actorWeather(c,t.id(),a,t);c.need("ACCURACY_WEATHER",weather.known());
         boolean always=moveId.equals("swift") || moveId.equals("thunder")
                 &&weather.known()&&weather.value().equals("raindance");
         if(!always){
@@ -247,7 +256,7 @@ public final class ScopedExecution {
     public Known<Integer> accuracy(String moveId, Profile attacker, Actor a, Profile target, Actor t) {
         var coverage=accuracyCoverage(moveId,attacker,a,target,t);
         if(!coverage.supported())return Known.unknown();
-        var weather=effectiveWeather(a,t);if(!weather.known())return Known.unknown();
+        var weather=effectiveActorWeather(t.id(),a,t);if(!weather.known())return Known.unknown();
         if(moveId.equals("swift") || moveId.equals("thunder")&&weather.value().equals("raindance"))
             return Known.of(100,coverage.source());
         int base=moveId.equals("thunder")&&weather.value().equals("sunnyday")?50:move(moveId).accuracy();
@@ -288,7 +297,7 @@ public final class ScopedExecution {
                 case "sandrush" -> "SAND_RUSH_WEATHER";
                 case "chlorophyll" -> "CHLOROPHYLL_WEATHER";
                 default -> "SWIFT_SWIM_WEATHER";
-            }, weather(c,participants(a,others)).known());
+            }, actorWeather(c,a.id(),participants(a,others)).known());
         if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a,others).known());
         return c.finish();
     }
@@ -392,7 +401,7 @@ public final class ScopedExecution {
         bound(attacker, a); bound(target, t);
         var coverage = damageCoverage(moveId, attacker, a, target, t);
         if (!coverage.supported()) return new Damage(Known.unknown(), Known.unknown(), coverage.missing(), coverage.source());
-        var weather=effectiveWeather(a,t);if(!weather.known())return Damage.unknown("WEATHER_PARTICIPATION_UNKNOWN");
+        var weather=effectiveActorWeather(t.id(),a,t);if(!weather.known())return Damage.unknown("WEATHER_PARTICIPATION_UNKNOWN");
         Move m = move(moveId); if (m == null || m.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
         var targetActive = active(t.id());
         if (targetActive != null && targetActive.volatiles().contains("protect")) return zero("public Protect");
@@ -450,7 +459,7 @@ public final class ScopedExecution {
         Known<Boolean> wind = b == null || b.observation() == null ? Known.unknown() : field.tailwind(b.observation().slot());
         if (!base.known() || !wind.known()) return Known.unknown();
         String boostWeather=speedWeather(ability(a.id()));
-        var weather=boostWeather!=null?weather(new Check(Operation.SPEED),participants(a,others)):field.weather();
+        var weather=boostWeather!=null?actorWeather(new Check(Operation.SPEED),a.id(),participants(a,others)):field.weather();
         if(boostWeather!=null&&!weather.known())return Known.unknown();
         int[] modifiers={item(a.id()).equals("choicescarf")?6144:4096,
                 wind.value()?8192:4096,boostWeather!=null&&weather.value().equals(boostWeather)?8192:4096};

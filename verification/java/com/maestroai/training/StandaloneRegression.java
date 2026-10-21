@@ -343,6 +343,7 @@ public final class StandaloneRegression {
         SandstormRegression.run();
         WeatherSuppressionRegression.run();
         WeatherSpeedRegression.run();
+        UtilityUmbrellaRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

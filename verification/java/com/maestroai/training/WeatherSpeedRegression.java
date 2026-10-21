@@ -63,7 +63,7 @@ final class WeatherSpeedRegression {
                 var unresolved=fixture(change(c,"status",status),"");check(speed(unresolved).known()&&!evaluate(unresolved).utility().known(),"Speed arithmetic certified unresolved status execution");
             }
             for(String weather:List.of("snow","desolateland","primordialsea"))check(!speed(fixture(change(c,"weather",weather),"")).known(),"Unsupported weather gained speed scope");
-            for(String item:List.of("utilityumbrella","heatrock","damprock"))check(!speed(fixture(change(c,"item",item),"")).known(),"Unsupported weather item gained scope");
+            for(String item:List.of("heatrock","damprock"))check(!speed(fixture(change(c,"item",item),"")).known(),"Unsupported weather item gained scope");
             check(!speed(fixture(change(c,"targetAbility","neutralizinggas"),"")).known(),"Unsupported ability suppression gained scope");
             var expired=fixture(c,"");var receipt=expired.execution().speedCoverage(expired.profiles().get(c.user()),user(expired));check(receipt.supported(),"Fresh speed receipt unavailable");expired.owner().endChoice();
             check(!receipt.supported()&&!speed(expired).known()&&!evaluate(expired).utility().known(),"Expired own proof retained weather speed");
@@ -86,7 +86,8 @@ final class WeatherSpeedRegression {
             check(low==0?!actual.known():actual.known()&&actual.value().equals(new IntRange(low,high)),"Native sun/rain speed differs: "+c.data()+" native="+low+".."+high+" actual="+actual);
         }
         var boundaries=data.getAsJsonArray("boundaries");check(boundaries.size()==24,"Boundary inventory changed");
-        for(var value:boundaries){var row=value.getAsJsonObject();check(!speed(fixture(new Case(row.getAsJsonObject("config")),"")).known(),"Native unscoped weather/item/suppression gained support");}
+        for(var value:boundaries){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var actual=speed(fixture(c,""));
+            check(c.s("item").equals("utilityumbrella")?actual.known()&&actual.value().equals(new IntRange(row.get("low").getAsInt(),row.get("high").getAsInt())):!actual.known(),"Native weather/item/suppression boundary differs");}
         var exchanges=data.getAsJsonArray("exchanges");check(exchanges.size()==304,"Exchange inventory changed");int bounded=0,unknown=0;var hidden=new HashMap<String,ShadowMechanicsEvaluation.Ranking>();
         for(var value:exchanges){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var f=fixture(c,c.data().has("protect")&&c.b("protect")?"protect":"");var actual=evaluate(f);
             boolean alive=row.get("foeHp").getAsDouble()>0&&(row.get("selfHp").getAsDouble()>0||c.n("ownBench")>0);
@@ -96,7 +97,7 @@ final class WeatherSpeedRegression {
             }else{unknown++;check(!actual.utility().known(),"Unproved survival, party or speed wrap gained scope: "+c.data());}
             if(c.s("id").equals("recoil-ko")){String key=c.b("enemy")+":"+c.s("ability")+":"+c.n("ownBench")+":"+c.b("nativeTie");if(c.n("foeBench")==0)hidden.put(key,actual);else check(actual.equals(hidden.get(key)),"Hidden opponent party changed weather-speed forecast");}
         }
-        System.out.println("Sun/rain speed native differential PASS: 852 speed configurations, 24 unsupported-scope controls, 304 queued exchanges; "+bounded+" bounded, "+unknown+" UNKNOWN; both roles, callback rounding, weather/suppression, priority, Trick Room and hidden-party isolation");
+        System.out.println("Sun/rain speed native differential PASS: 852 speed configurations, 24 weather/item controls, 304 queued exchanges; "+bounded+" bounded, "+unknown+" UNKNOWN; both roles, callback rounding, weather/suppression, priority, Trick Room and hidden-party isolation");
     }
     private static boolean matches(ShadowMechanicsEvaluation.Line l,JsonObject row){
         double utility=row.get("utility").getAsDouble();if(!l.utility().known()||utility<l.utility().value().low()-1e-10||utility>l.utility().value().high()+1e-10)return false;

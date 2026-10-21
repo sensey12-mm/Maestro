@@ -51,8 +51,10 @@ final class SandstormRegression {
             check(!residual(fixture(past,"indirect-setter")).utility().known(),"Indirect weather setter became certified");
             for(String ability:List.of("neutralizinggas"))
                 check(!residual(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported weather ability gained scope: "+ability);
-            for(String item:List.of("smoothrock","utilityumbrella"))
+            for(String item:List.of("smoothrock"))
                 check(!residual(fixture(change(c,"item",item),"")).utility().known(),"Unsupported weather item gained scope: "+item);
+            var umbrella=residual(fixture(change(c,"item","utilityumbrella"),""));var ordinary=residual(fixture(change(c,"item","none"),""));
+            check(umbrella.utility().known()&&umbrella.utility().value().equals(ordinary.utility().value()),"Umbrella changed supported sandstorm outcomes");
         }
         var setup=change(change(storm(),"move","bulkup"),"item","leftovers");
         var doomed=number(setup,"userHp",1);

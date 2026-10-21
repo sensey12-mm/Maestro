@@ -123,7 +123,7 @@
   // still pass its operation prerequisites. No absent modifier inference.
   const relevant = {
     ability: new Set(['runaway','magicguard','pressure','levitate','prankster','stall','download','technician','multitype','fairyaura','sandrush','sandforce','sandveil','airlock','cloudnine','chlorophyll','swiftswim']),
-    heldItem: new Set(['none','heavydutyboots','choicescarf','laggingtail','powerherb','marshadiumz','leftovers','safetygoggles']),
+    heldItem: new Set(['none','heavydutyboots','choicescarf','laggingtail','powerherb','marshadiumz','leftovers','safetygoggles','utilityumbrella']),
     move: new Set(['tackle','swift','scratch','quickattack','extremespeed','shadowclaw','shadowsneak',
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',
       'uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock','drainingkiss',
