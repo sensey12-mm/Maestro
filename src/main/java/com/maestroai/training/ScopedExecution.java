@@ -93,7 +93,7 @@ public final class ScopedExecution {
         return c.finish();
     }
     boolean sandstormImmune(Profile profile) {
-        return ability(profile.actor()).equals("magicguard")
+        return Set.of("magicguard","sandrush","sandforce").contains(ability(profile.actor()))
                 ||profile.types().value().stream().anyMatch(Set.of("rock","ground","steel")::contains);
     }
     /** Active Power Herb requires current own binding and no Magic Room. */
@@ -134,7 +134,7 @@ public final class ScopedExecution {
             need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
             need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !b.ability().value().equals("download"));
@@ -236,6 +236,8 @@ public final class ScopedExecution {
                 && Set.of("none","par","slp","frz","brn","psn","tox").contains(a.status().value()));
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         c.need(a.id() + ":TAILWIND", b != null && b.observation() != null && field.tailwind(b.observation().slot()).known());
+        if (actors.get(a.id()) != null && actors.get(a.id()).ability().known() && ability(a.id()).equals("sandrush"))
+            c.need(a.id() + ":SAND_RUSH_WEATHER", field.weather().known());
         if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a).known());
         return c.finish();
     }
@@ -285,6 +287,11 @@ public final class ScopedExecution {
         // Aura's priority-20 contribution. This slice has no earlier BP hooks.
         if(ability(a).equals("technician")&&move.power()<=60)
             modifier=chainModifier(modifier,6144);
+        // Native priority 21: Sand Force modifies base power, independently
+        // of the later Life Orb/Shadow Shield final-damage chain.
+        if(ability(a).equals("sandforce")&&field.weather().value().equals("sandstorm")
+                &&Set.of("rock","ground","steel").contains(move.type()))
+            modifier=chainModifier(modifier,5325);
         // Aura is one field contribution even when both active actors have it.
         if(move.type().equals("fairy")&&(ability(a).equals("fairyaura")||ability(t).equals("fairyaura")))
             modifier=chainModifier(modifier,5448);
@@ -387,28 +394,30 @@ public final class ScopedExecution {
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         Known<Boolean> wind = b == null || b.observation() == null ? Known.unknown() : field.tailwind(b.observation().slot());
         if (!base.known() || !wind.known()) return Known.unknown();
-        // Scarf and Tailwind chain into one 12-bit modifier, applied after stages.
-        int n = item(a.id()).equals("choicescarf") ? 3 : 2; if (wind.value()) n *= 2;
-        // Source modify uses round-half-down, not ordinary half-up.
-        int low = (base.value().low() * n * 4096 / 2 + 2047) / 4096;
-        int high = (base.value().high() * n * 4096 / 2 + 2047) / 4096;
-        if (a.status().value().equals("par")) {
-            // The status/item callbacks tie and may be shuffled. A zero cached
-            // action speed also ties actor callbacks with the side's Tailwind.
-            // No private cached speed is assumed: bound every native ordering,
-            // including a rounded Scarf before paralysis and Tailwind after it.
-            int scarf = item(a.id()).equals("choicescarf") ? 3 : 2;
-            int windFactor = wind.value() ? 2 : 1;
-            int middleLow = ((base.value().low() * scarf * 4096 / 2 + 2047) / 4096 / 2) * windFactor;
-            int middleHigh = ((base.value().high() * scarf * 4096 / 2 + 2047) / 4096 / 2) * windFactor;
-            int afterLow = (base.value().low() / 2 * n * 4096 / 2 + 2047) / 4096;
-            int afterHigh = (base.value().high() / 2 * n * 4096 / 2 + 2047) / 4096;
-            low = Math.min(middleLow, Math.min(low / 2, afterLow));
-            high = Math.max(middleHigh, Math.max(high / 2, afterHigh));
+        boolean rush = ability(a.id()).equals("sandrush");
+        if(rush&&!field.weather().known())return Known.unknown();
+        int[] modifiers={item(a.id()).equals("choicescarf")?6144:4096,
+                wind.value()?8192:4096,rush&&field.weather().value().equals("sandstorm")?8192:4096};
+        int low=Integer.MAX_VALUE, high=0;
+        // Paralysis flushes the preceding modifier chain, floors speed / 2,
+        // then lets the remaining callbacks form a new chain. Actor callbacks
+        // tie; zero cached speed can tie Tailwind too. Enumerate every partition
+        // around paralysis without consulting private native cached speed.
+        int partitions=a.status().value().equals("par")?8:1;
+        for(int mask=0;mask<partitions;mask++){
+            int before=4096,after=4096;
+            for(int i=0;i<modifiers.length;i++){
+                if((mask&(1<<i))!=0)before=chainModifier(before,modifiers[i]);
+                else after=chainModifier(after,modifiers[i]);
+            }
+            int lo=modifySpeed(base.value().low(),before),hi=modifySpeed(base.value().high(),before);
+            if(partitions>1){lo/=2;hi/=2;}
+            low=Math.min(low,modifySpeed(lo,after));high=Math.max(high,modifySpeed(hi,after));
         }
         if (low < 1 || high > 10000) return Known.unknown();
         return Known.of(new IntRange(low, high), field.token());
     }
+    private static int modifySpeed(int speed,int modifier){return (int)(((long)speed*modifier+2047)>>12);}
     private static boolean maxHpMatches(Known<Integer> maxHp, Profile reserve) {
         return maxHp.known() && reserve.maxHp().known() && reserve.maxHp().value().low() == maxHp.value()
                 && reserve.maxHp().value().high() == maxHp.value();

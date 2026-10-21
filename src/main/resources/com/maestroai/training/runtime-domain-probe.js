@@ -122,7 +122,7 @@
   // Unsupported entries are not certified; each selected actor/action must
   // still pass its operation prerequisites. No absent modifier inference.
   const relevant = {
-    ability: new Set(['runaway','magicguard','pressure','levitate','prankster','stall','download','technician','multitype','fairyaura']),
+    ability: new Set(['runaway','magicguard','pressure','levitate','prankster','stall','download','technician','multitype','fairyaura','sandrush','sandforce']),
     heldItem: new Set(['none','heavydutyboots','choicescarf','laggingtail','powerherb','marshadiumz','leftovers']),
     move: new Set(['tackle','swift','scratch','quickattack','extremespeed','shadowclaw','shadowsneak',
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',

@@ -160,7 +160,8 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(capture().current()&&!receipt.current(),'Status priority restoration revived old receipt: '+id);
     }
 
-    for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating']]){
+    for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating'],
+        ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating']]){
       const effects=battle.dex.dataCache[tableName],definition=effects[id];
       receipt=capture();effects[id]={...definition,[metadata]:definition[metadata]+1};
       check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Residual metadata omitted: '+id);
@@ -170,6 +171,30 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       let rejected=false;try{capture();}catch(unverified){rejected=true;}
       check(foreign!==definition[slot]&&foreign.toString()===definition[slot].toString()&&rejected&&!receipt.current(),'Foreign residual callback retained scope: '+id);
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
+    }
+    for(const id of ['sandrush','sandforce']){
+      const abilities=modules.Cobblemon.registries.ability,definition=battle.dex.dataCache.Abilities[id];
+      const native=abilities.register({name:id,...modules.Utils.deepClone(definition)},id);
+      receipt=capture();check(receipt.current()&&JSON.parse(receipt.json).scopedRegistryEquivalent,'Native sand ability registry rejected: '+id);
+      abilities.register({name:id,...modules.Utils.deepClone(definition),rating:definition.rating+1},id);
+      const altered=JSON.parse(capture().json);
+      check(!receipt.current()&&!altered.scopedRegistryEquivalent,'Altered sand ability registry retained scope: '+id);
+      badRegistries.push({id:id+'.rating',registryEquivalent:altered.registryEquivalent,scopedRegistryEquivalent:altered.scopedRegistryEquivalent});
+      abilities.contents.set(id,native);check(capture().current()&&!receipt.current(),'Sand ability registry restoration revived receipt: '+id);
+      for(const slot of Object.keys(definition).filter(k=>typeof definition[k]==='function')){
+        const foreign=eval('({'+definition[slot].toString()+'})')[slot];
+        receipt=capture();abilities.register({name:id,...modules.Utils.deepClone(definition),[slot]:foreign},id);
+        const bad=JSON.parse(capture().json);
+        check(!receipt.current()&&!bad.scopedRegistryEquivalent,'Foreign sand ability registry callback retained scope: '+id+'.'+slot);
+        badRegistries.push({id:id+'.'+slot,registryEquivalent:bad.registryEquivalent,scopedRegistryEquivalent:bad.scopedRegistryEquivalent});
+        abilities.contents.set(id,native);check(capture().current()&&!receipt.current(),'Sand ability callback restoration revived receipt: '+id+'.'+slot);
+        receipt=capture();battle.dex.dataCache.Abilities[id]={...definition,[slot]:foreign};
+        let rejected=false;try{capture();}catch(unverified){rejected=true;}
+        check(rejected&&!receipt.current(),'Foreign sand ability source callback retained scope: '+id+'.'+slot);
+        battle.dex.dataCache.Abilities[id]=definition;
+        check(capture().current()&&!receipt.current(),'Sand ability source restoration revived receipt: '+id+'.'+slot);
+      }
+      receipt=capture();abilities.reset();check(!receipt.current()&&capture().current(),'Sand ability registry reset retained receipt: '+id);
     }
     for(const slot of ['residualEvent','faintMessages']){
       const prototype=modules.Battle.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];

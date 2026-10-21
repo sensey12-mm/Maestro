@@ -49,7 +49,7 @@ final class SandstormRegression {
             var witnessed=c.data().deepCopy();witnessed.addProperty("witnessWeather",true);var past=new Case(witnessed);
             check(residual(fixture(past,"")).utility().known(),"Witnessed ordinary weather setter poisoned source coverage");
             check(!residual(fixture(past,"indirect-setter")).utility().known(),"Indirect weather setter became certified");
-            for(String ability:List.of("sandforce","sandrush","sandveil","airlock","cloudnine","neutralizinggas"))
+            for(String ability:List.of("sandveil","airlock","cloudnine","neutralizinggas"))
                 check(!residual(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported weather ability gained scope: "+ability);
             for(String item:List.of("smoothrock","safetygoggles","utilityumbrella"))
                 check(!residual(fixture(change(c,"item",item),"")).utility().known(),"Unsupported weather item gained scope: "+item);
@@ -66,7 +66,43 @@ final class SandstormRegression {
         check(!residual(fixture(setup,"",known(new Interval(.001,.1)))).utility().known(),"Unproved sandstorm survival became known");
         check(!CobblemonMechanics.supportedMoveIds().contains("sandstorm"),"Weather dependency became selectable");
         lifecycle(setup);
+        abilities();
         System.out.println("Sandstorm evidence regressions PASS: "+checks+" checks; weather lifetime, suppression, HP/survival, public identity and receipt expiration");
+    }
+    private static Known<IntRange> speed(Fixture f){
+        var c=f.config();var a=c.b("enemy")?f.state().opponent():f.state().self();
+        return f.execution().speed(f.profiles().get(c.user()),a);
+    }
+    private static void abilities(){
+        for(boolean enemy:List.of(false,true))for(String ability:List.of("sandrush","sandforce")){
+            var c=change(change(enemy?enemy(storm()):storm(),"ability",ability),"move","ironhead");var f=fixture(c,"");
+            check(damage(f,Critical.BOTH).points().known()&&speed(f).known()&&residual(f).utility().known(),"Supported sand ability remained UNKNOWN: "+ability);
+            for(String missing:List.of("own-item","own-ability","opponent-item","opponent-ability","own-transport","damage-scope","order-scope","speed-scope",
+                    "target-types","attacker-types","target-max","status","speed-stat","suppression","ambiguous","forged-opponent"))
+                check(!residual(fixture(c,missing)).utility().known(),"Sand ability bypassed evidence: "+ability+" / "+missing);
+            var unknownDuration=fixture(change(c,"weatherMode","upkeep"),"");
+            check(damage(unknownDuration,Critical.BOTH).points().known()&&speed(unknownDuration).known()&&!residual(unknownDuration).utility().known(),"Weather lifetime was inferred from an active ability");
+            var ended=fixture(change(c,"weatherMode","ended"),"");var none=fixture(change(c,"weather","none"),"");
+            check(damage(ended,Critical.BOTH).points().equals(damage(none,Critical.BOTH).points())&&speed(ended).equals(speed(none)),"Ended weather retained ability modifier");
+            var restarted=fixture(change(c,"weatherMode","restart"),"");
+            check(damage(f,Critical.BOTH).points().value().equals(damage(restarted,Critical.BOTH).points().value())&&speed(f).value().equals(speed(restarted).value()),"Restarted weather lost ability modifier");
+            var unsupported=fixture(change(c,"weather","snow"),"");
+            check(!damage(unsupported,Critical.BOTH).points().known()&&(!ability.equals("sandrush")||!speed(unsupported).known()),"Unproved Sand Rush weather gained speed");
+            var source=fixture(c,"");var cert=coverage(source);source.current().set(false);
+            check(!cert.supported()&&!speed(source).known()&&!residual(source).utility().known(),"Expired sand ability source retained arithmetic");
+            var own=fixture(c,"");own.owner().endChoice();
+            check(!residual(own).utility().known()&&speed(own).known()==enemy,"Sand ability bypassed own receipt or withdrew independent public speed");
+            var closing=fixture(c,"");var frame=closing.execution().withScopes(ExecutionCoverage.Scopes.receipt(op->{if(op==ExecutionCoverage.Operation.SPEED)closing.current().set(false);return known(true);},closing.current()::get));
+            var withdrawn=residual(closing,frame);
+            check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Expired closing sand ability receipt leaked branch states");
+            var immunity=fixture(change(change(change(c,"move","bulkup"),"item","none"),"targetAbility","sandforce"),"");
+            var immuneResult=residual(immunity);
+            check(immuneResult.utility().known()&&immuneResult.lines().stream().allMatch(l->l.state().self().hp().value().equals(immunity.state().self().hp().value())
+                    &&l.state().opponent().hp().value().equals(immunity.state().opponent().hp().value())),"Sand ability lost typeless sandstorm immunity");
+            var doubled=fixture(change(c,"ability","sandrush"),"");var plain=fixture(change(change(c,"ability","sandrush"),"weather","none"),"");
+            check(speed(doubled).value().low()==2*speed(plain).value().low(),"Sand Rush did not double current speed");
+            if(ability.equals("sandforce"))check(damage(f,Critical.BOTH).points().value().high()>damage(none,Critical.BOTH).points().value().high(),"Sand Force did not boost Steel base power");
+        }
     }
     private static PublicFieldEvidence.Capture append(Fixture f,String event){
         f.history().add("update\n"+event);f.protocol().update(f.history());f.provider().update(f.protocol());return f.fields().update(f.protocol(),f.provider());
@@ -87,7 +123,7 @@ final class SandstormRegression {
         var data=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle));})()").asString()).getAsJsonObject();
         var durations=data.getAsJsonArray("durations");check(durations.size()==8,"Native duration factory inventory changed");
         for(var value:durations){var row=value.getAsJsonObject();check(row.get("duration").getAsInt()==(row.get("item").getAsString().equals("smoothrock")&&!row.get("room").getAsBoolean()?8:5),"Native minimum duration or suppression changed");}
-        var configs=data.getAsJsonArray("damage");check(configs.size()==96,"Native weather damage inventory changed");int rolls=0;
+        var configs=data.getAsJsonArray("damage");check(configs.size()==224,"Native weather damage inventory changed");int rolls=0;
         for(var value:configs){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var f=fixture(c,"");
             for(Critical critical:Critical.values()){
                 var outcomes=new ArrayList<Integer>();for(var v:row.getAsJsonArray("values")){var r=v.getAsJsonObject();if(critical==Critical.BOTH||r.get("crit").getAsBoolean()==(critical==Critical.CRITICAL))outcomes.add(r.get("damage").getAsInt());}
@@ -95,8 +131,12 @@ final class SandstormRegression {
                 check(actual.points().known()&&actual.points().value().equals(new IntRange(low,high)),"Native weather stat/critical rounding differs: "+c.data()+" / "+critical+" / "+actual+" / "+outcomes);
             }rolls+=row.getAsJsonArray("values").size();
         }
-        check(rolls==3072,"Native sandstorm roll inventory changed");
-        var rows=data.getAsJsonArray("exchanges");check(rows.size()==212,"Native weather residual inventory changed");int bounded=0,unknown=0;
+        check(rolls==7168,"Native sandstorm roll inventory changed");
+        var speeds=data.getAsJsonArray("speeds");check(speeds.size()==396,"Native Sand Rush speed inventory changed");
+        for(var value:speeds){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var actual=speed(fixture(c,""));int low=row.get("low").getAsInt(),high=row.get("high").getAsInt();
+            check(low==0?!actual.known():actual.known()&&actual.value().equals(new IntRange(low,high)),"Native Sand Rush callback ordering differs: "+c.data()+" / "+row+" / "+actual);
+        }
+        var rows=data.getAsJsonArray("exchanges");check(rows.size()==376,"Native weather residual inventory changed");int bounded=0,unknown=0;
         var hidden=new HashMap<String,ShadowMechanicsEvaluation.Ranking>();
         for(var value:rows){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));
             var result=residual(fixture(c,c.data().has("protect")&&c.b("protect")?"protect":""));
@@ -107,12 +147,12 @@ final class SandstormRegression {
             if(supported){bounded++;check(result.utility().known()&&result.lines().stream().anyMatch(l->matches(l,row)),"Native sandstorm residual excluded: "+c.data()+" / "+row+" / "+result);
                 if(row.get("selfHp").getAsDouble()==0)check(result.lines().stream().allMatch(l->l.state().forcedReplacement()&&!l.state().nextRequestKnown()),"Native weather replacement became a future executable request");
             }else{unknown++;check(!result.utility().known(),"Unproved weather duration/party closure became known: "+c.data());}
-            if(c.s("id").equals("weather-knockout")){
-                String key=c.b("enemy")+":"+c.userHp()+":"+c.n("targetHp")+":"+c.n("ownBench");
+            if(Set.of("weather-knockout","ability-recoil-continuation").contains(c.s("id"))){
+                String key=c.s("id")+":"+c.s("ability")+":"+c.b("enemy")+":"+c.userHp()+":"+c.n("targetHp")+":"+c.n("ownBench");
                 if(c.n("foeBench")==0)hidden.put(key,result);else check(result.equals(hidden.get(key)),"Hidden opponent reserves changed weather evaluation");
             }
         }
-        System.out.println("Sandstorm native differential PASS: 8 duration factories, 96 damage configurations, 3072 critical/roll outcomes, 212 queued outcomes; "+bounded+" bounded, "+unknown+" UNKNOWN; both roles, expiry, immunity, recovery and fainting");
+        System.out.println("Sandstorm native differential PASS: 8 duration factories, 224 damage configurations, 7168 critical/roll outcomes, 396 speed configurations, 376 queued outcomes; "+bounded+" bounded, "+unknown+" UNKNOWN; both roles, Sand Rush/Force, expiry, immunity, recovery and fainting");
     }
     private static boolean matches(ShadowMechanicsEvaluation.Line line,JsonObject row){
         if(!line.utility().known())return false;double utility=row.get("utility").getAsDouble();
