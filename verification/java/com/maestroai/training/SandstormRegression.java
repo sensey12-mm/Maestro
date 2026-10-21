@@ -49,7 +49,7 @@ final class SandstormRegression {
             var witnessed=c.data().deepCopy();witnessed.addProperty("witnessWeather",true);var past=new Case(witnessed);
             check(residual(fixture(past,"")).utility().known(),"Witnessed ordinary weather setter poisoned source coverage");
             check(!residual(fixture(past,"indirect-setter")).utility().known(),"Indirect weather setter became certified");
-            for(String ability:List.of("airlock","cloudnine","neutralizinggas"))
+            for(String ability:List.of("neutralizinggas"))
                 check(!residual(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported weather ability gained scope: "+ability);
             for(String item:List.of("smoothrock","utilityumbrella"))
                 check(!residual(fixture(change(c,"item",item),"")).utility().known(),"Unsupported weather item gained scope: "+item);
@@ -132,7 +132,7 @@ final class SandstormRegression {
             var source=fixture(c,"");var cert=coverage(source);source.current().set(false);
             check(!cert.supported()&&!speed(source).known()&&!residual(source).utility().known(),"Expired sand ability source retained arithmetic");
             var own=fixture(c,"");own.owner().endChoice();
-            check(!residual(own).utility().known()&&speed(own).known()==enemy,"Sand ability bypassed own receipt or withdrew independent public speed");
+            check(!residual(own).utility().known()&&speed(own).known()==(enemy&&ability.equals("sandforce")),"Sand Rush must prove both active abilities; non-weather speed stays independent");
             var closing=fixture(c,"");var frame=closing.execution().withScopes(ExecutionCoverage.Scopes.receipt(op->{if(op==ExecutionCoverage.Operation.SPEED)closing.current().set(false);return known(true);},closing.current()::get));
             var withdrawn=residual(closing,frame);
             check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Expired closing sand ability receipt leaked branch states");

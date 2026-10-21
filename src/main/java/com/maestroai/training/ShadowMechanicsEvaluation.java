@@ -517,6 +517,8 @@ public final class ShadowMechanicsEvaluation {
             if(possibleFaint(own?p.state().self():p.state().opponent()))
                 return unknown(p,"RESIDUAL_QUEUE_SURVIVAL_UNKNOWN");
         }
+        var effectiveWeather=execution.effectiveWeather(p.state().self(),p.state().opponent());
+        if(!effectiveWeather.known())return unknown(p,"RESIDUAL_WEATHER_PARTICIPATION_UNKNOWN");
         if(execution.field().weather().value().equals("sandstorm")) {
             var active=execution.field().sandstormAtResidual();
             if(!active.known())return unknown(p,"SANDSTORM_RESIDUAL_DURATION_UNKNOWN");
@@ -527,7 +529,7 @@ public final class ShadowMechanicsEvaluation {
                 Actor actor=own?p.state().self():p.state().opponent();
                 if(zero(actor))continue;
                 Profile profile=profiles.get(actor.id());
-                if(!execution.sandstormImmune(profile)) {
+                if(effectiveWeather.value().equals("sandstorm")&&!execution.sandstormImmune(profile)) {
                     int max=profile.maxHp().value().low();
                     p=residualHp(p,own,max,-Math.max(1,max/16));
                     if(!p.unknown().isEmpty())return p;

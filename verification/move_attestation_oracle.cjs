@@ -165,9 +165,10 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
 
     for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating'],
         ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating'],
-        ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num']]){
+        ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num'],
+        ['Abilities','airlock','onStart','suppressWeather'],['Abilities','cloudnine','onStart','suppressWeather']]){
       const effects=battle.dex.dataCache[tableName],definition=effects[id];
-      receipt=capture();effects[id]={...definition,[metadata]:definition[metadata]+1};
+      receipt=capture();effects[id]={...definition,[metadata]:typeof definition[metadata]==='boolean'?!definition[metadata]:definition[metadata]+1};
       check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Residual metadata omitted: '+id);
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual metadata restoration revived receipt: '+id);
       const foreign=eval('({'+definition[slot].toString()+'})')[slot];
@@ -177,11 +178,12 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
     }
     for(const [group,tableName,id,metadata] of [['ability','Abilities','sandrush','rating'],['ability','Abilities','sandforce','rating'],
-        ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num']]){
+        ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num'],
+        ['ability','Abilities','airlock','suppressWeather'],['ability','Abilities','cloudnine','suppressWeather']]){
       const registryEffect=modules.Cobblemon.registries[group],definition=battle.dex.dataCache[tableName][id];
       const native=registryEffect.register({name:id,...modules.Utils.deepClone(definition)},id);
       receipt=capture();check(receipt.current()&&JSON.parse(receipt.json).scopedRegistryEquivalent,'Native selected weather effect registry rejected: '+id);
-      registryEffect.register({name:id,...modules.Utils.deepClone(definition),[metadata]:definition[metadata]+1},id);
+      registryEffect.register({name:id,...modules.Utils.deepClone(definition),[metadata]:typeof definition[metadata]==='boolean'?!definition[metadata]:definition[metadata]+1},id);
       const altered=JSON.parse(capture().json);
       check(!receipt.current()&&!altered.scopedRegistryEquivalent,'Altered selected weather effect registry retained scope: '+id);
       badRegistries.push({id:id+'.'+metadata,registryEquivalent:altered.registryEquivalent,scopedRegistryEquivalent:altered.scopedRegistryEquivalent});
@@ -207,6 +209,12 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       let rejected=false;try{capture();}catch(unverified){rejected=true;}
       check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign residual/faint dispatch retained scope: '+slot);
       prototype[slot]=method;check(capture().current()&&!receipt.current(),'Residual/faint dispatch restoration revived receipt: '+slot);
+    }
+    for(const slot of ['effectiveWeather','suppressingWeather','isWeather']){
+      const prototype=modules.Field.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];
+      receipt=capture();prototype[slot]=foreign;let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign effective-weather dispatch retained scope: '+slot);
+      prototype[slot]=method;check(capture().current()&&!receipt.current(),'Effective-weather dispatch restoration revived receipt: '+slot);
     }
 
     for(const id of ['rocktomb','thunder','fireblast']){

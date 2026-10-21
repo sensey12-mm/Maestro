@@ -341,6 +341,7 @@ public final class StandaloneRegression {
         AccuracyMissRegression.run();
         ResidualRecoveryRegression.run();
         SandstormRegression.run();
+        WeatherSuppressionRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

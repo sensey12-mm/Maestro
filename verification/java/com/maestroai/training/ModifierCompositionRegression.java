@@ -67,9 +67,10 @@ final class ModifierCompositionRegression {
                 ownUser?c.userHp()+"/1000":c.n("targetHp")+"/"+c.n("targetMax"),true,ownAbility,c.types(ownUser?"types":"targetTypes")),
                 ownUser?c.n("level"):100,stats.get("self"),ownItem,c.types(ownUser?"types":"targetTypes"),ownUser?c.s("status"):c.targetStatus(),false);
         int ownBench=c.data().has("ownBench")?c.n("ownBench"):0;
+        String benchAbility=c.data().has("ownBenchAbility")?c.s("ownBenchAbility"):"runaway";
         var ownPokemon=new ArrayList<OwnRequestTransport.Pokemon>();ownPokemon.add(pokemon);
         for(int i=0;i<ownBench;i++)ownPokemon.add(new OwnRequestTransport.Pokemon(new OwnRequestEvidence.Sample(new UUID(0,48+i),
-                "p1: Reserve"+i,"1000/1000",false,"runaway",List.of("normal")),100,
+                "p1: Reserve"+i,"1000/1000",false,benchAbility,List.of("normal")),100,
                 Map.of("atk",220,"def",220,"spa",220,"spd",220,"spe",220),"none",List.of("normal"),"none",false));
         var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,ownPokemon);
         ledger.dispatched(battle,actor,"p1",first,()->request);ledger.turnDispatched(battle,1);ledger.turnFinished(battle,1);
@@ -152,7 +153,7 @@ final class ModifierCompositionRegression {
             String id="reserve"+i;var reserve=facts(known(new Interval(1,1)),List.of("normal"),stages(0,0),List.of());
             bench.add(reserve);legal.add(id);targets.put(id,new SwitchTarget(reserve,known("none"),known(new Interval(0,0)),known(0)));
             profiles.put(id,new Profile(id,known(100),known(IntRange.exact(1000)),Map.of(),known(List.of("normal")),YES));
-            if(!missing.equals("reserve-binding"))bindings.put(id,new ScopedExecution.Binding(null,known("none"),known("runaway"),YES,lease));
+            if(!missing.equals("reserve-binding"))bindings.put(id,new ScopedExecution.Binding(null,known("none"),known(benchAbility),YES,lease));
         }
         var execution=new ScopedExecution(field,bindings,scopes);
         var snapshot=new BattleSnapshot(2,selfFacts,foeFacts,bench,List.of(),List.of(c.action()),legal,Map.of(),false,null);

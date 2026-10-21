@@ -74,6 +74,37 @@ public final class ScopedExecution {
     /** These values must already pass current per-operation evidence gates. */
     String currentItem(String role){return item(role);}
     String currentAbility(String role){return ability(role);}
+    private static boolean weatherSuppressor(String ability){return Set.of("airlock","cloudnine").contains(ability);}
+    /** Raw weather and its clock remain public field facts. Suppression only
+     * changes effective weather, and never proves a native faint flag or entry.
+     * Current single-actor queries use the other fresh public observation;
+     * conditional multi-actor calculations supply both projected actors. */
+    private Known<String> weather(Check c,Actor... participants){
+        c.need("EFFECTIVE_WEATHER",field.weather().known());
+        if(!field.weather().known())return Known.unknown();
+        if(field.weather().value().equals("none"))return c.missing.isEmpty()?field.weather():Known.unknown();
+        var projected=new HashMap<String,Actor>();for(var actor:participants)projected.put(actor.id(),actor);
+        boolean suppressed=false;
+        boolean possible=actors.entrySet().stream().anyMatch(e->(Set.of("self","opponent").contains(e.getKey())||projected.containsKey(e.getKey()))
+                &&e.getValue().ability().known()&&weatherSuppressor(e.getValue().ability().value()));
+        if(possible&&projected.keySet().stream().anyMatch(id->!Set.of("self","opponent").contains(id)))
+            c.need("WEATHER_REPLACEMENT_PARTICIPATION",false);
+        for(String role:List.of("self","opponent")){
+            c.actor(role,false);var binding=actors.get(role);
+            if(binding==null||!binding.ability().known())continue;
+            if(weatherSuppressor(binding.ability().value())){
+                Actor actor=projected.get(role);
+                Known<Interval> hp=actor==null?(binding.observation()==null?Known.unknown():binding.observation().hp()):actor.hp();
+                // HP zero alone does not establish when native faintMessages
+                // removed suppression. Do not guess during a conditional queue.
+                boolean active=hp.known()&&hp.value().low()>0&&(actor==null||!actor.facts().fainted());
+                c.need(role+":WEATHER_SUPPRESSOR_PARTICIPATION",active);suppressed|=active;
+            }
+        }
+        return c.missing.isEmpty()?Known.of(suppressed?"none":field.weather().value(),field.token()+":effective-weather"):Known.unknown();
+    }
+    Known<String> effectiveWeather(Actor... participants){var c=new Check(Operation.DAMAGE);c.actor("self",false);c.actor("opponent",false);return weather(c,participants);}
+    private static Actor[] participants(Actor actor,Actor... others){var all=new Actor[others.length+1];all[0]=actor;System.arraycopy(others,0,all,1,others.length);return all;}
     /** Residuals reuse the damage source domain: its attestation includes the
      * native event/faint dispatch and complete condition/item/ability tables. */
     public Certificate residualCoverage(Profile profile, Actor actor) {
@@ -135,10 +166,10 @@ public final class ScopedExecution {
             need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
-            need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !b.ability().value().equals("download"));
+            need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !Set.of("download","airlock","cloudnine").contains(b.ability().value()));
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
             else {
                 var a = field.actor(b.observation());
@@ -163,7 +194,7 @@ public final class ScopedExecution {
         if(defender!=null&&defender.ability().known()&&defender.ability().value().equals("shadowshield"))
             c.need("SHADOW_SHIELD_FULL_HP_CERTIFICATE",t.hp().known()
                     &&(t.hp().value().low()==1.0||t.hp().value().high()<1.0));
-        c.need("WEATHER", field.weather().known()); c.need("TERRAIN", field.terrain().known());
+        var weather=weather(c,a,t); c.need("WEATHER", weather.known()); c.need("TERRAIN", field.terrain().known());
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {
             var active = active(t.id());
@@ -176,13 +207,13 @@ public final class ScopedExecution {
                 c.need(t.id() + ":" + def, target.stat(def).known() && t.stages().containsKey(def));
                 c.need(t.id() + ":MAX_HP", target.maxHp().known()); c.need(a.id() + ":STATUS", a.status().known());
                 if (c.missing.isEmpty()) {
-                    int n = m.type().equals("fire") && field.weather().value().equals("sunnyday") ? 3 : 1;
-                    int d = m.type().equals("fire") && Set.of("sunnyday","raindance").contains(field.weather().value()) ? 2 : 1;
+                    int n = m.type().equals("fire") && weather.value().equals("sunnyday") ? 3 : 1;
+                    int d = m.type().equals("fire") && Set.of("sunnyday","raindance").contains(weather.value()) ? 2 : 1;
                     // Certify the full supported critical domain, refusing zero-stat
                     // and engine-wrap domains before issuing a usable certificate.
                     var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
-                            Critical.BOTH,n,d,sourcePowerModifier(m,attacker,t.id()),4096,
-                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target),4096);
+                            Critical.BOTH,n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,
+                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target,weather.value()),4096);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -196,9 +227,9 @@ public final class ScopedExecution {
         bound(attacker,a); bound(target,t); var c=new Check(Operation.DAMAGE);
         c.actor(a.id(),reserve(a.id())); c.actor(t.id(),reserve(t.id()));
         Move m=move(moveId); c.need("SUPPORTED_ACCURACY_MOVE",m!=null&&m.power()>0);
-        c.need("ACCURACY_WEATHER",field.weather().known());
+        var weather=weather(c,a,t);c.need("ACCURACY_WEATHER",weather.known());
         boolean always=moveId.equals("swift") || moveId.equals("thunder")
-                &&field.weather().known()&&field.weather().value().equals("raindance");
+                &&weather.known()&&weather.value().equals("raindance");
         if(!always){
             c.need(a.id()+":ACCURACY_STAGE",a.stages().containsKey("accuracy"));
             c.need(t.id()+":EVASION_STAGE",t.stages().containsKey("evasion"));
@@ -210,13 +241,14 @@ public final class ScopedExecution {
     public Known<Integer> accuracy(String moveId, Profile attacker, Actor a, Profile target, Actor t) {
         var coverage=accuracyCoverage(moveId,attacker,a,target,t);
         if(!coverage.supported())return Known.unknown();
-        if(moveId.equals("swift") || moveId.equals("thunder")&&field.weather().value().equals("raindance"))
+        var weather=effectiveWeather(a,t);if(!weather.known())return Known.unknown();
+        if(moveId.equals("swift") || moveId.equals("thunder")&&weather.value().equals("raindance"))
             return Known.of(100,coverage.source());
-        int base=moveId.equals("thunder")&&field.weather().value().equals("sunnyday")?50:move(moveId).accuracy();
+        int base=moveId.equals("thunder")&&weather.value().equals("sunnyday")?50:move(moveId).accuracy();
         // Native ModifyAccuracy runs before stage truncation. Sand Veil acts
         // on the target's incoming numeric accuracy; always-hit checks above
         // retain their exemption. The source applies round-half-down here.
-        if(ability(t.id()).equals("sandveil")&&field.weather().value().equals("sandstorm"))
+        if(ability(t.id()).equals("sandveil")&&weather.value().equals("sandstorm"))
             base=(base*3277+2047)/4096;
         int boost=Math.max(-6,Math.min(6,a.stages().get("accuracy")-t.stages().get("evasion")));
         int threshold=boost>=0?base*(3+boost)/3:base*3/(3-boost);
@@ -236,6 +268,9 @@ public final class ScopedExecution {
         return c.finish();
     }
     public Certificate speedCoverage(Profile p, Actor a) {
+        return speedCoverage(p,a,new Actor[0]);
+    }
+    private Certificate speedCoverage(Profile p, Actor a,Actor... others) {
         bound(p, a); var c = new Check(Operation.SPEED); c.actor(a.id(), reserve(a.id()));
         c.need(a.id() + ":SPEED", p.stat("spe").known() && a.stages().containsKey("spe"));
         c.need(a.id() + ":STATUS", a.status().known()
@@ -243,8 +278,8 @@ public final class ScopedExecution {
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         c.need(a.id() + ":TAILWIND", b != null && b.observation() != null && field.tailwind(b.observation().slot()).known());
         if (actors.get(a.id()) != null && actors.get(a.id()).ability().known() && ability(a.id()).equals("sandrush"))
-            c.need(a.id() + ":SAND_RUSH_WEATHER", field.weather().known());
-        if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a).known());
+            c.need(a.id() + ":SAND_RUSH_WEATHER", weather(c,participants(a,others)).known());
+        if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a,others).known());
         return c.finish();
     }
     public Certificate orderCoverage(String action, String reply, Profile self, Actor a, Profile foe, Actor f) {
@@ -259,14 +294,14 @@ public final class ScopedExecution {
             c.missing.addAll(acPriority.missing()); c.missing.addAll(fcPriority.missing());
             if (c.missing.isEmpty() && effectivePriority(own.id(), a.id()) == effectivePriority(reply, f.id())) {
                 c.required.add("TIED_PRIORITY_SPEED_AND_ROOM");
-                var ac = speedCoverage(self, a); var fc = speedCoverage(foe, f);
+                var ac = speedCoverage(self, a,f); var fc = speedCoverage(foe, f,a);
                 c.required.addAll(ac.prerequisites()); c.required.addAll(fc.prerequisites());
                 c.missing.addAll(ac.missing()); c.missing.addAll(fc.missing());
                 c.need("TRICK_ROOM", field.trickRoom().known());
                 if (c.missing.isEmpty()) {
                     int limit = field.trickRoom().value() ? 1807 : 8191;
-                    c.need("SOURCE_ACTION_SPEED_WRAP_DOMAIN", computedSpeed(self, a).value().high() <= limit
-                            && computedSpeed(foe, f).value().high() <= limit);
+                    c.need("SOURCE_ACTION_SPEED_WRAP_DOMAIN", computedSpeed(self, a,f).value().high() <= limit
+                            && computedSpeed(foe, f,a).value().high() <= limit);
                 }
             }
         }
@@ -286,7 +321,7 @@ public final class ScopedExecution {
         return new Profile(raw.actor(), raw.level(), raw.maxHp(), raw.stats(), raw.types(),
                 supported(raw.actor(), reserve) ? Known.of(true, field.token() + ":limited-conditional-scope") : Known.unknown());
     }
-    private int sourcePowerModifier(Move move,Profile attacker,String t) {
+    private int sourcePowerModifier(Move move,Profile attacker,String t,String weather) {
         String a=attacker.actor();
         int modifier=4096;
         // Native BasePower priority 30: Technician tests power before Fairy
@@ -295,7 +330,7 @@ public final class ScopedExecution {
             modifier=chainModifier(modifier,6144);
         // Native priority 21: Sand Force modifies base power, independently
         // of the later Life Orb/Shadow Shield final-damage chain.
-        if(ability(a).equals("sandforce")&&field.weather().value().equals("sandstorm")
+        if(ability(a).equals("sandforce")&&weather.equals("sandstorm")
                 &&Set.of("rock","ground","steel").contains(move.type()))
             modifier=chainModifier(modifier,5325);
         // Aura is one field contribution even when both active actors have it.
@@ -347,6 +382,7 @@ public final class ScopedExecution {
         bound(attacker, a); bound(target, t);
         var coverage = damageCoverage(moveId, attacker, a, target, t);
         if (!coverage.supported()) return new Damage(Known.unknown(), Known.unknown(), coverage.missing(), coverage.source());
+        var weather=effectiveWeather(a,t);if(!weather.known())return Damage.unknown("WEATHER_PARTICIPATION_UNKNOWN");
         Move m = move(moveId); if (m == null || m.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
         var targetActive = active(t.id());
         if (targetActive != null && targetActive.volatiles().contains("protect")) return zero("public Protect");
@@ -356,17 +392,17 @@ public final class ScopedExecution {
             return zero("public Psychic Terrain priority block");
         int n = 1, d = 1;
         if (m.type().equals("fire")) {
-            if (field.weather().value().equals("sunnyday")) { n = 3; d = 2; }
-            else if (field.weather().value().equals("raindance")) { n = 1; d = 2; }
+            if (weather.value().equals("sunnyday")) { n = 3; d = 2; }
+            else if (weather.value().equals("raindance")) { n = 1; d = 2; }
         }
         // Technician modifies base power before the level/stat formula. Never
         // multiply a final damage interval; the engine rounds at each stage.
         return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
-                n,d,sourcePowerModifier(m,attacker,t.id()),4096,finalDamageModifier(a.id(),t.id(),t),4096,
-                sourceDefenseModifier(m,target),4096);
+                n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,finalDamageModifier(a.id(),t.id(),t),4096,
+                sourceDefenseModifier(m,target,weather.value()),4096);
     }
-    private int sourceDefenseModifier(Move move,Profile target) {
-        return field.weather().value().equals("sandstorm")&&move.defendingStat().equals("spd")
+    private int sourceDefenseModifier(Move move,Profile target,String weather) {
+        return weather.equals("sandstorm")&&move.defendingStat().equals("spd")
                 &&target.types().value().contains("rock")?6144:4096;
     }
     private static Damage zero(String why) {
@@ -391,19 +427,23 @@ public final class ScopedExecution {
         return p;
     }
     public Known<IntRange> speed(Profile p, Actor a) {
-        bound(p, a);
-        if (!speedCoverage(p, a).supported()) return Known.unknown();
-        return computedSpeed(p, a);
+        return speed(p,a,new Actor[0]);
     }
-    private Known<IntRange> computedSpeed(Profile p, Actor a) {
+    private Known<IntRange> speed(Profile p, Actor a,Actor... others) {
+        bound(p, a);
+        if (!speedCoverage(p, a,others).supported()) return Known.unknown();
+        return computedSpeed(p, a,others);
+    }
+    private Known<IntRange> computedSpeed(Profile p, Actor a,Actor... others) {
         Known<IntRange> base = CobblemonMechanics.stagedSpeed(certified(p), a);
         Binding b = actors.get(reserve(a.id()) ? "self" : a.id());
         Known<Boolean> wind = b == null || b.observation() == null ? Known.unknown() : field.tailwind(b.observation().slot());
         if (!base.known() || !wind.known()) return Known.unknown();
         boolean rush = ability(a.id()).equals("sandrush");
-        if(rush&&!field.weather().known())return Known.unknown();
+        var weather=rush?weather(new Check(Operation.SPEED),participants(a,others)):field.weather();
+        if(rush&&!weather.known())return Known.unknown();
         int[] modifiers={item(a.id()).equals("choicescarf")?6144:4096,
-                wind.value()?8192:4096,rush&&field.weather().value().equals("sandstorm")?8192:4096};
+                wind.value()?8192:4096,rush&&weather.value().equals("sandstorm")?8192:4096};
         int low=Integer.MAX_VALUE, high=0;
         // Paralysis flushes the preceding modifier chain, floors speed / 2,
         // then lets the remaining callbacks form a new chain. Actor callbacks
@@ -436,7 +476,7 @@ public final class ScopedExecution {
         double p = effectivePriority(m.id(), a.id()), q = effectivePriority(reply, f.id());
         if (p != q) return p > q ? Order.SELF_FIRST : Order.OPPONENT_FIRST;
         // Both fractional priorities equal: reuse verified bounded speed ordering.
-        return CobblemonMechanics.order("move:tackle", "tackle", speed(self, a), speed(foe, f), field.trickRoom(), Known.of(true, field.token()));
+        return CobblemonMechanics.order("move:tackle", "tackle", speed(self, a,f), speed(foe, f,a), field.trickRoom(), Known.of(true, field.token()));
     }
     public Entry entry(Hazards hazards, Known<Integer> maxHp, Profile reserve) {
         if (Set.of("self", "opponent").contains(reserve.actor())) throw new IllegalArgumentException("entry requires an own reserve binding");
