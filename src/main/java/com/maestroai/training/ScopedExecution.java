@@ -167,11 +167,41 @@ public final class ScopedExecution {
         }
         return c.finish();
     }
+    /** Accuracy uses the existing damage-operation source/actor receipt. A
+     * successful-hit damage estimate remains independent of hit probability. */
+    public Certificate accuracyCoverage(String moveId, Profile attacker, Actor a, Profile target, Actor t) {
+        bound(attacker,a); bound(target,t); var c=new Check(Operation.DAMAGE);
+        c.actor(a.id(),reserve(a.id())); c.actor(t.id(),reserve(t.id()));
+        Move m=move(moveId); c.need("SUPPORTED_ACCURACY_MOVE",m!=null&&m.power()>0);
+        c.need("ACCURACY_WEATHER",field.weather().known());
+        boolean always=moveId.equals("swift") || moveId.equals("thunder")
+                &&field.weather().known()&&field.weather().value().equals("raindance");
+        if(!always){
+            c.need(a.id()+":ACCURACY_STAGE",a.stages().containsKey("accuracy"));
+            c.need(t.id()+":EVASION_STAGE",t.stages().containsKey("evasion"));
+        }
+        return c.finish();
+    }
+    /** Native integer threshold, not a prediction of the RNG draw. Values at
+     * least 100 guarantee this supported accuracy check, not overall execution. */
+    public Known<Integer> accuracy(String moveId, Profile attacker, Actor a, Profile target, Actor t) {
+        var coverage=accuracyCoverage(moveId,attacker,a,target,t);
+        if(!coverage.supported())return Known.unknown();
+        if(moveId.equals("swift") || moveId.equals("thunder")&&field.weather().value().equals("raindance"))
+            return Known.of(100,coverage.source());
+        int base=moveId.equals("thunder")&&field.weather().value().equals("sunnyday")?50:move(moveId).accuracy();
+        int boost=Math.max(-6,Math.min(6,a.stages().get("accuracy")-t.stages().get("evasion")));
+        int threshold=boost>=0?base*(3+boost)/3:base*3/(3-boost);
+        return Known.of(threshold,coverage.source());
+    }
     public Certificate setupCoverage(Profile p, Actor a, String moveId) {
         bound(p, a); var c = new Check(Operation.SETUP); c.actor(a.id(), reserve(a.id()));
         Move m = move(moveId); c.need("SUPPORTED_SETUP_MOVE", m != null && m.power() == 0);
         c.need("SUPPORTED_SETUP_EXECUTION", m != null && (!m.id().equals("geomancy") || activePowerHerb(a.id())));
-        c.need(a.id() + ":STATUS", a.status().known() && Set.of("none","par").contains(a.status().value()));
+        // Burn/poison do not veto BeforeMove in the pinned source. This also
+        // covers a burn secondary received before a queued self-target setup;
+        // root residual/status-duration restrictions remain in the evaluator.
+        c.need(a.id() + ":STATUS", a.status().known() && Set.of("none","par","brn","psn","tox").contains(a.status().value()));
         if (m != null && m.id().equals("recover")) c.need(a.id() + ":EXACT_RECOVERY_MAX_HP",
                 p.maxHp().known() && p.maxHp().value().low() == p.maxHp().value().high());
         if (m != null) m.boosts().keySet().forEach(stat -> c.need(a.id() + ":STAGE_" + stat, a.stages().containsKey(stat)));

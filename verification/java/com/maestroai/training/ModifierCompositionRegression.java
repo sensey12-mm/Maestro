@@ -109,7 +109,7 @@ final class ModifierCompositionRegression {
         if(missing.equals("unsupported-terrain"))events.append("\n|-fieldstart|move: Electric Terrain");
         if(missing.equals("suppression"))events.append("\n|-endability|p2a: Foe|Shadow Shield");
         if(missing.equals("ambiguous"))events.append("\n|replace|p2a: Foe|Zoroark, L100");
-        if(missing.equals("protect"))events.append("\n|-singleturn|").append(c.b("enemy")?"p1a: Own":"p2a: Foe").append("|Protect");
+        if(Set.of("protect","protect-accuracy-stage","protect-evasion-stage").contains(missing))events.append("\n|-singleturn|").append(c.b("enemy")?"p1a: Own":"p2a: Foe").append("|Protect");
         var history=new ArrayList<>(List.of(events.toString()));
         var protocol=new PublicProtocolEvidence();protocol.update(history);
         var provider=new PublicMechanicsEvidence(id->null);provider.update(protocol);
@@ -123,6 +123,13 @@ final class ModifierCompositionRegression {
         var userHp=known(new Interval(c.userHp()/1000.0,c.userHp()/1000.0));var selfHp=c.b("enemy")?targetHp:userHp;var foeHp=c.b("enemy")?userHp:targetHp;
         var selfStages=stages(c.b("enemy")?0:c.n("attackStage"),c.b("enemy")?c.n("defenseStage"):0);selfStages.put("spe",c.speedStage(!c.b("enemy")));
         var foeStages=stages(c.b("enemy")?c.n("attackStage"):0,c.b("enemy")?0:c.n("defenseStage"));foeStages.put("spe",c.speedStage(c.b("enemy")));
+        for(String role:List.of("self","opponent"))for(String stat:List.of("accuracy","evasion")){
+            boolean user=role.equals(c.user());var values=role.equals("self")?selfStages:foeStages;
+            String key=user?stat+"Stage":"target"+Character.toUpperCase(stat.charAt(0))+stat.substring(1)+"Stage";
+            if(c.data().has(key))values.put(stat,c.n(key));
+            if(Set.of("accuracy-stage","protect-accuracy-stage").contains(missing)&&user&&stat.equals("accuracy")
+                    ||Set.of("evasion-stage","protect-evasion-stage").contains(missing)&&!user&&stat.equals("evasion"))values.remove(stat);
+        }
         var selfFacts=facts(selfHp,c.types(c.b("enemy")?"targetTypes":"types"),selfStages,List.of());
         var foeFacts=facts(foeHp,c.types(c.b("enemy")?"types":"targetTypes"),foeStages,List.of(c.reply()));
         var snapshot=new BattleSnapshot(2,selfFacts,foeFacts,List.of(),List.of(),List.of(c.action()),List.of(),Map.of(),false,null);

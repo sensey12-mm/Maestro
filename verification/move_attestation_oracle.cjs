@@ -137,6 +137,33 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(capture().current()&&!receipt.current(),'Status priority restoration revived old receipt: '+id);
     }
 
+    for(const id of ['rocktomb','thunder','fireblast']){
+      const definition=table[id],native=registry.register({name:id,...modules.Utils.deepClone(definition)},id);
+      receipt=capture();check(receipt.current(),'Original accuracy receipt unavailable: '+id);
+      registry.register({name:id,...modules.Utils.deepClone(definition),accuracy:definition.accuracy+1},id);
+      const bad=JSON.parse(capture().json);
+      check(!bad.registryEquivalent&&!bad.scopedRegistryEquivalent&&!receipt.current(),'Altered accuracy registry retained scope: '+id);
+      badRegistries.push({id:id+'.accuracy',registryEquivalent:bad.registryEquivalent,scopedRegistryEquivalent:bad.scopedRegistryEquivalent});
+      registry.contents.set(id,native);
+      check(capture().current()&&!receipt.current(),'Accuracy registry restoration revived its receipt: '+id);
+      receipt=capture();table[id]={...definition,accuracy:definition.accuracy+1};
+      check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Accuracy metadata omitted from source proof: '+id);
+      table[id]=definition;
+      check(capture().current()&&!receipt.current(),'Accuracy source restoration revived its receipt: '+id);
+      registry.reset();
+    }
+    {
+      const prototype=modules.BattleActions.prototype,method=prototype.hitStepAccuracy;
+      receipt=capture();
+      const foreign=eval('({'+method.toString()+'})').hitStepAccuracy;
+      check(foreign!==method&&foreign.toString()===method.toString(),'Invalid same-text accuracy method fixture');
+      prototype.hitStepAccuracy=foreign;
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(rejected&&!receipt.current(),'Foreign native accuracy method retained scope');
+      prototype.hitStepAccuracy=method;
+      check(capture().current()&&!receipt.current(),'Accuracy method restoration revived its receipt');
+    }
+
     // An unused custom move may coexist, but receives no selected-operation
     // certificate. Its presence must not disable unrelated ordinary actions.
     table.unusedfixture = {name:'Unused Fixture', onHit() { callbackCalls++; }};

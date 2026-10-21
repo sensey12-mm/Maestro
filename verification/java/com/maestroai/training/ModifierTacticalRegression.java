@@ -168,8 +168,10 @@ final class ModifierTacticalRegression {
                 &&l.state().self().stages().get("spd")==-1),"Close Combat missed defense debuff");
         var rock=ranks.get("move:rocktomb");
         check(rock.utility().known()&&!rock.lines().isEmpty()
-                &&rock.lines().stream().allMatch(line->line.state().opponent().stages().get("spe")==-1),
-                "Rock Tomb must lower target Speed exactly once in every speed-order branch: "+rock);
+                &&rock.lines().stream().anyMatch(line->line.state().opponent().stages().get("spe")==-1)
+                &&rock.lines().stream().anyMatch(line->line.state().opponent().stages().get("spe")==0)
+                &&rock.lines().stream().allMatch(line->Set.of(0,-1).contains(line.state().opponent().stages().get("spe"))),
+                "Rock Tomb hit must lower Speed exactly once; a miss must preserve it: "+rock);
         check(ranks.get("move:spectralthief").utility().known(),"unboosted public Spectral Thief unknown");
         var kiss=ranks.get("move:drainingkiss");
         check(kiss.utility().known(),"Draining Kiss HP recovery unknown");

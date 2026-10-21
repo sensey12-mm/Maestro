@@ -123,7 +123,7 @@ public final class ShadowMechanicsEvaluation {
         }
         return new Comparison(rankings, preferred, legacyAction, simple,
                 preferred != null && legacyAction != null && !preferred.equals(legacyAction), coverage,
-                "conditional-supplied-replies;successful-actions;HP-resource-exchange;not-win-probability;advisoryOnly=true");
+                "conditional-supplied-replies;bounded-hit-miss-actions;HP-resource-exchange;not-win-probability;advisoryOnly=true");
     }
 
     private static List<Progress> turn(Progress p, Turn t, int index, PublicMechanics mechanics,
@@ -228,10 +228,41 @@ public final class ShadowMechanicsEvaluation {
             var eligible=replace(p,state(p.state(),own?recovered:p.state().self(),
                     own?p.state().opponent():recovered,p.state().actionKind(),p.state().action()));
             var branches=new ArrayList<Progress>();branches.add(p);
-            branches.addAll(executeEffects(eligible,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches));
+            branches.addAll(executeAccuracy(eligible,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches));
             return branches;
         }
-        return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+        return executeAccuracy(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+    }
+    private static List<Progress> executeAccuracy(Progress p,String id,boolean own,
+            Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
+            PublicMechanics mechanics,List<String> sourceLegalSwitches) {
+        Move move=move(id);
+        if(move==null||move.power()==0)return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+        Actor a=own?p.state().self():p.state().opponent(),t=own?p.state().opponent():p.state().self();
+        if(zero(t))return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+        Profile attacker=profiles.get(a.id()),target=profiles.get(t.id());
+        // Native Protect/type/Terrain checks precede accuracy. A certified zero
+        // retains those guards without requesting an irrelevant accuracy stage.
+        Damage hit=execution==null?damage(id,attacker,a,target,t,critical):execution.damage(id,attacker,a,target,t,critical);
+        if(hit.fraction().known()&&hit.fraction().value().high()==0)
+            return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+        if(execution==null){
+            // Retain the ordinary, explicitly unmodified guaranteed-hit slice.
+            // New uncertain hit/miss forecasts require a live execution receipt.
+            if(!id.equals("swift")&&(move.accuracy()!=100||!Objects.equals(a.stages().get("accuracy"),0)
+                    ||!Objects.equals(t.stages().get("evasion"),0)))
+                return List.of(unknown(p,"ACCURACY_RUNTIME_SCOPE_UNKNOWN"));
+            return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+        }
+        Known<Integer> threshold=execution.accuracy(id,attacker,a,target,t);
+        if(!threshold.known())return List.of(unknown(p,"ACCURACY_SOURCE_OR_STAGE_EVIDENCE_UNKNOWN"));
+        if(threshold.value()>=100)return executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches);
+        if(possibleFaint(a)||possibleFaint(t))return List.of(unknown(p,"ACCURACY_EXECUTION_SURVIVAL_UNKNOWN"));
+        // A miss leaves HP, stages, secondaries, drain, recoil and pivot state
+        // untouched. It must precede Spectral Thief's boost theft as in native.
+        var branches=new ArrayList<Progress>();branches.add(p);
+        if(threshold.value()>0)branches.addAll(executeEffects(p,id,own,profiles,critical,execution,mechanics,sourceLegalSwitches));
+        return branches;
     }
     private static List<Progress> executeEffects(Progress p,String id,boolean own,
             Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
@@ -552,7 +583,7 @@ public final class ShadowMechanicsEvaluation {
     }
     private static State state(State s, Actor self, Actor foe, Kind kind, String action) {
         Set<String> unresolved = new TreeSet<>(s.unresolved());
-        unresolved.add("CONDITIONAL_SUPPLIED_REPLY_AND_SUCCESS"); unresolved.add("RESIDUALS_AND_REPLACEMENTS_UNMODELED");
+        unresolved.add("CONDITIONAL_SUPPLIED_REPLY_AND_HIT_MISS"); unresolved.add("RESIDUALS_AND_REPLACEMENTS_UNMODELED");
         return new State(self, foe, s.selfHazards(), s.opponentHazards(), s.ambiguity(), unresolved,
                 kind, action, List.of(), List.of(), false, false, s.forcedReplacement(), false);
     }

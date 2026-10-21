@@ -338,6 +338,7 @@ public final class StandaloneRegression {
         HealingRecoilRegression.run();
         RecoilContinuationRegression.run();
         PivotOutcomeRegression.run();
+        AccuracyMissRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

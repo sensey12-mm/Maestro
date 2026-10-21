@@ -83,7 +83,7 @@ public final class AcceptanceGateRegression {
         var mechanics=new PublicMechanics(Map.of(),Map.of(),Set.of(),false,false,false,1,
                 new Evidence(context,Map.of(),Map.of()));
         var neutral=new BattleSnapshot.Combatant("Mew",1.0,List.of("normal"),
-                Map.of("atk",0,"def",0,"spa",0,"spd",0,"spe",0),
+                Map.of("atk",0,"def",0,"spa",0,"spd",0,"spe",0,"accuracy",0,"evasion",0),
                 List.of("tackle","quickattack"),null,null,false);
         var scenario=new BattleSnapshot(1,neutral,neutral,List.of(),List.of(),
                 List.of("tackle","quickattack"),List.of(),Map.of(),false,null);

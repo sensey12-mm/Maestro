@@ -103,6 +103,7 @@ final class PackSourceRegression {
             if (!layoutOnly) HealingRecoilRegression.differential(engine);
             if (!layoutOnly) RecoilContinuationRegression.differential(engine);
             if (!layoutOnly) PivotOutcomeRegression.differential(engine);
+            if (!layoutOnly) AccuracyMissRegression.differential(engine);
             if (!layoutOnly) StatusSpeedRegression.differential(engine);
             if (!layoutOnly) PsychicTerrainRegression.differential(engine);
             if (!layoutOnly) ModifierCompositionRegression.differential(engine);
