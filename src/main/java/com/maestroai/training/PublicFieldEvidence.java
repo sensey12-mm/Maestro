@@ -234,7 +234,7 @@ public final class PublicFieldEvidence {
                 // certificate is still required before any field result is used.
                 // Terrain/Tailwind exact nested conditions are also attested;
                 // accepting its past setter does not add a selectable action.
-                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","psychicterrain","tailwind","sandstorm").contains(key(p[3]));
+                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","toxicspikes","psychicterrain","tailwind","sandstorm").contains(key(p[3]));
                 if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }

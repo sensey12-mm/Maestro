@@ -15,9 +15,8 @@ final class MoveAttestationRegression {
         var result=JsonParser.parseString(oracle.execute(modules,anchor,probe,battle,ids).asString()).getAsJsonObject();
         if(result.get("selected").getAsInt()!=CobblemonMechanics.supportedMoveIds().size())
             throw new AssertionError("Calculator move coverage drifted");
-        if(result.get("fieldDependencies").getAsInt()!=3||CobblemonMechanics.supportedMoveIds().contains("psychicterrain")
-                ||CobblemonMechanics.supportedMoveIds().contains("tailwind")||CobblemonMechanics.supportedMoveIds().contains("sandstorm"))
-            throw new AssertionError("Terrain/Tailwind/weather field dependency/action separation drifted");
+        if(result.get("fieldDependencies").getAsInt()!=7||Set.of("psychicterrain","tailwind","sandstorm","spikes","stealthrock","stickyweb","toxicspikes").stream().anyMatch(CobblemonMechanics.supportedMoveIds()::contains))
+            throw new AssertionError("Field dependency/action separation drifted");
         var components=new TreeMap<>(expected);
         components.put("registryReceipt","0".repeat(64));
         for(var value:result.getAsJsonArray("badRegistries")) {
@@ -25,10 +24,10 @@ final class MoveAttestationRegression {
             var domain=new RuntimeDomain(new RuntimeDomain.Snapshot(true,false,true,
                     altered.get("registryEquivalent").getAsBoolean(),
                     altered.get("scopedRegistryEquivalent").getAsBoolean(),components),expected,true,()->true);
-            if(domain.effectiveState().known() || domain.scopes().get(ExecutionCoverage.Operation.DAMAGE).known())
+            if(domain.effectiveState().known() || domain.scopes().get(ExecutionCoverage.Operation.DAMAGE).known() || domain.scopes().get(ExecutionCoverage.Operation.ENTRY).known())
                 throw new AssertionError("Altered selected move retained an operation certificate");
         }
-        System.out.println("Native selected-move attestation PASS: "+result.get("selected").getAsInt()+" IDs + 3 field dependencies; "
+        System.out.println("Native selected-move attestation PASS: "+result.get("selected").getAsInt()+" IDs + "+result.get("fieldDependencies").getAsInt()+" field dependencies; "
                 +result.get("checks").getAsInt()+" checks; altered definitions withdraw Java operation scopes");
     }
 }

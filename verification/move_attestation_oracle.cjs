@@ -14,7 +14,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
     check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
     check(!table[id].flags?.powder,'Selectable powder move requires separate Goggles hit protection coverage: '+id);
   }
-  const fieldDependencies=['psychicterrain','tailwind','sandstorm'];
+  const fieldDependencies=['psychicterrain','tailwind','sandstorm','spikes','stealthrock','stickyweb','toxicspikes'];
   for(const id of fieldDependencies){
     check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
     check(!selectable.includes(id),'Field dependency became a selectable calculator action: '+id);

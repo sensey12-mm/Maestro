@@ -16,7 +16,7 @@ final class PivotOutcomeRegression {
     private static int checks;
     private static <T> Known<T> known(T v){return Known.of(v,SOURCE);}
     private static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
-    private record Case(JsonObject data) {
+    record Case(JsonObject data) {
         String s(String key){return data.get(key).getAsString();}
         int n(String key){return data.get(key).getAsInt();}
         boolean b(String key){return data.get(key).getAsBoolean();}
@@ -25,10 +25,10 @@ final class PivotOutcomeRegression {
         String action(){return b("enemy")?s("reply"):"uturn";}
         String reply(){return b("enemy")?"uturn":s("reply");}
     }
-    private record Fixture(Case config,BattleSnapshot snapshot,PublicMechanics mechanics,Map<String,Profile> profiles,
+    record Fixture(Case config,BattleSnapshot snapshot,PublicMechanics mechanics,Map<String,Profile> profiles,
                            ScopedExecution execution,OwnRequestTransport transport,AtomicBoolean current,PublicFieldEvidence fields) {}
     private record Owner(OwnRequestTransport transport,OwnRequestTransport.Lease lease) {}
-    private static Case ordinary(){return new Case(JsonParser.parseString("""
+    static Case ordinary(){return new Case(JsonParser.parseString("""
         {"id":"controlled","reply":"bulkup","hp":500,"targetHp":1000,"userSpeed":300,"targetSpeed":100,"item":"",
          "ownBench":1,"enemy":false,"reserveMax":1000,"reserveHp":1000,"reserveTypes":["normal"],"reserveItem":"",
          "reserveAbility":"runaway","hazards":{},"magicRoom":false,"protect":false}
@@ -53,7 +53,7 @@ final class PivotOutcomeRegression {
             var types=i==0?List.of("normal"):c.types();String held=i==0?(c.b("enemy")?"none":item(c.s("item"))):item(c.s("reserveItem"));
             pokemon.add(new OwnRequestTransport.Pokemon(new OwnRequestEvidence.Sample(i==0?active:new UUID(0,46+i),"p1: Own"+i,
                     hp+"/"+max,i==0,i==0?"runaway":c.s("reserveAbility"),types),100,
-                    Map.of("atk",220,"def",220,"spa",220,"spd",220,"spe",i==0?(c.b("enemy")?c.n("targetSpeed"):c.n("userSpeed")):220),held,types,"",false));
+                    Map.of("atk",220,"def",220,"spa",220,"spd",220,"spe",i==0?(c.b("enemy")?c.n("targetSpeed"):c.n("userSpeed")):220),held,types,i>0&&c.data().has("reserveStatus")?c.s("reserveStatus"):"none",false));
         }
         var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,pokemon);
         ledger.dispatched(battle,actor,"p1",first,()->request);ledger.turnDispatched(battle,1);ledger.turnFinished(battle,1);
@@ -62,14 +62,21 @@ final class PivotOutcomeRegression {
         if(!lease.current())throw new AssertionError("Pivot fixture did not issue a real current owning lease");
         return new Owner(ledger,lease);
     }
-    private static Fixture fixture(Case c,String missing){
+    static Fixture fixture(Case c,String missing){
         var owner=owner(c);var protocol=new PublicProtocolEvidence();
         var events=new StringBuilder("update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L100|100/100\n|switch|p2a: Foe|Mew, L100|100/100\n");
         if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|Run Away\n");
         events.append(c.b("enemy")&&c.s("item").equals("lifeorb")?"|-item|p2a: Foe|Life Orb\n":"|-enditem|p2a: Foe|Sitrus Berry\n");
         events.append("|turn|1\n|turn|2");
+        if(c.data().has("weather")&&!c.s("weather").equals("none"))events.append("\n|-weather|").append(c.s("weather"));
+        if(missing.equals("gravity"))events.append("\n|-fieldstart|move: Gravity");
+        if(missing.equals("ambiguous"))events.append("\n|replace|p2a: Foe|Zoroark, L100");
         if(c.b("magicRoom"))events.append("\n|-fieldstart|move: Magic Room");
         if(c.b("protect"))events.append("\n|-singleturn|p2a: Foe|Protect");
+        if(c.data().has("witnessToxic")&&c.b("witnessToxic")){
+            events.append("\n|move|p2a: Foe|Toxic Spikes|p1a: Own");
+            if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
+        }
         for(var e:c.hazards().entrySet())for(int i=0;i<e.getValue();i++)events.append("\n|-sidestart|")
                 .append(c.b("enemy")?"p2: Foe":"p1: Own").append('|').append(switch(e.getKey()){
                     case "stealthrock"->"Stealth Rock";case "spikes"->"Spikes";case "stickyweb"->"Sticky Web";case "toxicspikes"->"Toxic Spikes";default->throw new AssertionError();});
@@ -92,7 +99,7 @@ final class PivotOutcomeRegression {
             if(missing.equals("reserve-max"))p=new Profile(id,p.level(),Known.unknown(),p.stats(),p.types(),YES);
             profiles.put(id,p);
             if(!missing.equals("reserve-binding"))bindings.put(id,new ScopedExecution.Binding(missing.equals("foreign-reserve")?foe:null,
-                    known(item(c.s("reserveItem"))),known(c.s("reserveAbility")),missing.equals("stale-reserve")?Known.unknown():YES,owner.lease()));
+                    missing.equals("reserve-item")?Known.unknown():known(item(c.s("reserveItem"))),missing.equals("reserve-ability")?Known.unknown():known(c.s("reserveAbility")),missing.equals("stale-reserve")?Known.unknown():YES,owner.lease()));
         }
         var execution=new ScopedExecution(field,bindings,scopes);
         var hazards=new Hazards(c.b("enemy")?Map.of():c.hazards(),!missing.equals("partial-hazards"),SOURCE);
@@ -104,7 +111,7 @@ final class PivotOutcomeRegression {
             var entry=execution.entry(hazards,max,p);
             Known<Interval> damage=missing.equals("entry-damage")?Known.unknown():missing.equals("altered-entry-damage")?known(new Interval(0,0)):entry.damage();
             Known<Integer> speed=missing.equals("entry-speed")?Known.unknown():missing.equals("altered-entry-speed")?known(-1):entry.speedDelta();
-            targets.put(id,new SwitchTarget(bench.get(i),known("none"),damage,speed));
+            targets.put(id,new SwitchTarget(bench.get(i),missing.equals("reserve-status")?Known.unknown():known(c.data().has("reserveStatus")?c.s("reserveStatus"):"none"),damage,speed));
         }
         if(missing.equals("reserve-profile"))profiles.remove("reserve0");
         if(missing.equals("foreign-profile"))profiles.put("reserve0",profile("opponent",1000,220,List.of("normal")));
@@ -174,7 +181,7 @@ final class PivotOutcomeRegression {
                 +";return JSON.stringify(exports.run(require('./sim/battle').Battle));})()").asString()).getAsJsonArray();
         check(rows.size()==35,"Native pivot inventory changed");
         Set<String> abstentions=Set.of("target-ko","target-last","possible-target-ko","recoil-last","entry-ko","ambiguous-reserve",
-                "no-reserve","opponent-pivot","toxic-spikes","download-entry");
+                "no-reserve","opponent-pivot","download-entry");
         ShadowMechanicsEvaluation.Ranking hidden=null;
         for(var value:rows){
             var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));
@@ -191,7 +198,7 @@ final class PivotOutcomeRegression {
         }
         System.out.println("Pivot outcome native differential PASS: 35 exchanges; timing, target KO abstention, recoil ownership, hazard rounding/immunity/suppression and reply routing");
     }
-    private static boolean matches(ShadowMechanicsEvaluation.Line line,JsonObject row){
+    static boolean matches(ShadowMechanicsEvaluation.Line line,JsonObject row){
         State state=line.state();if(!state.self().id().equals(row.get("active").getAsString()))return false;
         double utility=row.get("utility").getAsDouble();if(utility<line.utility().value().low()-1e-10||utility>line.utility().value().high()+1e-10)return false;
         for(String role:List.of("self","foe")){

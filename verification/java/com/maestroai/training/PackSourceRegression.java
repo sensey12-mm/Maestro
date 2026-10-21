@@ -110,6 +110,7 @@ final class PackSourceRegression {
             if (!layoutOnly) WeatherSpeedRegression.differential(engine);
             if (!layoutOnly) UtilityUmbrellaRegression.differential(engine);
             if (!layoutOnly) WeatherAbilityRegression.differential(engine);
+            if (!layoutOnly) ToxicEntryRegression.differential(engine);
             if (!layoutOnly) StatusSpeedRegression.differential(engine);
             if (!layoutOnly) PsychicTerrainRegression.differential(engine);
             if (!layoutOnly) ModifierCompositionRegression.differential(engine);

@@ -333,8 +333,24 @@ public final class ScopedExecution {
         c.need("OWN_MAX_HP", maxHp.known()); c.need("RESERVE_TYPES", reserve.types().known());
         c.need("OWN_MAX_HP_PROFILE_BINDING", maxHpMatches(maxHp, reserve));
         c.need("COMPLETE_HAZARD_LAYERS", hazards.complete());
-        c.need("TOXIC_SPIKES_EXECUTION", hazards.layers().getOrDefault("toxicspikes", 0) == 0);
         return c.finish();
+    }
+    /** Entry status and side changes are separate from the existing HP/speed
+     * result. The caller must prove survival through all entry hazards first. */
+    record EntryEffects(Known<String> status,Hazards hazards,Set<String> unknown) {}
+    EntryEffects entryEffects(Hazards hazards,Known<Integer> max,Profile reserve,Known<String> status) {
+        var cert=entryCoverage(hazards,max,reserve);
+        if(!cert.supported()||!status.known())return new EntryEffects(Known.unknown(),hazards,Set.of("ENTRY_STATUS_OR_SOURCE_UNKNOWN"));
+        int layers=hazards.layers().getOrDefault("toxicspikes",0);
+        if(layers==0||!grounded(reserve))return new EntryEffects(status,hazards,Set.of());
+        // Native Poison absorption precedes Steel/Boots and existing status.
+        if(reserve.types().value().contains("poison")) {
+            var remaining=new TreeMap<>(hazards.layers());remaining.remove("toxicspikes");
+            return new EntryEffects(status,new Hazards(remaining,true,field.token()+":toxic-spikes-absorbed"),Set.of());
+        }
+        if(reserve.types().value().contains("steel")||item(reserve.actor()).equals("heavydutyboots")||!status.value().equals("none"))
+            return new EntryEffects(status,hazards,Set.of());
+        return new EntryEffects(Known.of(layers==1?"psn":"tox",field.token()+":toxic-spikes-entry"),hazards,Set.of());
     }
     private boolean reserve(String role) { return actors.containsKey(role) && actors.get(role).observation() == null; }
     public Profile profile(Profile raw, boolean reserve) {

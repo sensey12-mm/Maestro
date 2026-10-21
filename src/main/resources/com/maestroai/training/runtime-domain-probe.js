@@ -128,7 +128,7 @@
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',
       'uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock','drainingkiss',
       'energyball','closecombat','rocktomb','geomancy','thunder','psystrike','fireblast','spectralthief',
-      'shadowball','hypervoice','aurasphere','psychicterrain','tailwind','sandstorm'])
+      'shadowball','hypervoice','aurasphere','psychicterrain','tailwind','sandstorm','spikes','stealthrock','stickyweb','toxicspikes'])
   };
   const registryAudit = {};
   for (const [group, table, ctor] of [['ability', 'Abilities', modules.Ability],

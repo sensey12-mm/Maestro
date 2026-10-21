@@ -183,6 +183,7 @@ public final class ShadowMechanicsEvaluation {
                         Known.of(true, "supplied ordinary action-order scope"));
         if (order == Order.UNKNOWN) return List.of(unknown(p, "ACTION_ORDER_UNKNOWN"));
         if (switching) {
+            if(execution==null){
             SwitchTarget target = mechanics.transitions().context().switchTargets().get(t.action().substring(7));
             if (target == null || !target.entryDamage().known() || !target.entrySpeedDelta().known()
                     || !target.status().known() || !target.status().value().equals("none"))
@@ -207,6 +208,10 @@ public final class ShadowMechanicsEvaluation {
                     stages, target.status());
             Progress switched = replace(p, state(s, arriving, s.opponent(), Kind.SWITCH, t.action()));
             switched = hurt(switched, true, target.entryDamage().value());
+            return executeVariants(switched,t.reply(),false,profiles,critical,execution,mechanics,s.legalSwitches());
+            }
+            Progress switched=enterOwnReserve(p,t.action().substring(7),mechanics,profiles,execution,Kind.SWITCH,t.action());
+            if(!switched.unknown().isEmpty())return List.of(switched);
             return executeVariants(switched,t.reply(),false,profiles,critical,execution,mechanics,s.legalSwitches());
         }
         if(order==Order.BOTH){
@@ -487,7 +492,7 @@ public final class ShadowMechanicsEvaluation {
             Actor after=own?result.state().self():result.state().opponent();
             Actor other=own?result.state().opponent():result.state().self();
             if(zero(after)&&!zero(other)) {
-                if(!own||!certifiedOwnReserve(mechanics,profiles,execution))
+                if(!own||!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
                     return unknown(result,"POST_RECOIL_PARTY_CONTINUATION_UNKNOWN");
                 result=pendingOwnReplacement(result);
             }
@@ -502,7 +507,7 @@ public final class ShadowMechanicsEvaluation {
         // Only positive own reserve evidence establishes a supported continuation.
         if(possibleFaint(p.state().opponent()))return unknown(p,"RESIDUAL_OPPONENT_PARTY_CLOSURE_UNKNOWN");
         if(possibleFaint(p.state().self())&&(!zero(p.state().self())
-                ||!certifiedOwnReserve(mechanics,profiles,execution)))
+                ||!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id())))
             return unknown(p,"RESIDUAL_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
         if(zero(p.state().self()))p=pendingOwnReplacement(clearFaintedStages(p));
         for(boolean own:List.of(true,false)) {
@@ -538,7 +543,7 @@ public final class ShadowMechanicsEvaluation {
             p=clearFaintedStages(p);
             if(possibleFaint(p.state().opponent()))return unknown(p,"SANDSTORM_OPPONENT_PARTY_CLOSURE_UNKNOWN");
             if(possibleFaint(p.state().self())) {
-                if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution))
+                if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
                     return unknown(p,"SANDSTORM_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
                 p=pendingOwnReplacement(p);
             }
@@ -563,7 +568,7 @@ public final class ShadowMechanicsEvaluation {
             p=clearFaintedStages(p);
             if(possibleFaint(p.state().opponent()))return unknown(p,"WEATHER_ABILITY_OPPONENT_PARTY_CLOSURE_UNKNOWN");
             if(possibleFaint(p.state().self())) {
-                if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution))
+                if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
                     return unknown(p,"WEATHER_ABILITY_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
                 p=pendingOwnReplacement(p);
             }
@@ -590,7 +595,7 @@ public final class ShadowMechanicsEvaluation {
                 p=clearFaintedStages(p);
                 if(!zero(actor))return unknown(p,"RESIDUAL_SURVIVAL_UNKNOWN");
                 if(!own)return unknown(p,"RESIDUAL_OPPONENT_PARTY_CLOSURE_UNKNOWN");
-                if(!certifiedOwnReserve(mechanics,profiles,execution))
+                if(!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
                     return unknown(p,"RESIDUAL_OWN_PARTY_CLOSURE_UNKNOWN");
                 p=pendingOwnReplacement(p);
             }
@@ -624,11 +629,11 @@ public final class ShadowMechanicsEvaluation {
      * exhaustion; opponent roster size and identity are never consulted.
      * Voluntary trapping does not prevent a later forced replacement.
      */
-    private static boolean certifiedOwnReserve(PublicMechanics mechanics,Map<String,Profile> profiles,ScopedExecution execution) {
+    private static boolean certifiedOwnReserve(PublicMechanics mechanics,Map<String,Profile> profiles,ScopedExecution execution,String activeId) {
         if(execution==null)return false;
         for(var entry:mechanics.transitions().context().switchTargets().entrySet()) {
             String id=entry.getKey();var target=entry.getValue();
-            if(Set.of("self","opponent").contains(id)||target.facts().fainted()
+            if(id.equals(activeId)||Set.of("self","opponent").contains(id)||target.facts().fainted()
                     ||!target.facts().hpKnown()||target.facts().hpFraction()<=0)continue;
             Profile reserve=profiles.get(id);
             if(reserve==null||!reserve.actor().equals(id))continue;
@@ -657,17 +662,19 @@ public final class ShadowMechanicsEvaluation {
     private static Progress pivotToSoleCertifiedReserve(Progress p,PublicMechanics mechanics,
             List<String> choices,Map<String,Profile> profiles,ScopedExecution execution){
         if(choices.size()!=1)return unknown(p,"U_TURN_REPLACEMENT_CHOICE_NOT_DETERMINED");
-        String id=choices.getFirst();
+        return enterOwnReserve(p,choices.getFirst(),mechanics,profiles,execution,Kind.FORCED_CONTINUATION,p.state().action());
+    }
+    private static Progress enterOwnReserve(Progress p,String id,PublicMechanics mechanics,
+            Map<String,Profile> profiles,ScopedExecution execution,Kind kind,String action){
         SwitchTarget entry=mechanics.transitions().context().switchTargets().get(id);
         if(entry==null||!entry.entryDamage().known()||!entry.entrySpeedDelta().known()
-                ||!entry.status().known()||!entry.status().value().equals("none")
+                ||!entry.status().known()
                 ||entry.facts().fainted()||!entry.facts().hpKnown()||entry.facts().hpFraction()<=0)
             return unknown(p,"U_TURN_REPLACEMENT_ENTRY_UNKNOWN");
         Profile reserve=profiles.get(id);
         if(reserve==null||execution==null||!reserve.actor().equals(id)||Set.of("self","opponent").contains(id))
             return unknown(p,"U_TURN_RESERVE_PROFILE_UNKNOWN");
-        if(!p.state().selfHazards().complete()
-                ||p.state().selfHazards().layers().getOrDefault("toxicspikes",0)>0)
+        if(!p.state().selfHazards().complete())
             return unknown(p,"U_TURN_NON_HP_ENTRY_EFFECTS_UNKNOWN");
         var max=reserve.maxHp().known()&&reserve.maxHp().value().low()==reserve.maxHp().value().high()
                 ?Known.of(reserve.maxHp().value().low(),reserve.maxHp().source())
@@ -675,7 +682,7 @@ public final class ShadowMechanicsEvaluation {
         var cert=execution.entryCoverage(p.state().selfHazards(),max,reserve);
         if(!cert.supported())return unknown(p,String.join(",",cert.missing()));
         var sourceEntry=execution.entry(p.state().selfHazards(),max,reserve);
-        if(!sourceEntry.damage().known()||!sourceEntry.speedDelta().known()||!sourceEntry.unknown().isEmpty())
+        if(!sourceEntry.damage().known()||!sourceEntry.speedDelta().known()||sourceEntry.unknown().stream().anyMatch(reason->!reason.equals("TOXIC_SPIKES_STATUS_OR_ABSORPTION_UNKNOWN")))
             return unknown(p,"U_TURN_SOURCE_ENTRY_UNKNOWN");
         if(!entry.entryDamage().value().equals(sourceEntry.damage().value())
                 ||!entry.entrySpeedDelta().value().equals(sourceEntry.speedDelta().value()))
@@ -683,12 +690,16 @@ public final class ShadowMechanicsEvaluation {
         var hp=new Interval(entry.facts().hpFraction(),entry.facts().hpFraction());
         if(remainingHp(hp,sourceEntry.damage().value()).low()<=0)
             return unknown(p,"U_TURN_ENTRY_SURVIVAL_UNKNOWN");
+        var effects=execution.entryEffects(p.state().selfHazards(),max,reserve,entry.status());
+        if(!effects.status().known()||!effects.unknown().isEmpty())return unknown(p,"ENTRY_STATUS_OR_ABSORPTION_UNKNOWN");
         Map<String,Integer> nextStages=new TreeMap<>();STATS.forEach(k->nextStages.put(k,0));
         nextStages.put("spe",sourceEntry.speedDelta().value());
         Actor arriving=new Actor(id,entry.facts(),Known.of(hp,"owner-only current reserve HP"),
-                nextStages,entry.status());
-        Progress swapped=replace(p,state(p.state(),arriving,p.state().opponent(),
-                Kind.FORCED_CONTINUATION,p.state().action()));
+                nextStages,effects.status());
+        var before=p.state();
+        var entered=new State(arriving,before.opponent(),effects.hazards(),before.opponentHazards(),before.ambiguity(),before.unresolved(),
+                kind,action,before.legalMoves(),before.legalSwitches(),before.nextRequestKnown(),before.forcedAction(),before.forcedReplacement(),before.trapped());
+        Progress swapped=replace(p,entered);
         return hurt(swapped,true,sourceEntry.damage().value());
     }
     private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
