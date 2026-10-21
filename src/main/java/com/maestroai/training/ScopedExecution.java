@@ -210,6 +210,7 @@ public final class ScopedExecution {
             c.need("SHADOW_SHIELD_FULL_HP_CERTIFICATE",t.hp().known()
                     &&(t.hp().value().low()==1.0||t.hp().value().high()<1.0));
         var weather=actorWeather(c,t.id(),a,t); c.need("WEATHER", weather.known()); c.need("TERRAIN", field.terrain().known());
+        var attackWeather=actorWeather(c,a.id(),a,t);c.need("ATTACKER_WEATHER",attackWeather.known());
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {
             var active = active(t.id());
@@ -228,7 +229,7 @@ public final class ScopedExecution {
                     // and engine-wrap domains before issuing a usable certificate.
                     var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
                             Critical.BOTH,n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,
-                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a,t),4096);
+                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a.id(),attackWeather.value()),4096);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -402,6 +403,7 @@ public final class ScopedExecution {
         var coverage = damageCoverage(moveId, attacker, a, target, t);
         if (!coverage.supported()) return new Damage(Known.unknown(), Known.unknown(), coverage.missing(), coverage.source());
         var weather=effectiveActorWeather(t.id(),a,t);if(!weather.known())return Damage.unknown("WEATHER_PARTICIPATION_UNKNOWN");
+        var attackWeather=effectiveActorWeather(a.id(),a,t);if(!attackWeather.known())return Damage.unknown("ATTACKER_WEATHER_PARTICIPATION_UNKNOWN");
         Move m = move(moveId); if (m == null || m.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
         var targetActive = active(t.id());
         if (targetActive != null && targetActive.volatiles().contains("protect")) return zero("public Protect");
@@ -418,13 +420,12 @@ public final class ScopedExecution {
         // multiply a final damage interval; the engine rounds at each stage.
         return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
                 n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,finalDamageModifier(a.id(),t.id(),t),4096,
-                sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a,t),4096);
+                sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a.id(),attackWeather.value()),4096);
     }
-    private int sourceAttackModifier(Move move,Actor attacker,Actor target) {
+    private int sourceAttackModifier(Move move,String attacker,String weather) {
         // Native ModifySpA follows critical-adjusted stages, independently of
         // the defender's ordinary weather-damage multiplier and umbrella.
-        return !move.physical()&&ability(attacker.id()).equals("solarpower")
-                &&effectiveActorWeather(attacker.id(),attacker,target).value().equals("sunnyday")?6144:4096;
+        return !move.physical()&&ability(attacker).equals("solarpower")&&weather.equals("sunnyday")?6144:4096;
     }
     private int sourceDefenseModifier(Move move,Profile target,String weather) {
         return weather.equals("sandstorm")&&move.defendingStat().equals("spd")

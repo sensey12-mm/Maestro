@@ -56,6 +56,19 @@ final class WeatherAbilityRegression {
             var expired=fixture(c,"");var old=expired.execution().residualCoverage(expired.profiles().get("self"),expired.state().self());expired.owner().endChoice();
             check(!old.supported()&&!rank(expired,true).utility().known(),"Expired owning request retained residual scope");
             var field=fixture(c,"");field.fields().reset();boolean stale=false;try{rank(field,true);}catch(IllegalArgumentException rejected){stale=true;}check(stale,"Expired weather capture retained forecast");
+            for(boolean expire:List.of(false,true)) {
+                var during=fixture(c,"");var queries=new java.util.concurrent.atomic.AtomicInteger();
+                var fading=during.execution().withScopes(ExecutionCoverage.Scopes.receipt(op->{
+                    if(op==ExecutionCoverage.Operation.DAMAGE&&queries.incrementAndGet()==2){
+                        if(expire)during.current().set(false);
+                        else return Known.unknown();
+                    }
+                    return known(true);
+                },during.current()::get));
+                var fadingActor=during.config().b("enemy")?during.state().opponent():during.state().self();
+                var fadingTarget=during.config().b("enemy")?during.state().self():during.state().opponent();
+                check(!fading.damage(c.s("move"),during.profiles().get(fadingActor.id()),fadingActor,during.profiles().get(fadingTarget.id()),fadingTarget,Critical.BOTH).fraction().known(),"Receipt/scope withdrawing during direct damage did not fail closed");
+            }
             var closing=fixture(c,"");var frame=closing.execution().withScopes(ExecutionCoverage.Scopes.receipt(op->{if(op==ExecutionCoverage.Operation.DAMAGE)closing.current().set(false);return known(true);},closing.current()::get));
             var withdrawn=rank(closing,true,frame);check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Closing receipt leaked projected weather states");
             String action="move:"+c.action();var turn=new ShadowMechanicsEvaluation.Turn(action,c.reply(),null);var future=new ShadowMechanicsEvaluation.Plan(action,List.of(List.of(turn,turn)),SOURCE);
