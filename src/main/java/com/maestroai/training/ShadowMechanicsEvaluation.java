@@ -57,6 +57,19 @@ public final class ShadowMechanicsEvaluation {
     public static Comparison compare(BattleSnapshot snapshot, PublicMechanics mechanics,
                                      Map<String, Profile> profiles, List<Plan> plans,
                                      Known<Boolean> trickRoom, Critical critical, String legacyAction, ScopedExecution execution) {
+        return compare(snapshot,mechanics,profiles,plans,trickRoom,critical,legacyAction,execution,false);
+    }
+    /** Explicit end-of-turn boundary. The existing comparison remains pre-residual.
+     * No subsequent request, field duration or hidden party closure is inferred. */
+    public static Comparison compareEndOfTurn(BattleSnapshot snapshot, PublicMechanics mechanics,
+                                     Map<String, Profile> profiles, List<Plan> plans,
+                                     Known<Boolean> trickRoom, Critical critical, String legacyAction, ScopedExecution execution) {
+        return compare(snapshot,mechanics,profiles,plans,trickRoom,critical,legacyAction,execution,true);
+    }
+    private static Comparison compare(BattleSnapshot snapshot, PublicMechanics mechanics,
+                                     Map<String, Profile> profiles, List<Plan> plans,
+                                     Known<Boolean> trickRoom, Critical critical, String legacyAction, ScopedExecution execution,
+                                     boolean endOfTurn) {
         Objects.requireNonNull(profiles); Objects.requireNonNull(trickRoom);
         // Each executed operation issues its own certificate. Do not require
         // all six unrelated scopes merely to copy a raw immutable actor profile.
@@ -84,7 +97,10 @@ public final class ShadowMechanicsEvaluation {
                 List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of(),false));
                 for (int i = 0; i < turns.size(); i++) {
                     List<Progress> expanded = new ArrayList<>();
-                    for (Progress branch : branches) expanded.addAll(turn(branch, turns.get(i), i, mechanics, profiles, trickRoom, critical, execution));
+                    for (Progress branch : branches) {
+                        var outcomes=turn(branch,turns.get(i),i,mechanics,profiles,trickRoom,critical,execution,endOfTurn);
+                        for(var outcome:outcomes) expanded.add(endOfTurn?residual(outcome,mechanics,profiles,execution):outcome);
+                    }
                     branches = expanded;
                 }
                 for (Progress p : branches) {
@@ -123,11 +139,13 @@ public final class ShadowMechanicsEvaluation {
         }
         return new Comparison(rankings, preferred, legacyAction, simple,
                 preferred != null && legacyAction != null && !preferred.equals(legacyAction), coverage,
-                "conditional-supplied-replies;bounded-hit-miss-actions;HP-resource-exchange;not-win-probability;advisoryOnly=true");
+                "conditional-supplied-replies;bounded-hit-miss-actions;"+(endOfTurn?"bounded-end-of-turn;":"pre-residual;")
+                        +"HP-resource-exchange;not-win-probability;advisoryOnly=true");
     }
 
     private static List<Progress> turn(Progress p, Turn t, int index, PublicMechanics mechanics,
-                                       Map<String, Profile> profiles, Known<Boolean> trickRoom, Critical critical, ScopedExecution execution) {
+                                       Map<String, Profile> profiles, Known<Boolean> trickRoom, Critical critical, ScopedExecution execution,
+                                       boolean endOfTurn) {
         if (!p.unknown().isEmpty()) return List.of(p);
         if (execution != null && index > 0) return List.of(unknown(p, "FUTURE_FIELD_AND_VOLATILE_DURATION_UNRESOLVED"));
         if (p.state().forcedAction() || p.state().forcedReplacement())
@@ -152,8 +170,8 @@ public final class ShadowMechanicsEvaluation {
         if (!s.opponent().facts().revealedMoves().contains(t.reply())) return List.of(unknown(p, "UNREVEALED_OPPONENT_REPLY"));
         if (!s.self().hp().known() || !s.opponent().hp().known()) return List.of(unknown(p, "PUBLIC_HP_UNKNOWN"));
         if (!s.self().status().known() || !s.opponent().status().known()
-                || !Set.of("none","par").contains(s.self().status().value())
-                || !Set.of("none","par").contains(s.opponent().status().value())
+                || !(endOfTurn?Set.of("none","par","brn","psn"):Set.of("none","par")).contains(s.self().status().value())
+                || !(endOfTurn?Set.of("none","par","brn","psn"):Set.of("none","par")).contains(s.opponent().status().value())
                 || execution == null && (!s.self().status().value().equals("none") || !s.opponent().status().value().equals("none")))
             return List.of(unknown(p, "STATUS_EXECUTION_OR_RESIDUAL_EFFECTS_UNRESOLVED"));
         Profile self = profiles.get(s.self().id()), foe = profiles.get(s.opponent().id());
@@ -475,6 +493,81 @@ public final class ShadowMechanicsEvaluation {
             }
         }
         return result;
+    }
+    private static Progress residual(Progress p,PublicMechanics mechanics,Map<String,Profile> profiles,
+                                     ScopedExecution execution) {
+        if(!p.unknown().isEmpty())return p;
+        if(execution==null)return unknown(p,"RESIDUAL_RUNTIME_SCOPE_UNKNOWN");
+        // A KO during the action queue may have ended the battle before residuals.
+        // Only positive own reserve evidence establishes a supported continuation.
+        if(possibleFaint(p.state().opponent()))return unknown(p,"RESIDUAL_OPPONENT_PARTY_CLOSURE_UNKNOWN");
+        if(possibleFaint(p.state().self())&&(!zero(p.state().self())
+                ||!certifiedOwnReserve(mechanics,profiles,execution)))
+            return unknown(p,"RESIDUAL_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
+        if(zero(p.state().self()))p=pendingOwnReplacement(clearFaintedStages(p));
+        for(boolean own:List.of(true,false)) {
+            Actor actor=own?p.state().self():p.state().opponent();
+            if(zero(actor))continue;
+            var profile=profiles.get(actor.id());
+            if(profile==null)return unknown(p,"RESIDUAL_PROFILE_UNKNOWN");
+            var cert=execution.residualCoverage(profile,actor);
+            if(!cert.supported())return unknown(p,String.join(",",cert.missing()));
+            p=residualHp(p,own,profile.maxHp().value().low(),0);
+            if(!p.unknown().isEmpty())return p;
+            if(possibleFaint(own?p.state().self():p.state().opponent()))
+                return unknown(p,"RESIDUAL_QUEUE_SURVIVAL_UNKNOWN");
+        }
+        // Native order 5.4: Leftovers heals before poison (9) and burn (10).
+        // Magic Room expires later; current suppression applies to this recovery.
+        for(boolean own:List.of(true,false)) {
+            Actor actor=own?p.state().self():p.state().opponent();
+            if(!zero(actor)&&execution.currentItem(actor.id()).equals("leftovers")) {
+                int max=profiles.get(actor.id()).maxHp().value().low();
+                p=residualHp(p,own,max,Math.max(1,max/16));
+                if(!p.unknown().isEmpty())return p;
+            }
+        }
+        for(String status:List.of("psn","brn"))for(boolean own:List.of(true,false)) {
+            Actor actor=own?p.state().self():p.state().opponent();
+            if(zero(actor)||!actor.status().value().equals(status)
+                    ||execution.currentAbility(actor.id()).equals("magicguard"))continue;
+            int max=profiles.get(actor.id()).maxHp().value().low();
+            p=residualHp(p,own,max,-Math.max(1,max/(status.equals("psn")?8:16)));
+            if(!p.unknown().isEmpty())return p;
+            actor=own?p.state().self():p.state().opponent();
+            if(possibleFaint(actor)) {
+                p=clearFaintedStages(p);
+                if(!zero(actor))return unknown(p,"RESIDUAL_SURVIVAL_UNKNOWN");
+                if(!own)return unknown(p,"RESIDUAL_OPPONENT_PARTY_CLOSURE_UNKNOWN");
+                if(!certifiedOwnReserve(mechanics,profiles,execution))
+                    return unknown(p,"RESIDUAL_OWN_PARTY_CLOSURE_UNKNOWN");
+                p=pendingOwnReplacement(p);
+            }
+        }
+        var s=p.state();var unresolved=new TreeSet<>(s.unresolved());
+        unresolved.remove("RESIDUALS_AND_REPLACEMENTS_UNMODELED");
+        unresolved.add("BOUNDED_RESIDUALS_COMPLETE_REPLACEMENT_AND_FUTURE_DURATIONS_UNRESOLVED");
+        return replace(p,new State(s.self(),s.opponent(),s.selfHazards(),s.opponentHazards(),s.ambiguity(),unresolved,
+                s.actionKind(),s.action(),s.legalMoves(),s.legalSwitches(),false,s.forcedAction(),s.forcedReplacement(),s.trapped()));
+    }
+    /** Residual rounding/fainting operates on integer HP, while the shared actor
+     * representation stays fractional. Expand only for accumulated floating-point
+     * representation error in this bounded action queue before intersecting the
+     * native integer lattice; inconsistent point HP remains UNKNOWN. */
+    private static Progress residualHp(Progress p,boolean own,int max,int delta) {
+        Actor before=own?p.state().self():p.state().opponent();var hp=before.hp().value();
+        double error=64*Math.ulp((double)max);
+        int low=(int)Math.ceil(hp.low()*max-error),high=(int)Math.floor(hp.high()*max+error);
+        if(low>high)return unknown(p,"RESIDUAL_HP_INTEGER_DOMAIN_UNKNOWN");
+        int afterLow=Math.clamp(low+delta,0,max),afterHigh=Math.clamp(high+delta,0,max);
+        Actor after=actor(before,new Interval(afterLow/(double)max,afterHigh/(double)max),before.stages());
+        State s=state(p.state(),own?after:p.state().self(),own?p.state().opponent():after,
+                p.state().actionKind(),p.state().action());
+        // Signed loss: recovery is negative and capped by the current HP bounds.
+        double lostLow=Math.min(low-afterLow,high-afterHigh)/(double)max;
+        double lostHigh=Math.max(low-afterLow,high-afterHigh)/(double)max;
+        return new Progress(s,p.dealtLow()+(own?0:lostLow),p.dealtHigh()+(own?0:lostHigh),
+                p.lostLow()+(own?lostLow:0),p.lostHigh()+(own?lostHigh:0),p.unknown(),p.skipNext());
     }
     /** Positive own-reserve evidence only. An empty list never proves party
      * exhaustion; opponent roster size and identity are never consulted.

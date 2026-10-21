@@ -74,6 +74,22 @@ public final class ScopedExecution {
     /** These values must already pass current per-operation evidence gates. */
     String currentItem(String role){return item(role);}
     String currentAbility(String role){return ability(role);}
+    /** Residuals reuse the damage source domain: its attestation includes the
+     * native event/faint dispatch and complete condition/item/ability tables. */
+    public Certificate residualCoverage(Profile profile, Actor actor) {
+        bound(profile,actor); var c=new Check(Operation.DAMAGE);
+        c.actor(actor.id(),reserve(actor.id()));
+        c.need("RESIDUAL_MAX_HP",profile.maxHp().known()
+                &&profile.maxHp().value().low()==profile.maxHp().value().high());
+        c.need("RESIDUAL_STATUS",actor.status().known()
+                &&Set.of("none","par","brn","psn").contains(actor.status().value()));
+        c.need("RESIDUAL_HP",actor.hp().known());
+        c.need("RESIDUAL_WEATHER",field.weather().known()
+                &&Set.of("none","sunnyday","raindance").contains(field.weather().value()));
+        c.need("RESIDUAL_TERRAIN",field.terrain().known()
+                &&Set.of("none","psychicterrain").contains(field.terrain().value()));
+        return c.finish();
+    }
     /** Active Power Herb requires current own binding and no Magic Room. */
     boolean activePowerHerb(String role) {
         var b=actors.get(role);

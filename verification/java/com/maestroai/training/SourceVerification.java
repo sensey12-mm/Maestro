@@ -76,6 +76,7 @@ public final class SourceVerification {
             RecoilContinuationRegression.differential(engine);
             PivotOutcomeRegression.differential(engine);
             AccuracyMissRegression.differential(engine);
+            ResidualRecoveryRegression.differential(engine);
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);
             ModifierCompositionRegression.differential(engine);

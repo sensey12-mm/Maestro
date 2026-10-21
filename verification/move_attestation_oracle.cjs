@@ -118,7 +118,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
     // Status callbacks execute outside move definitions. Full public condition
     // attestation must reject identical-text closures without reading actors.
     const conditions=battle.dex.dataCache.Conditions;
-    for(const id of ['par','slp','frz']){
+    for(const id of ['par','slp','frz','brn','psn','tox']){
       const definition=conditions[id];
       for(const slot of Object.keys(definition).filter(k=>typeof definition[k]==='function')){
         receipt=capture();check(receipt.current(),'Native status receipt missing: '+id+'.'+slot);
@@ -130,11 +130,31 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
         conditions[id]=definition;
         check(capture().current()&&!receipt.current(),'Status restoration revived old receipt: '+id+'.'+slot);
       }
-      receipt=capture();conditions[id]={...definition,onBeforeMovePriority:definition.onBeforeMovePriority+1};
+      const order=['brn','psn','tox'].includes(id)?'onResidualOrder':'onBeforeMovePriority';
+      receipt=capture();conditions[id]={...definition,[order]:definition[order]+1};
       check(!receipt.current(),'Status callback priority alteration retained receipt: '+id);
       check(JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Status priority omitted from fingerprint: '+id);
       conditions[id]=definition;
       check(capture().current()&&!receipt.current(),'Status priority restoration revived old receipt: '+id);
+    }
+
+    for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating']]){
+      const effects=battle.dex.dataCache[tableName],definition=effects[id];
+      receipt=capture();effects[id]={...definition,[metadata]:definition[metadata]+1};
+      check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Residual metadata omitted: '+id);
+      effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual metadata restoration revived receipt: '+id);
+      const foreign=eval('({'+definition[slot].toString()+'})')[slot];
+      receipt=capture();effects[id]={...definition,[slot]:foreign};
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(foreign!==definition[slot]&&foreign.toString()===definition[slot].toString()&&rejected&&!receipt.current(),'Foreign residual callback retained scope: '+id);
+      effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
+    }
+    for(const slot of ['residualEvent','faintMessages']){
+      const prototype=modules.Battle.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];
+      receipt=capture();prototype[slot]=foreign;
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign residual/faint dispatch retained scope: '+slot);
+      prototype[slot]=method;check(capture().current()&&!receipt.current(),'Residual/faint dispatch restoration revived receipt: '+slot);
     }
 
     for(const id of ['rocktomb','thunder','fireblast']){

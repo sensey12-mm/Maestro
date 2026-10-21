@@ -66,7 +66,12 @@ final class ModifierCompositionRegression {
         var pokemon=new OwnRequestTransport.Pokemon(new OwnRequestEvidence.Sample(active,"p1: Own",
                 ownUser?c.userHp()+"/1000":c.n("targetHp")+"/"+c.n("targetMax"),true,ownAbility,c.types(ownUser?"types":"targetTypes")),
                 ownUser?c.n("level"):100,stats.get("self"),ownItem,c.types(ownUser?"types":"targetTypes"),ownUser?c.s("status"):c.targetStatus(),false);
-        var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,List.of(pokemon));
+        int ownBench=c.data().has("ownBench")?c.n("ownBench"):0;
+        var ownPokemon=new ArrayList<OwnRequestTransport.Pokemon>();ownPokemon.add(pokemon);
+        for(int i=0;i<ownBench;i++)ownPokemon.add(new OwnRequestTransport.Pokemon(new OwnRequestEvidence.Sample(new UUID(0,48+i),
+                "p1: Reserve"+i,"1000/1000",false,"runaway",List.of("normal")),100,
+                Map.of("atk",220,"def",220,"spa",220,"spd",220,"spe",220),"none",List.of("normal"),"none",false));
+        var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,ownPokemon);
         ledger.dispatched(battle,actor,"p1",first,()->request);ledger.turnDispatched(battle,1);ledger.turnFinished(battle,1);
         ledger.dispatched(battle,actor,"p1",second,()->request);ledger.turnDispatched(battle,2);
         var lease=ledger.beginChoice(battle,actor,second,active,false,()->true);
@@ -116,10 +121,10 @@ final class ModifierCompositionRegression {
         var fields=new PublicFieldEvidence();var field=fields.update(protocol,provider);var current=new AtomicBoolean(true);
         var scopes=ExecutionCoverage.Scopes.receipt(op->missing.equals(op.name().toLowerCase(Locale.ROOT)+"-scope")?Known.unknown():YES,current::get);
         var foe=provider.observation("p2a");
-        var execution=new ScopedExecution(field,Map.of(
+        var bindings=new HashMap<>(Map.of(
                 "self",new ScopedExecution.Binding(provider.observation("p1a"),missing.equals("own-item")?Known.unknown():known(ownItem),
                         missing.equals("own-ability")?Known.unknown():known(ownAbility),missing.equals("own-transport")?Known.unknown():YES,lease),
-                "opponent",new ScopedExecution.Binding(foe,foe.item(),missing.equals("forged-opponent")?known("technician"):foe.ability())),scopes);
+                "opponent",new ScopedExecution.Binding(foe,foe.item(),missing.equals("forged-opponent")?known("technician"):foe.ability())));
         var userHp=known(new Interval(c.userHp()/1000.0,c.userHp()/1000.0));var selfHp=c.b("enemy")?targetHp:userHp;var foeHp=c.b("enemy")?userHp:targetHp;
         var selfStages=stages(c.b("enemy")?0:c.n("attackStage"),c.b("enemy")?c.n("defenseStage"):0);selfStages.put("spe",c.speedStage(!c.b("enemy")));
         var foeStages=stages(c.b("enemy")?c.n("attackStage"):0,c.b("enemy")?0:c.n("defenseStage"));foeStages.put("spe",c.speedStage(c.b("enemy")));
@@ -132,9 +137,17 @@ final class ModifierCompositionRegression {
         }
         var selfFacts=facts(selfHp,c.types(c.b("enemy")?"targetTypes":"types"),selfStages,List.of());
         var foeFacts=facts(foeHp,c.types(c.b("enemy")?"types":"targetTypes"),foeStages,List.of(c.reply()));
-        var snapshot=new BattleSnapshot(2,selfFacts,foeFacts,List.of(),List.of(),List.of(c.action()),List.of(),Map.of(),false,null);
+        var bench=new ArrayList<BattleSnapshot.Combatant>();var legal=new ArrayList<String>();var targets=new HashMap<String,SwitchTarget>();
+        for(int i=0;i<ownBench;i++){
+            String id="reserve"+i;var reserve=facts(known(new Interval(1,1)),List.of("normal"),stages(0,0),List.of());
+            bench.add(reserve);legal.add(id);targets.put(id,new SwitchTarget(reserve,known("none"),known(new Interval(0,0)),known(0)));
+            profiles.put(id,new Profile(id,known(100),known(IntRange.exact(1000)),Map.of(),known(List.of("normal")),YES));
+            if(!missing.equals("reserve-binding"))bindings.put(id,new ScopedExecution.Binding(null,known("none"),known("runaway"),YES,lease));
+        }
+        var execution=new ScopedExecution(field,bindings,scopes);
+        var snapshot=new BattleSnapshot(2,selfFacts,foeFacts,bench,List.of(),List.of(c.action()),legal,Map.of(),false,null);
         var hazards=new Hazards(Map.of(),true,SOURCE);var healthy=known(c.targetStatus());var status=missing.equals("status")?Known.<String>unknown():known(c.s("status"));
-        var context=new PublicTransitionState.Context(selfHp,foeHp,c.b("enemy")?healthy:status,c.b("enemy")?status:healthy,hazards,hazards,Map.of(),Map.of(),Set.of());
+        var context=new PublicTransitionState.Context(selfHp,foeHp,c.b("enemy")?healthy:status,c.b("enemy")?status:healthy,hazards,hazards,targets,Map.of(),Set.of());
         var mechanics=new PublicMechanics(Map.of(),foeFacts.knownBoosts(),Set.of(),false,false,false,0,new Evidence(context,Map.of(),Map.of()));
         var state=PublicStateSearchAdapter.project(snapshot,mechanics).states().get("root");
         return new Fixture(c,execution,Map.copyOf(profiles),state,snapshot,mechanics,ledger,current,fields,lease,protocol,provider,history);
