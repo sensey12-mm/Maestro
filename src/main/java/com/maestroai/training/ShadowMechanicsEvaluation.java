@@ -543,6 +543,31 @@ public final class ShadowMechanicsEvaluation {
                 p=pendingOwnReplacement(p);
             }
         }
+        // Native ordinary weather order 1 dispatches all Weather callbacks
+        // before faintMessages, Leftovers (5.4), poison (9) and burn (10).
+        if(Set.of("sunnyday","raindance").contains(effectiveWeather.value())) {
+            for(boolean own:List.of(true,false)) {
+                Actor actor=own?p.state().self():p.state().opponent();
+                if(zero(actor))continue;
+                String ability=execution.currentAbility(actor.id());
+                var weather=execution.effectiveActorWeather(actor.id(),p.state().self(),p.state().opponent());
+                if(!weather.known())return unknown(p,"WEATHER_ABILITY_PARTICIPATION_UNKNOWN");
+                boolean heal=ability.equals("raindish")&&weather.value().equals("raindance");
+                boolean cost=ability.equals("solarpower")&&weather.value().equals("sunnyday");
+                if(!heal&&!cost)continue;
+                if(!execution.field().weatherAtResidual().known())return unknown(p,"WEATHER_ABILITY_RESIDUAL_DURATION_UNKNOWN");
+                int max=profiles.get(actor.id()).maxHp().value().low();
+                p=residualHp(p,own,max,(heal?1:-1)*Math.max(1,max/(heal?16:8)));
+                if(!p.unknown().isEmpty())return p;
+            }
+            p=clearFaintedStages(p);
+            if(possibleFaint(p.state().opponent()))return unknown(p,"WEATHER_ABILITY_OPPONENT_PARTY_CLOSURE_UNKNOWN");
+            if(possibleFaint(p.state().self())) {
+                if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution))
+                    return unknown(p,"WEATHER_ABILITY_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
+                p=pendingOwnReplacement(p);
+            }
+        }
         // Native order 5.4: Leftovers heals before poison (9) and burn (10).
         // Magic Room expires later; current suppression applies to this recovery.
         for(boolean own:List.of(true,false)) {

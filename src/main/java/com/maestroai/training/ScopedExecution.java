@@ -118,7 +118,7 @@ public final class ScopedExecution {
         return weather.known()&&Set.of("sunnyday","raindance").contains(weather.value())&&item(role).equals("utilityumbrella")
                 ?Known.of("none",field.token()+":actor-effective-weather"):weather;
     }
-    private Known<String> effectiveActorWeather(String role,Actor... participants){var c=new Check(Operation.DAMAGE);c.actor("self",false);c.actor("opponent",false);return actorWeather(c,role,participants);}
+    Known<String> effectiveActorWeather(String role,Actor... participants){var c=new Check(Operation.DAMAGE);c.actor("self",false);c.actor("opponent",false);return actorWeather(c,role,participants);}
     private static Actor[] participants(Actor actor,Actor... others){var all=new Actor[others.length+1];all[0]=actor;System.arraycopy(others,0,all,1,others.length);return all;}
     /** Residuals reuse the damage source domain: its attestation includes the
      * native event/faint dispatch and complete condition/item/ability tables. */
@@ -181,7 +181,7 @@ public final class ScopedExecution {
             need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles", "utilityumbrella").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
             need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !Set.of("download","airlock","cloudnine").contains(b.ability().value()));
@@ -228,7 +228,7 @@ public final class ScopedExecution {
                     // and engine-wrap domains before issuing a usable certificate.
                     var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
                             Critical.BOTH,n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,
-                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target,weather.value()),4096);
+                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a,t),4096);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -418,7 +418,13 @@ public final class ScopedExecution {
         // multiply a final damage interval; the engine rounds at each stage.
         return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
                 n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,finalDamageModifier(a.id(),t.id(),t),4096,
-                sourceDefenseModifier(m,target,weather.value()),4096);
+                sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a,t),4096);
+    }
+    private int sourceAttackModifier(Move move,Actor attacker,Actor target) {
+        // Native ModifySpA follows critical-adjusted stages, independently of
+        // the defender's ordinary weather-damage multiplier and umbrella.
+        return !move.physical()&&ability(attacker.id()).equals("solarpower")
+                &&effectiveActorWeather(attacker.id(),attacker,target).value().equals("sunnyday")?6144:4096;
     }
     private int sourceDefenseModifier(Move move,Profile target,String weather) {
         return weather.equals("sandstorm")&&move.defendingStat().equals("spd")

@@ -165,6 +165,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
 
     for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating'],
         ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating'],
+        ['Abilities','raindish','onWeather','rating'],['Abilities','solarpower','onModifySpA','onModifySpAPriority'],
         ['Abilities','chlorophyll','onModifySpe','rating'],['Abilities','swiftswim','onModifySpe','rating'],
         ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num'],
         ['Items','utilityumbrella','onStart','num'],
@@ -180,6 +181,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
     }
     for(const [group,tableName,id,metadata] of [['ability','Abilities','sandrush','rating'],['ability','Abilities','sandforce','rating'],
+        ['ability','Abilities','raindish','rating'],['ability','Abilities','solarpower','onModifySpAPriority'],
         ['ability','Abilities','chlorophyll','rating'],['ability','Abilities','swiftswim','rating'],
         ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num'],
         ['heldItem','Items','utilityumbrella','num'],

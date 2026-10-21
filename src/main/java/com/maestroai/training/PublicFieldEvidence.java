@@ -50,6 +50,15 @@ public final class PublicFieldEvidence {
             requireCurrent(turn);
             if(!weather.known())return Known.unknown();
             if(!weather.value().equals("sandstorm"))return Known.of(false,token());
+            return weatherAtResidual();
+        }
+        /** Ordinary sun, rain and sand share the native minimum five-phase
+         * clock. Expiration precedes Weather callbacks on the fifth phase. */
+        public Known<Boolean> weatherAtResidual() {
+            requireCurrent(turn);
+            if(!weather.known())return Known.unknown();
+            if(weather.value().equals("none"))return Known.of(false,token());
+            if(!Set.of("sunnyday","raindance","sandstorm").contains(weather.value()))return Known.unknown();
             int age=turn-weatherStartTurn;
             return weatherStartTurn>0&&age>=0&&age<4?Known.of(true,token()+":native-minimum-weather-duration"):Known.unknown();
         }
@@ -163,7 +172,7 @@ public final class PublicFieldEvidence {
             if (event.equals("-weather")) {
                 String value = p.length >= 3 ? key(p[2]) : "";
                 boolean fresh=p.length==3&&(!weather.known()||!weather.value().equals(value));
-                if(!value.equals("sandstorm"))weatherStartTurn=-1;
+                if(!Set.of("sunnyday","raindance","sandstorm").contains(value))weatherStartTurn=-1;
                 else if(fresh)weatherStartTurn=Math.max(1,turn);
                 if (Set.of("none", "sunnyday", "raindance","sandstorm").contains(value)) weather = Known.of(value, SOURCE + ":weather-event");
                 else { weather = Known.unknown(); unknown.add("UNSUPPORTED_WEATHER"); }
