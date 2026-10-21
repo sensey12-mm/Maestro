@@ -22,8 +22,11 @@ exports.run=function(Battle){
     for(const stat of ['def','spd']){target.storedStats[stat]=c.defense;target.boosts[stat]=c.defenseStage;}
     user.storedStats.spe=c.userSpeed;target.storedStats.spe=c.targetSpeed;
     user.boosts.spe=c.speedStage||0;target.boosts.spe=c.targetSpeedStage||0;
+    user.boosts.accuracy=c.accuracyStage||0;user.boosts.evasion=c.evasionStage||0;
+    target.boosts.accuracy=c.targetAccuracyStage||0;target.boosts.evasion=c.targetEvasionStage||0;
     user.status=c.status==='none'?'':c.status;target.status=c.targetStatus==='none'?'':c.targetStatus;
     if(c.room)b.field.addPseudoWeather('magicroom',user);
+    if(c.room&&c.roomDuration)b.field.pseudoWeather.magicroom.duration=c.roomDuration;
     if(c.trickRoom)b.field.addPseudoWeather('trickroom',user);
     for(const [actor,wind] of [[user,c.wind],[target,c.targetWind]])if(wind){actor.side.addSideCondition('tailwind',actor);if(c.windEnded)actor.side.removeSideCondition('tailwind');}
     if(c.protect)target.addVolatile('protect');
@@ -59,6 +62,8 @@ exports.run=function(Battle){
     damageSeeds.push({id:'sand-force-room',move,room,ability:'sandforce',item:'lifeorb',targetAbility:'shadowshield',targetHp:1000});
   for(const weatherMode of ['ended','restart'])for(const move of ['rocktomb','ironhead'])
     damageSeeds.push({id:'sand-force-weather-change',weatherMode,move,ability:'sandforce',item:'lifeorb',targetAbility:'shadowshield',targetHp:1000});
+  for(const move of ['rocktomb','ironhead','swift'])for(const ability of ['sandforce','sandveil'])for(const targetAbility of ['sandveil','shadowshield'])for(const room of [false,true])
+    damageSeeds.push({id:'goggles-damage',move,ability,targetAbility,room,item:'safetygoggles',targetItem:'safetygoggles',targetHp:1000,defense:219});
   const damage=[];
   for(const seed of damageSeeds)for(const enemy of [false,true]){
     const c=config(seed,enemy),{b,user,target}=battle(c),values=[];
@@ -84,9 +89,18 @@ exports.run=function(Battle){
     const faint=b.faintMessages;
     b.faintMessages=function(...args){const result=faint.apply(this,args);if(this.ended&&!observed)observed=snapshot();return result;};
     b.makeChoices('move 1','move 1');if(!observed)throw Error('Missing native sandstorm end-of-turn boundary');
-    return {config:c,...observed,ended:b.ended,request:b.requestState,weatherAfter:b.field.weather||'none'};
+    return {config:c,...observed,ended:b.ended,request:b.requestState,weatherAfter:b.field.weather||'none',roomAfter:!!b.field.pseudoWeather.magicroom};
   }
   const seeds=[];
+  for(const ability of ['runaway','sandveil','magicguard'])for(const item of ['safetygoggles','leftovers'])for(const room of [false,true])for(const status of ['none','brn','psn'])for(const userHp of [1,500])
+    seeds.push({id:'goggles-status-protection',ability,item,room,status,userHp,targetItem:'leftovers'});
+  for(const ability of ['runaway','sandveil'])for(const room of [false,true])for(const roomDuration of [1,5])for(const userHp of [1,500])
+    seeds.push({id:'goggles-room-expiration',ability,room,roomDuration,userHp,item:'safetygoggles',targetItem:'safetygoggles'});
+  for(const weatherMode of ['ended','restart','upkeep'])for(const move of ['rocktomb','closecombat','drainingkiss','swift'])for(const miss of [false,true])
+    seeds.push({id:'veil-goggles-weather',weatherMode,move,miss,item:'lifeorb',targetItem:'safetygoggles',ability:'sandforce',targetAbility:'sandveil',userHp:990});
+  for(const ownBench of [0,1])for(const foeBench of [0,1])for(const targetHp of [1,500])
+    seeds.push({id:'goggles-knockout',item:'safetygoggles',targetItem:'safetygoggles',room:true,userHp:1,targetHp,ownBench,foeBench});
+  seeds.push({id:'goggles-expired-weather',weatherMode:'upkeep',weatherDuration:1,item:'safetygoggles',targetItem:'safetygoggles',ability:'sandveil',targetAbility:'sandveil'});
   for(const ability of ['sandrush','sandforce'])for(const move of ['bulkup','rocktomb','ironhead'])for(const weatherMode of ['fresh','ended','restart','upkeep'])for(const status of ['none','par'])
     seeds.push({id:'sand-ability-exchange',ability,move,weatherMode,status,item:move==='bulkup'?'leftovers':'lifeorb',targetItem:'leftovers',userSpeed:101,targetSpeed:201,wind:true});
   for(const ability of ['sandrush','sandforce'])for(const userHp of [1,999])for(const status of ['brn','psn'])
@@ -121,6 +135,8 @@ exports.run=function(Battle){
   const exchanges=[];for(const seed of seeds)for(const enemy of [false,true])exchanges.push(exchange(config(seed,enemy)));
   for(const row of exchanges.filter(r=>r.config.id==='unproved-duration'&&r.config.weatherDuration===1))if(row.weatherAfter!=='none')throw Error('Native weather expiration fixture failed');
   if(!exchanges.some(r=>r.config.id==='weather-knockout'&&r.selfHp===0&&r.foeHp===0))throw Error('Weather handler failed to damage both actives before faint processing');
+  for(const row of exchanges.filter(r=>r.config.id==='goggles-room-expiration'&&r.config.room&&r.config.roomDuration===1&&r.selfHp>0&&r.foeHp>0))
+    if(row.roomAfter)throw Error('Native Magic Room expiration fixture did not end the room');
   function speedSamples(c){
     const {b,user}=battle(c),values=[],cached=user.speed;
     // Four tied callbacks: Scarf, Sand Rush, paralysis and (at cached zero)

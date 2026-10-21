@@ -24,6 +24,8 @@ exports.run=function(Battle){
     for(const actor of [user,target])if(actor.status==='slp')actor.statusState={id:'slp',target:actor,time:c.sleepTime,startTime:c.sleepTime};
     user.boosts.accuracy=c.accuracyStage;user.boosts.evasion=c.evasionStage;target.boosts.accuracy=c.targetAccuracyStage;target.boosts.evasion=c.targetEvasionStage;
     if(c.weather!=='none')b.field.setWeather(c.weather,user);
+    if(c.weatherMode==='ended')b.field.clearWeather();
+    if(c.weatherMode==='restart'){b.field.clearWeather();b.field.setWeather('sandstorm',user);}
     if(c.room)b.field.addPseudoWeather('magicroom',user);
     if(c.trickRoom)b.field.addPseudoWeather('trickroom',user);
     for(const [actor,wind] of [[user,c.wind],[target,c.targetWind]])if(wind){actor.side.addSideCondition('tailwind',actor);if(c.windEnded)actor.side.removeSideCondition('tailwind');}
@@ -87,6 +89,17 @@ exports.run=function(Battle){
   for(const move of ['rocktomb','thunder','fireblast','tackle','swift'])for(const [accuracyStage,targetEvasionStage] of [[0,0],[-1,0],[0,1],[6,-6],[-6,6],[2,1]])
     for(const weather of move==='thunder'?['none','sunnyday','raindance']:['none'])for(const enemy of [false,true])
       thresholds.push(observe(config({id:'threshold',move,accuracyStage,targetEvasionStage,weather},enemy),true));
+  const veilStages=[...Array.from({length:13},(_,i)=>[i-6,0]),[6,-6],[-6,6],[2,1],[0,1]];
+  for(const move of ['rocktomb','thunder','fireblast','tackle','swift'])for(const [accuracyStage,targetEvasionStage] of veilStages)
+    for(const incoming of [false,true])for(const enemy of [false,true])
+      thresholds.push(observe(config({id:'sand-veil-threshold',move,accuracyStage,targetEvasionStage,weather:'sandstorm',
+        ability:incoming?'runaway':'sandveil',targetAbility:incoming?'sandveil':'runaway'},enemy),true));
+  for(const move of ['rocktomb','thunder','fireblast','swift'])for(const room of [false,true])for(const enemy of [false,true])
+    thresholds.push(observe(config({id:'veil-goggles-threshold',move,room,targetAbility:'sandveil',item:'safetygoggles',targetItem:'safetygoggles',weather:'sandstorm'},enemy),true));
+  for(const weather of ['none','sunnyday','raindance'])for(const enemy of [false,true])
+    thresholds.push(observe(config({id:'veil-thunder-weather',move:'thunder',weather,targetAbility:'sandveil',accuracyStage:-6,targetEvasionStage:6},enemy),true));
+  for(const weatherMode of ['ended','restart'])for(const move of ['rocktomb','thunder','fireblast','tackle','swift'])for(const enemy of [false,true])
+    thresholds.push(observe(config({id:'veil-weather-change',move,weatherMode,weather:'sandstorm',targetAbility:'sandveil'},enemy),true));
   const seeds=[
     {id:'rock',move:'rocktomb'}, {id:'thunder',move:'thunder'}, {id:'fire',move:'fireblast'},
     {id:'focus',move:'focusblast'}, {id:'sun-thunder',move:'thunder',weather:'sunnyday'},
@@ -109,6 +122,29 @@ exports.run=function(Battle){
   ];
   const exchanges=[];
   for(const seed of seeds)for(const draw of [0,99])for(const enemy of [false,true])exchanges.push(observe(config({...seed,draw},enemy)));
+  const veilSeeds=[];
+  for(const move of ['rocktomb','thunder','fireblast','tackle','closecombat','drainingkiss','uturn','spectralthief'])for(const ability of ['runaway','sandforce'])for(const item of ['lifeorb','safetygoggles'])
+    veilSeeds.push({id:'veil-follow-ups',move,ability,item,targetAbility:'sandveil',weather:'sandstorm',
+      targetTypes:move==='spectralthief'?['psychic']:['normal'],defenseStage:move==='spectralthief'?2:0,userHp:move==='drainingkiss'?990:500});
+  for(const item of ['lifeorb','safetygoggles'])for(const room of [false,true])
+    veilSeeds.push({id:'outgoing-veil-shield',ability:'sandveil',targetAbility:'shadowshield',targetItem:'safetygoggles',item,room,weather:'sandstorm',critical:true});
+  veilSeeds.push({id:'protect',targetAbility:'sandveil',weather:'sandstorm',protect:true},
+    {id:'immune',move:'thunder',targetTypes:['ground'],targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'terrain-block',move:'quickattack',terrain:'psychicterrain',targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-paralysis',status:'par',item:'choicescarf',wind:true,ability:'sandrush',targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-paralysis-skip',status:'par',paralyzed:true,targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-priority',replyMove:'quickattack',targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-critical',critical:true,targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-guaranteed',accuracyStage:1,targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-swift',move:'swift',accuracyStage:-6,targetEvasionStage:6,targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-suppressed-goggles',item:'safetygoggles',targetItem:'safetygoggles',room:true,targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-ended',weatherMode:'ended',targetAbility:'sandveil',weather:'sandstorm'},
+    {id:'veil-restarted',weatherMode:'restart',targetAbility:'sandveil',weather:'sandstorm'});
+  for(const seed of veilSeeds)for(const enemy of [false,true]){
+    const threshold=observe(config(seed,enemy),true).threshold;
+    for(const draw of new Set([0,Math.max(0,Math.min(99,threshold-1)),Math.max(0,Math.min(99,threshold)),99]))
+      exchanges.push(observe(config({...seed,draw},enemy)));
+  }
   if(!exchanges.some(r=>r.ownMiss)||!exchanges.some(r=>!r.ownMiss&&r.config.draw===0))throw Error('Native hit/miss inventory missing');
   return {thresholds,exchanges};
 };

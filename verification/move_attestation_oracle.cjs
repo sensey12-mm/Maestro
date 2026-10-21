@@ -10,7 +10,10 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   const table = battle.dex.dataCache.Moves;
   const initial = capture(), original = JSON.parse(initial.json);
   const covered = JSON.parse(original.components.operationTables).Moves;
-  for (const id of selectable) check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
+  for (const id of selectable) {
+    check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
+    check(!table[id].flags?.powder,'Selectable powder move requires separate Goggles hit protection coverage: '+id);
+  }
   const fieldDependencies=['psychicterrain','tailwind','sandstorm'];
   for(const id of fieldDependencies){
     check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
@@ -161,7 +164,8 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
     }
 
     for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating'],
-        ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating']]){
+        ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating'],
+        ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num']]){
       const effects=battle.dex.dataCache[tableName],definition=effects[id];
       receipt=capture();effects[id]={...definition,[metadata]:definition[metadata]+1};
       check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Residual metadata omitted: '+id);
@@ -172,29 +176,30 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(foreign!==definition[slot]&&foreign.toString()===definition[slot].toString()&&rejected&&!receipt.current(),'Foreign residual callback retained scope: '+id);
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
     }
-    for(const id of ['sandrush','sandforce']){
-      const abilities=modules.Cobblemon.registries.ability,definition=battle.dex.dataCache.Abilities[id];
-      const native=abilities.register({name:id,...modules.Utils.deepClone(definition)},id);
-      receipt=capture();check(receipt.current()&&JSON.parse(receipt.json).scopedRegistryEquivalent,'Native sand ability registry rejected: '+id);
-      abilities.register({name:id,...modules.Utils.deepClone(definition),rating:definition.rating+1},id);
+    for(const [group,tableName,id,metadata] of [['ability','Abilities','sandrush','rating'],['ability','Abilities','sandforce','rating'],
+        ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num']]){
+      const registryEffect=modules.Cobblemon.registries[group],definition=battle.dex.dataCache[tableName][id];
+      const native=registryEffect.register({name:id,...modules.Utils.deepClone(definition)},id);
+      receipt=capture();check(receipt.current()&&JSON.parse(receipt.json).scopedRegistryEquivalent,'Native selected weather effect registry rejected: '+id);
+      registryEffect.register({name:id,...modules.Utils.deepClone(definition),[metadata]:definition[metadata]+1},id);
       const altered=JSON.parse(capture().json);
-      check(!receipt.current()&&!altered.scopedRegistryEquivalent,'Altered sand ability registry retained scope: '+id);
-      badRegistries.push({id:id+'.rating',registryEquivalent:altered.registryEquivalent,scopedRegistryEquivalent:altered.scopedRegistryEquivalent});
-      abilities.contents.set(id,native);check(capture().current()&&!receipt.current(),'Sand ability registry restoration revived receipt: '+id);
+      check(!receipt.current()&&!altered.scopedRegistryEquivalent,'Altered selected weather effect registry retained scope: '+id);
+      badRegistries.push({id:id+'.'+metadata,registryEquivalent:altered.registryEquivalent,scopedRegistryEquivalent:altered.scopedRegistryEquivalent});
+      registryEffect.contents.set(id,native);check(capture().current()&&!receipt.current(),'Sand ability registry restoration revived receipt: '+id);
       for(const slot of Object.keys(definition).filter(k=>typeof definition[k]==='function')){
         const foreign=eval('({'+definition[slot].toString()+'})')[slot];
-        receipt=capture();abilities.register({name:id,...modules.Utils.deepClone(definition),[slot]:foreign},id);
+        receipt=capture();registryEffect.register({name:id,...modules.Utils.deepClone(definition),[slot]:foreign},id);
         const bad=JSON.parse(capture().json);
-        check(!receipt.current()&&!bad.scopedRegistryEquivalent,'Foreign sand ability registry callback retained scope: '+id+'.'+slot);
+        check(!receipt.current()&&!bad.scopedRegistryEquivalent,'Foreign selected weather effect registry callback retained scope: '+id+'.'+slot);
         badRegistries.push({id:id+'.'+slot,registryEquivalent:bad.registryEquivalent,scopedRegistryEquivalent:bad.scopedRegistryEquivalent});
-        abilities.contents.set(id,native);check(capture().current()&&!receipt.current(),'Sand ability callback restoration revived receipt: '+id+'.'+slot);
-        receipt=capture();battle.dex.dataCache.Abilities[id]={...definition,[slot]:foreign};
+        registryEffect.contents.set(id,native);check(capture().current()&&!receipt.current(),'Sand ability callback restoration revived receipt: '+id+'.'+slot);
+        receipt=capture();battle.dex.dataCache[tableName][id]={...definition,[slot]:foreign};
         let rejected=false;try{capture();}catch(unverified){rejected=true;}
-        check(rejected&&!receipt.current(),'Foreign sand ability source callback retained scope: '+id+'.'+slot);
-        battle.dex.dataCache.Abilities[id]=definition;
+        check(rejected&&!receipt.current(),'Foreign selected weather effect source callback retained scope: '+id+'.'+slot);
+        battle.dex.dataCache[tableName][id]=definition;
         check(capture().current()&&!receipt.current(),'Sand ability source restoration revived receipt: '+id+'.'+slot);
       }
-      receipt=capture();abilities.reset();check(!receipt.current()&&capture().current(),'Sand ability registry reset retained receipt: '+id);
+      receipt=capture();registryEffect.reset();check(!receipt.current()&&capture().current(),'Sand ability registry reset retained receipt: '+id);
     }
     for(const slot of ['residualEvent','faintMessages']){
       const prototype=modules.Battle.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];

@@ -49,9 +49,9 @@ final class SandstormRegression {
             var witnessed=c.data().deepCopy();witnessed.addProperty("witnessWeather",true);var past=new Case(witnessed);
             check(residual(fixture(past,"")).utility().known(),"Witnessed ordinary weather setter poisoned source coverage");
             check(!residual(fixture(past,"indirect-setter")).utility().known(),"Indirect weather setter became certified");
-            for(String ability:List.of("sandveil","airlock","cloudnine","neutralizinggas"))
+            for(String ability:List.of("airlock","cloudnine","neutralizinggas"))
                 check(!residual(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported weather ability gained scope: "+ability);
-            for(String item:List.of("smoothrock","safetygoggles","utilityumbrella"))
+            for(String item:List.of("smoothrock","utilityumbrella"))
                 check(!residual(fixture(change(c,"item",item),"")).utility().known(),"Unsupported weather item gained scope: "+item);
         }
         var setup=change(change(storm(),"move","bulkup"),"item","leftovers");
@@ -67,7 +67,48 @@ final class SandstormRegression {
         check(!CobblemonMechanics.supportedMoveIds().contains("sandstorm"),"Weather dependency became selectable");
         lifecycle(setup);
         abilities();
+        protection();
         System.out.println("Sandstorm evidence regressions PASS: "+checks+" checks; weather lifetime, suppression, HP/survival, public identity and receipt expiration");
+    }
+    private static void protection(){
+        for(boolean enemy:List.of(false,true)){
+            Case c=change(change(change(enemy?enemy(storm()):storm(),"move","bulkup"),"item","safetygoggles"),"targetItem","safetygoggles");
+            var f=fixture(c,"");var result=residual(f);
+            check(result.utility().known()&&result.lines().stream().allMatch(l->l.state().self().hp().value().equals(f.state().self().hp().value())
+                    &&l.state().opponent().hp().value().equals(f.state().opponent().hp().value())),"Goggles lost weather protection on Normal types");
+            var room=c.data().deepCopy();room.addProperty("room",true);var suppressed=new Case(room);var disabled=fixture(suppressed,"");
+            check(residual(disabled).utility().known()&&residual(disabled).lines().stream().allMatch(l->l.state().self().hp().value().high()<disabled.state().self().hp().value().low()
+                    &&l.state().opponent().hp().value().high()<disabled.state().opponent().hp().value().low()),"Magic Room retained Goggles protection");
+            var veil=fixture(change(suppressed,"ability","sandveil"),"");
+            check(residual(veil).utility().known()&&residual(veil).lines().stream().allMatch(l->{var user=enemy?l.state().opponent():l.state().self();var before=enemy?veil.state().opponent():veil.state().self();
+                return user.hp().value().equals(before.hp().value());}),"Magic Room suppressed Sand Veil weather immunity");
+            var poisoned=fixture(change(c,"status","psn"),"");
+            check(residual(poisoned).utility().known()&&residual(poisoned).lines().stream().allMatch(l->{var user=enemy?l.state().opponent():l.state().self();return user.hp().value().equals(new Interval(.375,.375));}),"Goggles prevented poison damage");
+            var magic=fixture(change(change(c,"status","psn"),"ability","magicguard"),"");
+            check(residual(magic).utility().known()&&residual(magic).lines().stream().allMatch(l->{var user=enemy?l.state().opponent():l.state().self();return user.hp().value().equals(new Interval(.5,.5));}),"Goggles broke Magic Guard composition");
+            var uncertain=change(c,"weatherMode","upkeep");
+            check(!residual(fixture(uncertain,"")).utility().known(),"Protected actors inferred weather expiration");
+            check(residual(fixture(number(uncertain,"weatherDuration",1),"")).equals(residual(fixture(number(uncertain,"weatherDuration",8),""))),"Private weather counter entered Goggles forecast");
+            check(residual(fixture(number(suppressed,"roomDuration",1),"")).equals(residual(fixture(number(suppressed,"roomDuration",5),""))),"Oracle Magic Room counter entered current protection");
+            for(String missing:List.of("own-item","own-ability","opponent-item","opponent-ability","own-transport","damage-scope","order-scope","speed-scope",
+                    "types","target-types","attacker-types","target-max","status","suppression","ambiguous","forged-opponent","gravity","magnet-rise","unsupported-terrain"))
+                check(!residual(fixture(c,missing)).utility().known(),"Goggles/Sand Veil bypassed residual evidence: "+missing);
+            check(!residual(fixture(c,"",known(new Interval(0,.5)))).utility().known(),"Goggles inferred survival/party closure");
+            check(!residual(fixture(change(c,"weather","hail"),"")).utility().known(),"Goggles extended unsupported hail outcomes");
+            var expired=fixture(c,"");var cert=expired.execution().residualCoverage(expired.profiles().get("self"),expired.state().self());expired.owner().endChoice();
+            check(!cert.supported()&&!residual(expired).utility().known(),"Expired owner retained Goggles residual protection");
+            var source=fixture(c,"");var sourceCert=coverage(source);source.current().set(false);
+            check(!sourceCert.supported()&&!residual(source).utility().known(),"Expired source retained Goggles residual protection");
+            var field=fixture(c,"");field.fields().reset();boolean rejected=false;try{residual(field);}catch(IllegalArgumentException stale){rejected=true;}
+            check(rejected,"Expired field retained Goggles residual protection");
+            var closing=fixture(c,"");var frame=closing.execution().withScopes(ExecutionCoverage.Scopes.receipt(op->{if(op==ExecutionCoverage.Operation.DAMAGE)closing.current().set(false);return known(true);},closing.current()::get));
+            var withdrawn=residual(closing,frame);
+            check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Closing Goggles receipt leaked residual states");
+        }
+        var room=change(change(change(storm(),"move","bulkup"),"item","safetygoggles"),"targetItem","safetygoggles").data().deepCopy();room.addProperty("room",true);room.addProperty("userHp",1);room.addProperty("ownBench",1);
+        var continued=residual(fixture(new Case(room),""));
+        check(continued.utility().known()&&continued.lines().stream().allMatch(l->l.state().self().hp().value().high()==0&&l.state().forcedReplacement()&&!l.state().nextRequestKnown()),"Suppressed Goggles KO lost certified own continuation");
+        check(!residual(fixture(new Case(room),"reserve-binding")).utility().known(),"Suppressed Goggles inferred reserve binding");
     }
     private static Known<IntRange> speed(Fixture f){
         var c=f.config();var a=c.b("enemy")?f.state().opponent():f.state().self();
@@ -123,7 +164,7 @@ final class SandstormRegression {
         var data=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle));})()").asString()).getAsJsonObject();
         var durations=data.getAsJsonArray("durations");check(durations.size()==8,"Native duration factory inventory changed");
         for(var value:durations){var row=value.getAsJsonObject();check(row.get("duration").getAsInt()==(row.get("item").getAsString().equals("smoothrock")&&!row.get("room").getAsBoolean()?8:5),"Native minimum duration or suppression changed");}
-        var configs=data.getAsJsonArray("damage");check(configs.size()==224,"Native weather damage inventory changed");int rolls=0;
+        var configs=data.getAsJsonArray("damage");check(configs.size()==272,"Native weather damage inventory changed");int rolls=0;
         for(var value:configs){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var f=fixture(c,"");
             for(Critical critical:Critical.values()){
                 var outcomes=new ArrayList<Integer>();for(var v:row.getAsJsonArray("values")){var r=v.getAsJsonObject();if(critical==Critical.BOTH||r.get("crit").getAsBoolean()==(critical==Critical.CRITICAL))outcomes.add(r.get("damage").getAsInt());}
@@ -131,12 +172,12 @@ final class SandstormRegression {
                 check(actual.points().known()&&actual.points().value().equals(new IntRange(low,high)),"Native weather stat/critical rounding differs: "+c.data()+" / "+critical+" / "+actual+" / "+outcomes);
             }rolls+=row.getAsJsonArray("values").size();
         }
-        check(rolls==7168,"Native sandstorm roll inventory changed");
+        check(rolls==8704,"Native sandstorm roll inventory changed");
         var speeds=data.getAsJsonArray("speeds");check(speeds.size()==396,"Native Sand Rush speed inventory changed");
         for(var value:speeds){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var actual=speed(fixture(c,""));int low=row.get("low").getAsInt(),high=row.get("high").getAsInt();
             check(low==0?!actual.known():actual.known()&&actual.value().equals(new IntRange(low,high)),"Native Sand Rush callback ordering differs: "+c.data()+" / "+row+" / "+actual);
         }
-        var rows=data.getAsJsonArray("exchanges");check(rows.size()==376,"Native weather residual inventory changed");int bounded=0,unknown=0;
+        var rows=data.getAsJsonArray("exchanges");check(rows.size()==618,"Native weather residual inventory changed");int bounded=0,unknown=0;
         var hidden=new HashMap<String,ShadowMechanicsEvaluation.Ranking>();
         for(var value:rows){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));
             var result=residual(fixture(c,c.data().has("protect")&&c.b("protect")?"protect":""));
@@ -147,12 +188,12 @@ final class SandstormRegression {
             if(supported){bounded++;check(result.utility().known()&&result.lines().stream().anyMatch(l->matches(l,row)),"Native sandstorm residual excluded: "+c.data()+" / "+row+" / "+result);
                 if(row.get("selfHp").getAsDouble()==0)check(result.lines().stream().allMatch(l->l.state().forcedReplacement()&&!l.state().nextRequestKnown()),"Native weather replacement became a future executable request");
             }else{unknown++;check(!result.utility().known(),"Unproved weather duration/party closure became known: "+c.data());}
-            if(Set.of("weather-knockout","ability-recoil-continuation").contains(c.s("id"))){
+            if(Set.of("weather-knockout","ability-recoil-continuation","goggles-knockout").contains(c.s("id"))){
                 String key=c.s("id")+":"+c.s("ability")+":"+c.b("enemy")+":"+c.userHp()+":"+c.n("targetHp")+":"+c.n("ownBench");
                 if(c.n("foeBench")==0)hidden.put(key,result);else check(result.equals(hidden.get(key)),"Hidden opponent reserves changed weather evaluation");
             }
         }
-        System.out.println("Sandstorm native differential PASS: 8 duration factories, 224 damage configurations, 7168 critical/roll outcomes, 396 speed configurations, 376 queued outcomes; "+bounded+" bounded, "+unknown+" UNKNOWN; both roles, Sand Rush/Force, expiry, immunity, recovery and fainting");
+        System.out.println("Sandstorm native differential PASS: 8 duration factories, 272 damage configurations, 8704 critical/roll outcomes, 396 speed configurations, 618 queued outcomes; "+bounded+" bounded, "+unknown+" UNKNOWN; both roles, Sand Veil/Goggles, Magic Room expiry, immunity, recovery and fainting");
     }
     private static boolean matches(ShadowMechanicsEvaluation.Line line,JsonObject row){
         if(!line.utility().known())return false;double utility=row.get("utility").getAsDouble();

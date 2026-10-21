@@ -93,7 +93,8 @@ public final class ScopedExecution {
         return c.finish();
     }
     boolean sandstormImmune(Profile profile) {
-        return Set.of("magicguard","sandrush","sandforce").contains(ability(profile.actor()))
+        return Set.of("magicguard","sandrush","sandforce","sandveil").contains(ability(profile.actor()))
+                ||item(profile.actor()).equals("safetygoggles")
                 ||profile.types().value().stream().anyMatch(Set.of("rock","ground","steel")::contains);
     }
     /** Active Power Herb requires current own binding and no Magic Room. */
@@ -131,10 +132,10 @@ public final class ScopedExecution {
                 need(role + ":OWN_TRANSPORT_FRESHNESS", yes(b.ownTransportCurrent()) && (b.lease() == null || b.lease().turn() == field.turn()));
                 if (b.lease() != null) leases.add(b.lease());
             }
-            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey").contains(b.item().value()));
+            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
             need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !b.ability().value().equals("download"));
@@ -212,6 +213,11 @@ public final class ScopedExecution {
         if(moveId.equals("swift") || moveId.equals("thunder")&&field.weather().value().equals("raindance"))
             return Known.of(100,coverage.source());
         int base=moveId.equals("thunder")&&field.weather().value().equals("sunnyday")?50:move(moveId).accuracy();
+        // Native ModifyAccuracy runs before stage truncation. Sand Veil acts
+        // on the target's incoming numeric accuracy; always-hit checks above
+        // retain their exemption. The source applies round-half-down here.
+        if(ability(t.id()).equals("sandveil")&&field.weather().value().equals("sandstorm"))
+            base=(base*3277+2047)/4096;
         int boost=Math.max(-6,Math.min(6,a.stages().get("accuracy")-t.stages().get("evasion")));
         int threshold=boost>=0?base*(3+boost)/3:base*3/(3-boost);
         return Known.of(threshold,coverage.source());

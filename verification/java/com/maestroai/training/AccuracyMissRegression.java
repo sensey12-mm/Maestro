@@ -53,7 +53,7 @@ final class AccuracyMissRegression {
             check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Closing expiration leaked hit/miss states");
             check(!evaluate(fixture(c,"",known(new Interval(0,.5)))).utility().known(),"Unproved survival certified accuracy execution");
             for(String unsupported:List.of("blunderpolicy","widelens","brightpowder"))check(!evaluate(fixture(change(c,"item",unsupported),"")).utility().known(),"Unsupported miss/accuracy item became known: "+unsupported);
-            for(String ability:List.of("compoundeyes","noguard","sandveil"))check(!evaluate(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported accuracy ability became known: "+ability);
+            for(String ability:List.of("compoundeyes","noguard"))check(!evaluate(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported accuracy ability became known: "+ability);
             check(!evaluate(fixture(change(c,"weather","hail"),"")).utility().known(),"Unsupported weather became known");
             var swift=number(number(change(c,"move","swift"),"accuracyStage",-6),"targetEvasionStage",6);
             check(accuracy(fixture(swift,"accuracy-stage")).value()==100&&evaluate(fixture(swift,"accuracy-stage")).utility().known(),"Always-hit Swift incorrectly required accuracy stages");
@@ -63,16 +63,53 @@ final class AccuracyMissRegression {
             var guaranteed=number(c,"accuracyStage",1);check(accuracy(fixture(guaranteed,"")).value()==126,"Native accuracy threshold flooring differs");
             check(evaluate(fixture(guaranteed,"")).lines().stream().allMatch(l->(enemy?l.state().self():l.state().opponent()).stages().get("spe")==-1),"Guaranteed accuracy retained a fabricated miss");
         }
-        System.out.println("Accuracy/miss evidence regressions PASS: "+checks+" checks; stage/weather thresholds, miss guards, missing evidence and receipt withdrawal");
+        veil();
+        System.out.println("Accuracy/miss evidence regressions PASS: "+checks+" checks; Sand Veil, stage/weather thresholds, miss guards, missing evidence and receipt withdrawal");
+    }
+    private static void veil(){
+        for(boolean enemy:List.of(false,true)){
+            Case c=change(change(enemy?enemy(rock()):rock(),"weather","sandstorm"),"targetAbility","sandveil");var f=fixture(c,"");
+            check(accuracy(f).value()==76&&evaluate(f).utility().known(),"Incoming Sand Veil remained UNKNOWN or lost native rounding");
+            var thunder=number(change(c,"move","thunder"),"accuracyStage",-2);
+            check(accuracy(fixture(thunder,"")).value()==33,"Sand Veil must round before accuracy stages");
+            check(accuracy(fixture(change(change(c,"targetAbility","runaway"),"ability","sandveil"),"")).value()==95,"Outgoing Sand Veil reduced the holder's accuracy");
+            for(String mode:List.of("ended","restart","upkeep"))check(accuracy(fixture(change(c,"weatherMode",mode),"")).value()==(mode.equals("ended")?95:76),"Weather transition changed Sand Veil incorrectly: "+mode);
+            var goggles=change(change(c,"item","safetygoggles"),"targetItem","safetygoggles");
+            check(accuracy(fixture(goggles,"")).value()==76,"Safety Goggles bypassed Sand Veil");
+            var room=goggles.data().deepCopy();room.addProperty("room",true);
+            check(accuracy(fixture(new Case(room),"")).value()==76,"Magic Room suppressed Sand Veil");
+            for(String missing:List.of("own-item","own-ability","opponent-item","opponent-ability","own-transport","damage-scope","order-scope","accuracy-stage","evasion-stage",
+                    "status","suppression","ambiguous","forged-opponent","target-max","attack-stat","level","types","gravity","magnet-rise","unsupported-terrain"))
+                check(!evaluate(fixture(goggles,missing)).utility().known(),"Sand Veil/Goggles bypassed evidence: "+missing);
+            for(String missing:List.of("accuracy-stage","evasion-stage")){
+                check(evaluate(fixture(goggles,"protect-"+missing)).utility().known(),"Blocked Sand Veil attack required irrelevant accuracy proof");
+                check(damage(fixture(goggles,missing),Critical.BOTH).points().known(),"Missing Sand Veil accuracy poisoned successful-hit damage");
+                check(accuracy(fixture(change(goggles,"move","swift"),missing)).value()==100,"Sand Veil overrode always-hit Swift");
+                check(accuracy(fixture(change(change(goggles,"move","thunder"),"weather","raindance"),missing)).value()==100,"Sand Veil overrode rain Thunder");
+            }
+            var boosted=number(c,"accuracyStage",1);
+            check(accuracy(fixture(boosted,"")).value()==101&&evaluate(fixture(boosted,"")).lines().stream().allMatch(l->(enemy?l.state().self():l.state().opponent()).stages().get("spe")==-1),"Boosted Sand Veil threshold fabricated a miss");
+            var owner=fixture(goggles,"");var ownCert=receipt(owner);owner.owner().endChoice();
+            check(!ownCert.supported()&&!accuracy(owner).known()&&!evaluate(owner).utility().known(),"Expired owner retained Sand Veil/Goggles forecast");
+            var source=fixture(goggles,"");var cert=receipt(source);source.current().set(false);
+            check(!cert.supported()&&!accuracy(source).known()&&!evaluate(source).utility().known(),"Expired source retained Sand Veil/Goggles forecast");
+            var field=fixture(goggles,"");field.fields().reset();boolean rejected=false;try{accuracy(field);}catch(IllegalArgumentException stale){rejected=true;}
+            check(rejected,"Expired field retained Sand Veil forecast");
+            var closing=fixture(goggles,"");var frame=closing.execution().withScopes(ExecutionCoverage.Scopes.receipt(op->{if(op==ExecutionCoverage.Operation.DAMAGE)closing.current().set(false);return known(true);},closing.current()::get));
+            var withdrawn=evaluated(closing,frame);
+            check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Closing Sand Veil receipt leaked hit/miss states");
+            check(!evaluate(fixture(goggles,"",known(new Interval(0,.5)))).utility().known(),"Unproved Sand Veil survival gained scope");
+        }
+        check(!CobblemonMechanics.supportedMoveIds().contains("sleeppowder"),"Goggles expanded selectable powder coverage");
     }
     static void differential(Context engine) throws Exception {
         String source=Files.readString(Path.of("verification/accuracy_miss_oracle.cjs"));
         var data=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle));})()").asString()).getAsJsonObject();
-        var thresholds=data.getAsJsonArray("thresholds");check(thresholds.size()==84,"Native threshold inventory changed");
+        var thresholds=data.getAsJsonArray("thresholds");check(thresholds.size()==466,"Native threshold inventory changed");
         for(var value:thresholds){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var actual=accuracy(fixture(c,""));
             check(actual.known()&&actual.value()==row.get("threshold").getAsInt(),"Native accuracy differs: "+c.data()+" / "+actual+" / "+row);
         }
-        var exchanges=data.getAsJsonArray("exchanges");check(exchanges.size()==100,"Native exchange inventory changed");
+        var exchanges=data.getAsJsonArray("exchanges");check(exchanges.size()==476,"Native exchange inventory changed");
         for(var value:exchanges){var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var result=evaluate(fixture(c,c.data().has("protect")&&c.b("protect")?"protect":""));
             if(c.s("move").equals("uturn")){
                 String reason=c.b("enemy")?"OPPONENT_U_TURN_PARTY_HIDDEN":"U_TURN_REPLACEMENT_CHOICE_NOT_DETERMINED";
@@ -82,7 +119,7 @@ final class AccuracyMissRegression {
             }
             check(result.utility().known()&&result.lines().stream().anyMatch(line->matches(line,row)),"Native hit/miss exchange excluded: "+c.data()+" / "+row+" / "+result);
         }
-        System.out.println("Accuracy/miss native differential PASS: 84 thresholds, 100 queued exchanges; exact integer thresholds, early blocking, paralysis, priority, miss follow-ups and both roles");
+        System.out.println("Accuracy/miss native differential PASS: 466 thresholds, 476 queued exchanges; Sand Veil stage rounding, early blocking, paralysis, priority, miss follow-ups and both roles");
     }
     private static boolean matches(ShadowMechanicsEvaluation.Line line,JsonObject row){
         double utility=row.get("utility").getAsDouble();if(!line.utility().known()||utility<line.utility().value().low()-1e-10||utility>line.utility().value().high()+1e-10)return false;
