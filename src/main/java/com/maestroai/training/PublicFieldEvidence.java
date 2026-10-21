@@ -18,6 +18,7 @@ public final class PublicFieldEvidence {
         private final int turn;
         private final Known<String> weather, terrain;
         private final Known<Boolean> trickRoom, magicRoom;
+        private final int weatherStartTurn;
         private final Map<String, Boolean> tailwind;
         private final Map<String, Active> actors;
         private final Set<String> unknown;
@@ -28,18 +29,30 @@ public final class PublicFieldEvidence {
         private Capture(PublicFieldEvidence owner, long epoch, int turn, Known<String> weather,
                         Known<String> terrain, Known<Boolean> trickRoom, Known<Boolean> magicRoom,
                         Map<String, Boolean> tailwind, Map<String, Active> actors, Set<String> unknown,
-                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol) {
+                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn) {
             this.owner = owner; this.epoch = epoch; this.turn = turn; this.weather = weather; this.terrain = terrain;
             this.trickRoom = trickRoom; this.magicRoom = magicRoom; this.tailwind = Map.copyOf(tailwind);
             this.actors = Map.copyOf(actors); this.unknown = Set.copyOf(unknown);
             this.evidence = evidence;
             this.protocol = protocol; this.events = protocol.mechanicsEvents();
+            this.weatherStartTurn=weatherStartTurn;
             var captured = new HashMap<String, PublicMechanicsEvidence.Observation>();
             actors.keySet().forEach(slot -> { var o = evidence.observation(slot); if (o != null) captured.put(slot, o); });
             this.observations = Map.copyOf(captured);
         }
         public int turn() { return turn; }
         public Known<String> weather() { return weather; }
+        /** Native Gen9 Sandstorm lasts at least five residual phases, including
+         * its setter turn. Smooth Rock may extend it; no hidden item is inferred.
+         * Upkeep and repeated active-weather announcements never reset this clock.
+         * A current weather observation alone cannot prove residual survival. */
+        public Known<Boolean> sandstormAtResidual() {
+            requireCurrent(turn);
+            if(!weather.known())return Known.unknown();
+            if(!weather.value().equals("sandstorm"))return Known.of(false,token());
+            int age=turn-weatherStartTurn;
+            return weatherStartTurn>0&&age>=0&&age<4?Known.of(true,token()+":native-minimum-weather-duration"):Known.unknown();
+        }
         public Known<String> terrain() { return terrain; }
         public Known<Boolean> trickRoom() { return trickRoom; }
         public Known<Boolean> magicRoom() { return magicRoom; }
@@ -129,7 +142,7 @@ public final class PublicFieldEvidence {
         Known<Boolean> trick = Known.unknown(), magic = Known.unknown();
         Map<String, Boolean> wind = new HashMap<>();
         Map<String, Mutable> active = new HashMap<>(); Map<String, Integer> entries = new HashMap<>();
-        boolean start = false, gen9 = false, singles = false; int turn = 0;
+        boolean start = false, gen9 = false, singles = false; int turn = 0, weatherStartTurn=-1;
         if (!protocol.complete() || protocol.corrupted()) unknown.add("PUBLIC_STREAM_INCOMPLETE_OR_CORRUPT");
         for (String line : protocol.mechanicsEvents()) {
             String[] p = line.split("\\|", -1); String event = p[1];
@@ -149,7 +162,10 @@ public final class PublicFieldEvidence {
             }
             if (event.equals("-weather")) {
                 String value = p.length >= 3 ? key(p[2]) : "";
-                if (Set.of("none", "sunnyday", "raindance").contains(value)) weather = Known.of(value, SOURCE + ":weather-event");
+                boolean fresh=p.length==3&&(!weather.known()||!weather.value().equals(value));
+                if(!value.equals("sandstorm"))weatherStartTurn=-1;
+                else if(fresh)weatherStartTurn=Math.max(1,turn);
+                if (Set.of("none", "sunnyday", "raindance","sandstorm").contains(value)) weather = Known.of(value, SOURCE + ":weather-event");
                 else { weather = Known.unknown(); unknown.add("UNSUPPORTED_WEATHER"); }
                 continue;
             }
@@ -209,7 +225,7 @@ public final class PublicFieldEvidence {
                 // certificate is still required before any field result is used.
                 // Terrain/Tailwind exact nested conditions are also attested;
                 // accepting its past setter does not add a selectable action.
-                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","psychicterrain","tailwind").contains(key(p[3]));
+                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","psychicterrain","tailwind","sandstorm").contains(key(p[3]));
                 if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }
@@ -221,6 +237,6 @@ public final class PublicFieldEvidence {
         if (!start || !gen9 || !singles || turn == 0) unknown.add("WITNESSED_GEN9_SINGLES_START_OR_TURN_MISSING");
         Map<String, Active> actors = new HashMap<>();
         active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered && !a.transientFlinch)));
-        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol); return current;
+        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn); return current;
     }
 }

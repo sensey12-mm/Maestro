@@ -129,6 +129,14 @@ public final class CobblemonMechanics {
     static Damage damage(String moveId,Profile attacker,Actor attackerState,Profile target,Actor targetState,
             Critical critical,int weatherNumerator,int weatherDenominator,int powerNumerator,
             int powerDenominator,int finalNumerator,int finalDenominator) {
+        return damage(moveId,attacker,attackerState,target,targetState,critical,weatherNumerator,weatherDenominator,
+                powerNumerator,powerDenominator,finalNumerator,finalDenominator,1,1);
+    }
+    /** Native defense weather hooks run after critical-adjusted stages and
+     * before the damage formula; they are not final-damage multipliers. */
+    static Damage damage(String moveId,Profile attacker,Actor attackerState,Profile target,Actor targetState,
+            Critical critical,int weatherNumerator,int weatherDenominator,int powerNumerator,
+            int powerDenominator,int finalNumerator,int finalDenominator,int defenseNumerator,int defenseDenominator) {
         bound(attacker, attackerState); bound(target, targetState); Objects.requireNonNull(critical);
         Move move = move(moveId);
         if (move == null || move.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
@@ -156,9 +164,9 @@ public final class CobblemonMechanics {
                     || stage(target.stat(defense).value().low(), dStage) == 0)
                 return Damage.unknown("ZERO_EFFECTIVE_STAT_OUTSIDE_SLICE");
             int min = hit(attacker.level().value(), power, stage(attacker.stat(offense).value().low(), aStage),
-                    stage(target.stat(defense).value().high(), dStage), stab, exponent, burn, crit, 85, weatherNumerator, weatherDenominator,finalNumerator,finalDenominator);
+                    (int)halfDown(stage(target.stat(defense).value().high(), dStage),defenseNumerator,defenseDenominator), stab, exponent, burn, crit, 85, weatherNumerator, weatherDenominator,finalNumerator,finalDenominator);
             int max = hit(attacker.level().value(), power, stage(attacker.stat(offense).value().high(), aStage),
-                    stage(target.stat(defense).value().low(), dStage), stab, exponent, burn, crit, 100, weatherNumerator, weatherDenominator,finalNumerator,finalDenominator);
+                    (int)halfDown(stage(target.stat(defense).value().low(), dStage),defenseNumerator,defenseDenominator), stab, exponent, burn, crit, 100, weatherNumerator, weatherDenominator,finalNumerator,finalDenominator);
             if (min < 0 || max < 0 || max > 10000) return Damage.unknown("DAMAGE_OVERFLOW_OUTSIDE_SLICE");
             low = Math.min(low, min); high = Math.max(high, max);
         }

@@ -15,9 +15,9 @@ final class MoveAttestationRegression {
         var result=JsonParser.parseString(oracle.execute(modules,anchor,probe,battle,ids).asString()).getAsJsonObject();
         if(result.get("selected").getAsInt()!=CobblemonMechanics.supportedMoveIds().size())
             throw new AssertionError("Calculator move coverage drifted");
-        if(result.get("fieldDependencies").getAsInt()!=2||CobblemonMechanics.supportedMoveIds().contains("psychicterrain")
-                ||CobblemonMechanics.supportedMoveIds().contains("tailwind"))
-            throw new AssertionError("Terrain/Tailwind field dependency/action separation drifted");
+        if(result.get("fieldDependencies").getAsInt()!=3||CobblemonMechanics.supportedMoveIds().contains("psychicterrain")
+                ||CobblemonMechanics.supportedMoveIds().contains("tailwind")||CobblemonMechanics.supportedMoveIds().contains("sandstorm"))
+            throw new AssertionError("Terrain/Tailwind/weather field dependency/action separation drifted");
         var components=new TreeMap<>(expected);
         components.put("registryReceipt","0".repeat(64));
         for(var value:result.getAsJsonArray("badRegistries")) {
@@ -28,7 +28,7 @@ final class MoveAttestationRegression {
             if(domain.effectiveState().known() || domain.scopes().get(ExecutionCoverage.Operation.DAMAGE).known())
                 throw new AssertionError("Altered selected move retained an operation certificate");
         }
-        System.out.println("Native selected-move attestation PASS: "+result.get("selected").getAsInt()+" IDs + 2 field dependencies; "
+        System.out.println("Native selected-move attestation PASS: "+result.get("selected").getAsInt()+" IDs + 3 field dependencies; "
                 +result.get("checks").getAsInt()+" checks; altered definitions withdraw Java operation scopes");
     }
 }

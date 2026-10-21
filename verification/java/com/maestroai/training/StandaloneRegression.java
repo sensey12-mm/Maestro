@@ -340,6 +340,7 @@ public final class StandaloneRegression {
         PivotOutcomeRegression.run();
         AccuracyMissRegression.run();
         ResidualRecoveryRegression.run();
+        SandstormRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

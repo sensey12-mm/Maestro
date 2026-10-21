@@ -11,7 +11,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   const initial = capture(), original = JSON.parse(initial.json);
   const covered = JSON.parse(original.components.operationTables).Moves;
   for (const id of selectable) check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
-  const fieldDependencies=['psychicterrain','tailwind'];
+  const fieldDependencies=['psychicterrain','tailwind','sandstorm'];
   for(const id of fieldDependencies){
     check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
     check(!selectable.includes(id),'Field dependency became a selectable calculator action: '+id);
@@ -86,6 +86,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
     // selectable calculator move. Exact text cannot confer callback identity.
     for(const id of fieldDependencies){
       const definition=table[id];
+      if(!definition.condition)continue; // Sandstorm uses the global weather condition below.
       for(const slot of Object.keys(definition.condition).filter(k=>typeof definition.condition[k]==='function')){
         const native=registry.register({name:id,...modules.Utils.deepClone(definition)},id);
         receipt=capture();check(receipt.current(),'Native field condition receipt missing: '+slot);
@@ -113,6 +114,27 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Field lifecycle omitted from operation fingerprint');
       table[id]=definition;
       check(capture().current()&&!receipt.current(),'Field lifecycle restoration revived old lease');
+    }
+
+    {
+      const conditions=battle.dex.dataCache.Conditions,definition=conditions.sandstorm;
+      for(const slot of Object.keys(definition).filter(k=>typeof definition[k]==='function')){
+        const foreign=eval('({'+definition[slot].toString()+'})')[slot];
+        receipt=capture();conditions.sandstorm={...definition,[slot]:foreign};
+        let rejected=false;try{capture();}catch(unverified){rejected=true;}
+        check(foreign!==definition[slot]&&foreign.toString()===definition[slot].toString()&&rejected&&!receipt.current(),'Foreign sandstorm callback retained scope: '+slot);
+        conditions.sandstorm=definition;check(capture().current()&&!receipt.current(),'Sandstorm callback restoration revived receipt: '+slot);
+      }
+      for(const slot of ['duration','onFieldResidualOrder','onModifySpDPriority']){
+        receipt=capture();conditions.sandstorm={...definition,[slot]:definition[slot]+1};
+        check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Sandstorm lifecycle/order omitted: '+slot);
+        conditions.sandstorm=definition;check(capture().current()&&!receipt.current(),'Sandstorm lifecycle restoration revived receipt: '+slot);
+      }
+      const setter=table.sandstorm;
+      receipt=capture();table.sandstorm={...setter,weather:'RainDance'};
+      check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Sandstorm setter weather omitted from fingerprint');
+      table.sandstorm=setter;
+      check(capture().current()&&!receipt.current(),'Sandstorm setter restoration revived receipt');
     }
 
     // Status callbacks execute outside move definitions. Full public condition

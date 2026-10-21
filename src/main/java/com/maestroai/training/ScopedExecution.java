@@ -85,10 +85,16 @@ public final class ScopedExecution {
                 &&Set.of("none","par","brn","psn").contains(actor.status().value()));
         c.need("RESIDUAL_HP",actor.hp().known());
         c.need("RESIDUAL_WEATHER",field.weather().known()
-                &&Set.of("none","sunnyday","raindance").contains(field.weather().value()));
+                &&Set.of("none","sunnyday","raindance","sandstorm").contains(field.weather().value()));
+        if(field.weather().known()&&field.weather().value().equals("sandstorm"))
+            c.need("SANDSTORM_CURRENT_TYPES",profile.types().known());
         c.need("RESIDUAL_TERRAIN",field.terrain().known()
                 &&Set.of("none","psychicterrain").contains(field.terrain().value()));
         return c.finish();
+    }
+    boolean sandstormImmune(Profile profile) {
+        return ability(profile.actor()).equals("magicguard")
+                ||profile.types().value().stream().anyMatch(Set.of("rock","ground","steel")::contains);
     }
     /** Active Power Herb requires current own binding and no Magic Room. */
     boolean activePowerHerb(String role) {
@@ -170,12 +176,12 @@ public final class ScopedExecution {
                 c.need(t.id() + ":MAX_HP", target.maxHp().known()); c.need(a.id() + ":STATUS", a.status().known());
                 if (c.missing.isEmpty()) {
                     int n = m.type().equals("fire") && field.weather().value().equals("sunnyday") ? 3 : 1;
-                    int d = m.type().equals("fire") && !field.weather().value().equals("none") ? 2 : 1;
+                    int d = m.type().equals("fire") && Set.of("sunnyday","raindance").contains(field.weather().value()) ? 2 : 1;
                     // Certify the full supported critical domain, refusing zero-stat
                     // and engine-wrap domains before issuing a usable certificate.
                     var probe = CobblemonMechanics.damage(moveId, certified(attacker), a, certified(target), t,
                             Critical.BOTH,n,d,sourcePowerModifier(m,attacker,t.id()),4096,
-                            finalDamageModifier(a.id(),t.id(),t),4096);
+                            finalDamageModifier(a.id(),t.id(),t),4096,sourceDefenseModifier(m,target),4096);
                     c.need("SUPPORTED_DAMAGE_ARITHMETIC_DOMAIN", probe.fraction().known());
                     c.missing.addAll(probe.unknown());
                 }
@@ -343,7 +349,12 @@ public final class ScopedExecution {
         // Technician modifies base power before the level/stat formula. Never
         // multiply a final damage interval; the engine rounds at each stage.
         return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
-                n,d,sourcePowerModifier(m,attacker,t.id()),4096,finalDamageModifier(a.id(),t.id(),t),4096);
+                n,d,sourcePowerModifier(m,attacker,t.id()),4096,finalDamageModifier(a.id(),t.id(),t),4096,
+                sourceDefenseModifier(m,target),4096);
+    }
+    private int sourceDefenseModifier(Move move,Profile target) {
+        return field.weather().value().equals("sandstorm")&&move.defendingStat().equals("spd")
+                &&target.types().value().contains("rock")?6144:4096;
     }
     private static Damage zero(String why) {
         return new Damage(Known.unknown(), Known.of(new Interval(0, 0), PublicFieldEvidence.SOURCE + ":" + why), Set.of(), PublicFieldEvidence.SOURCE);

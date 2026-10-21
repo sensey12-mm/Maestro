@@ -96,6 +96,11 @@ final class ModifierCompositionRegression {
             if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
             events.append("\n|-fieldstart|move: Psychic Terrain");
         }
+        if(c.data().has("witnessWeather")&&c.b("witnessWeather")){
+            events.append("\n|move|p2a: Foe|Sandstorm|p2a: Foe");
+            if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
+            events.append("\n|-weather|Sandstorm");
+        }
         events.append("\n|turn|2");
         for(String key:List.of("wind","targetWind"))if(c.data().has(key)&&c.b(key)){
             boolean own=key.equals("wind")?ownUser:!ownUser;
@@ -105,7 +110,12 @@ final class ModifierCompositionRegression {
         }
         if(c.data().has("trickRoom")&&c.b("trickRoom"))events.append("\n|-fieldstart|move: Trick Room");
         if(c.b("room"))events.append("\n|-fieldstart|move: Magic Room");
-        if(!c.s("weather").equals("none"))events.append("\n|-weather|").append(c.s("weather"));
+        if(!c.s("weather").equals("none")&&!(c.data().has("witnessWeather")&&c.b("witnessWeather"))) {
+            events.append("\n|-weather|").append(c.s("weather"));
+            if(c.data().has("weatherMode")&&c.s("weatherMode").equals("upkeep"))events.append("|[upkeep]");
+        }
+        if(c.data().has("weatherMode")&&Set.of("ended","restart").contains(c.s("weatherMode")))events.append("\n|-weather|none");
+        if(c.data().has("weatherMode")&&c.s("weatherMode").equals("restart"))events.append("\n|-weather|Sandstorm");
         if(c.data().has("terrain")&&!c.s("terrain").equals("none")&&!(c.data().has("witnessSetter")&&c.b("witnessSetter")))events.append("\n|-fieldstart|move: ").append(c.s("terrain"));
         if(c.data().has("terrainMode")&&Set.of("ended","restart").contains(c.s("terrainMode")))events.append("\n|-fieldend|move: Psychic Terrain");
         if(c.data().has("terrainMode")&&c.s("terrainMode").equals("restart"))events.append("\n|-fieldstart|move: Psychic Terrain");

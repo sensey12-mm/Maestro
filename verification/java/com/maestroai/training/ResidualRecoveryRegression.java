@@ -51,7 +51,7 @@ final class ResidualRecoveryRegression {
             check(guarded.utility().known()&&guarded.lines().stream().allMatch(l->Math.abs((enemy?l.state().opponent():l.state().self()).hp().value().low()-.562)<1e-10),"Magic Guard suppressed healing or allowed burn");
             var room=c.data().deepCopy();room.addProperty("room",true);
             check(residual(fixture(new Case(room),"")).lines().stream().allMatch(l->Math.abs((enemy?l.state().opponent():l.state().self()).hp().value().low()-.438)<1e-10),"Magic Room failed to suppress Leftovers");
-            for(String weather:List.of("sandstorm","hail"))check(!residual(fixture(change(c,"weather",weather),"")).utility().known(),"Unsupported weather residual became known");
+            for(String weather:List.of("snow","hail"))check(!residual(fixture(change(c,"weather",weather),"")).utility().known(),"Unsupported weather residual became known");
             var uncertain=change(c,"targetStatus","psn");
             check(!residual(fixture(uncertain,"",known(new Interval(.001,.2)))).utility().known(),"Poison survival threshold certified");
             check(!residual(fixture(c,"",known(new Interval(.5001,.5001)))).utility().known(),"Fractional point HP outside the native integer domain became known");

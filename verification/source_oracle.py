@@ -237,6 +237,7 @@ def main():
         subprocess.run(['node', 'verification/modifier_composition_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/accuracy_miss_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/residual_recovery_oracle.cjs', folder], check=True)
+        subprocess.run(['node', 'verification/sandstorm_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/status_speed_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/psychic_terrain_oracle.cjs', folder], check=True)
         subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',

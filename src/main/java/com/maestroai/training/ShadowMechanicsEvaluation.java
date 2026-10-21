@@ -517,6 +517,30 @@ public final class ShadowMechanicsEvaluation {
             if(possibleFaint(own?p.state().self():p.state().opponent()))
                 return unknown(p,"RESIDUAL_QUEUE_SURVIVAL_UNKNOWN");
         }
+        if(execution.field().weather().value().equals("sandstorm")) {
+            var active=execution.field().sandstormAtResidual();
+            if(!active.known())return unknown(p,"SANDSTORM_RESIDUAL_DURATION_UNKNOWN");
+            // Native weather order 1 runs eachEvent(Weather) for all actives
+            // before faintMessages. A first weather KO does not skip the other
+            // actor's chip; terminal/continuation checks precede Leftovers.
+            for(boolean own:List.of(true,false)) {
+                Actor actor=own?p.state().self():p.state().opponent();
+                if(zero(actor))continue;
+                Profile profile=profiles.get(actor.id());
+                if(!execution.sandstormImmune(profile)) {
+                    int max=profile.maxHp().value().low();
+                    p=residualHp(p,own,max,-Math.max(1,max/16));
+                    if(!p.unknown().isEmpty())return p;
+                }
+            }
+            p=clearFaintedStages(p);
+            if(possibleFaint(p.state().opponent()))return unknown(p,"SANDSTORM_OPPONENT_PARTY_CLOSURE_UNKNOWN");
+            if(possibleFaint(p.state().self())) {
+                if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution))
+                    return unknown(p,"SANDSTORM_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
+                p=pendingOwnReplacement(p);
+            }
+        }
         // Native order 5.4: Leftovers heals before poison (9) and burn (10).
         // Magic Room expires later; current suppression applies to this recovery.
         for(boolean own:List.of(true,false)) {
