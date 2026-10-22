@@ -181,6 +181,8 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
     }
     for(const [group,tableName,id,metadata] of [['ability','Abilities','sandrush','rating'],['ability','Abilities','sandforce','rating'],
+        ['ability','Abilities','insomnia','rating'],['ability','Abilities','asonespectrier','rating'],['ability','Abilities','shadowshield','rating'],
+        ['heldItem','Items','lifeorb','num'],['heldItem','Items','mewtwonitey','num'],
         ['ability','Abilities','raindish','rating'],['ability','Abilities','solarpower','onModifySpAPriority'],
         ['ability','Abilities','chlorophyll','rating'],['ability','Abilities','swiftswim','rating'],
         ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num'],

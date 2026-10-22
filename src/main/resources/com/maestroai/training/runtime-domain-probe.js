@@ -122,8 +122,8 @@
   // Unsupported entries are not certified; each selected actor/action must
   // still pass its operation prerequisites. No absent modifier inference.
   const relevant = {
-    ability: new Set(['runaway','magicguard','pressure','levitate','prankster','stall','download','technician','multitype','fairyaura','sandrush','sandforce','sandveil','airlock','cloudnine','chlorophyll','swiftswim','raindish','solarpower']),
-    heldItem: new Set(['none','heavydutyboots','choicescarf','laggingtail','powerherb','marshadiumz','leftovers','safetygoggles','utilityumbrella']),
+    ability: new Set(['runaway','magicguard','pressure','insomnia','levitate','prankster','stall','download','technician','multitype','fairyaura','asonespectrier','shadowshield','sandrush','sandforce','sandveil','airlock','cloudnine','chlorophyll','swiftswim','raindish','solarpower']),
+    heldItem: new Set(['none','heavydutyboots','choicescarf','laggingtail','powerherb','marshadiumz','leftovers','lifeorb','mewtwonitey','safetygoggles','utilityumbrella']),
     move: new Set(['tackle','swift','scratch','quickattack','extremespeed','shadowclaw','shadowsneak',
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',
       'uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock','drainingkiss',

@@ -458,12 +458,22 @@ public final class ShadowMechanicsEvaluation {
                 return unknown(result,"POST_RECOIL_CONTINUATION_SURVIVAL_UNKNOWN");
         }
         if(execution!=null&&execution.currentAbility(attacker.id()).equals("asonespectrier")
-                &&(own?result.state().opponent():result.state().self()).hp().value().high()==0) {
+                &&possibleFaint(own?result.state().opponent():result.state().self())
+                &&!zero(own?result.state().self():result.state().opponent())) {
+            // Native AfterFaint runs only after the entire faint queue and
+            // checkWin. HP loss alone cannot certify either the KO trigger or
+            // a continuing battle; never infer a hidden opponent reserve.
+            Actor victim=own?result.state().opponent():result.state().self();
             Actor acted=own?result.state().self():result.state().opponent();
+            if(possibleFaint(target)||!zero(victim)||possibleFaint(acted))
+                return unknown(clearFaintedStages(result),"AS_ONE_KNOCKOUT_OR_USER_SURVIVAL_UNKNOWN");
+            if(own||!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
+                return unknown(clearFaintedStages(result),"AS_ONE_POST_FAINT_BATTLE_CONTINUATION_UNKNOWN");
             Actor boosted=stageEffect(acted,Map.of("spa",1));
             if(boosted==null)return unknown(result,"AS_ONE_POST_KO_SPA_STAGE_UNKNOWN");
             result=replace(result,state(result.state(),own?boosted:result.state().self(),
                     own?result.state().opponent():boosted,result.state().actionKind(),result.state().action()));
+            result=pendingOwnReplacement(result);
         }
         if(moveId.equals("uturn")){
             // Native U-turn pivots after a KO only if the battle continues.
@@ -497,6 +507,13 @@ public final class ShadowMechanicsEvaluation {
                 result=pendingOwnReplacement(result);
             }
         }
+        // A direct knockout has the same delayed own replacement boundary as
+        // recoil. Positive reserve proof establishes continuation, never which
+        // reserve enters or whether it survives its eventual entry effects.
+        if(execution!=null&&!result.state().forcedReplacement()&&zero(result.state().self())
+                &&!possibleFaint(result.state().opponent())
+                &&certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
+            result=pendingOwnReplacement(result);
         return result;
     }
     private static Progress residual(Progress p,PublicMechanics mechanics,Map<String,Profile> profiles,

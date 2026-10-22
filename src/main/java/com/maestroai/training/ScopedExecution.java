@@ -181,7 +181,9 @@ public final class ScopedExecution {
             need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles", "utilityumbrella").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower").contains(b.ability().value()));
+            // Insomnia has no modifier on an already legal awake action. Its
+            // sleep/Yawn immunity does not prove that Update cured current sleep.
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "insomnia", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower").contains(b.ability().value()));
             // Download's witnessed active boosts are already in the public stage
             // vector. A reserve's future Download boost needs a separate entry model.
             need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !Set.of("download","airlock","cloudnine").contains(b.ability().value()));
@@ -341,6 +343,8 @@ public final class ScopedExecution {
     EntryEffects entryEffects(Hazards hazards,Known<Integer> max,Profile reserve,Known<String> status) {
         var cert=entryCoverage(hazards,max,reserve);
         if(!cert.supported()||!status.known())return new EntryEffects(Known.unknown(),hazards,Set.of("ENTRY_STATUS_OR_SOURCE_UNKNOWN"));
+        if(ability(reserve.actor()).equals("insomnia")&&status.value().equals("slp"))
+            return new EntryEffects(Known.unknown(),hazards,Set.of("INSOMNIA_ENTRY_STATUS_RECOVERY_UNPROVED"));
         int layers=hazards.layers().getOrDefault("toxicspikes",0);
         if(layers==0||!grounded(reserve))return new EntryEffects(status,hazards,Set.of());
         // Native Poison absorption precedes Steel/Boots and existing status.
