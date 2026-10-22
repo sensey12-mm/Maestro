@@ -110,9 +110,10 @@ final class WeatherAbilityRegression {
             for(boolean end:List.of(false,true)){var actual=rank(f,end);var expected=row.getAsJsonObject(end?"post":"pre");
                 boolean alive=expected.get("foeHp").getAsDouble()>0&&(expected.get("selfHp").getAsDouble()>0||c.n("ownBench")>0);
                 boolean supported=alive&&(end||!Set.of("brn","psn").contains(c.s("status")))&&!(c.s("id").equals("pivot-out")&&c.b("enemy"))&&!(end&&Set.of("upkeep-expiry","upkeep-ongoing").contains(c.s("id")));
-                // The existing pre-residual boundary can certify a completed
-                // KO action without certifying later weather/faint dispatch.
-                if(c.s("id").equals("suppression-faint"))supported=!end;
+                // An own faint with a certified living reserve proves native
+                // continuation and restores Solar Power for residuals. Fainting
+                // on the opponent's side never proves its hidden party closure.
+                if(c.s("id").equals("suppression-faint"))supported=!end||c.b("enemy")&&c.n("ownBench")>0;
                 if(supported){bounded++;check(actual.utility().known()&&actual.lines().stream().anyMatch(l->matches(l,expected)),"Native weather ability exchange excluded: "+c.data()+" / end="+end+" / "+expected+" / "+actual);}
                 else{unknown++;check(!actual.utility().known(),"Unproved weather continuation/duration gained scope: "+c.data());}
                 if(Set.of("weather-ko","recoil-ko","both-weather-ko","suppression-faint").contains(c.s("id"))){String key=end+":"+c.b("enemy")+":"+c.s("id")+":"+c.n("userHp")+":"+c.n("ownBench");if(c.n("foeBench")==0)hidden.put(key,actual);else check(actual.equals(hidden.get(key)),"Hidden opponent party affected weather ability forecast");}
