@@ -73,7 +73,7 @@ final class WeatherSuppressionRegression {
             for(String weather:List.of("hail","snow"))check(!rank(fixture(change(c,"weather",weather),""),true).utility().known(),"Suppression certified unsupported weather");
             var bench=change(number(change(c,"targetAbility","runaway"),"ownBench",1),"ownBenchAbility",suppressor);var reserve=fixture(bench,"");
             check(reserve.execution().effectiveWeather(reserve.state().self(),reserve.state().opponent()).value().equals("sandstorm"),"Inactive own reserve suppressed weather");
-            check(!reserve.execution().entryCoverage(reserve.state().selfHazards(),known(1000),reserve.profiles().get("reserve0")).supported(),"Unproved suppressor entry gained scope");
+            check(reserve.execution().entryCoverage(reserve.state().selfHazards(),known(1000),reserve.profiles().get("reserve0")).supported()&&!reserve.execution().profile(reserve.profiles().get("reserve0"),true).ordinaryEffects().known(),"Entry arithmetic incorrectly certified active suppression");
         }
         System.out.println("Weather suppression evidence regressions PASS: "+checks+" checks; participation, modifier composition, duration, inactive reserves and expired receipts");
     }
@@ -98,7 +98,8 @@ final class WeatherSuppressionRegression {
                 boolean alive=expected.get("foeHp").getAsDouble()>0&&(expected.get("selfHp").getAsDouble()>0||c.n("ownBench")>0);
                 boolean statusBoundary=end||Set.of("none","par").contains(c.s("status"))&&Set.of("none","par").contains(c.s("targetStatus"));
                 boolean supported=alive&&statusBoundary&&!(end&&(c.s("weatherMode").equals("upkeep")||c.s("id").equals("pivot-out")||expected.get("selfHp").getAsDouble()==0));
-                if(c.s("id").equals("pivot-out")){if(end||c.b("enemy")){unknown++;check(!actual.utility().known(),"Unproved suppression pivot gained scope");}else if(actual.utility().known())check(actual.lines().stream().anyMatch(l->matches(l,expected)),"Native suppression pivot pre-boundary excluded");continue;}
+                if(c.s("id").equals("pivot-out")){if(c.b("enemy")){unknown++;check(!actual.utility().known(),"Hidden opponent suppression pivot gained scope");}else {bounded++;check(actual.utility().known()&&actual.lines().stream().anyMatch(l->matches(l,expected)),"Native suppression departure excluded");}continue;}
+                if(end&&c.s("id").equals("recoil-ko")&&!c.b("enemy")&&c.n("ownBench")>0&&expected.get("foeHp").getAsDouble()>0)supported=true;
                 if(supported){bounded++;check(actual.utility().known()&&actual.lines().stream().anyMatch(l->matches(l,expected)),"Native suppression exchange excluded: "+c.data()+" / end="+end+" / "+expected+" / "+actual);}
                 else{unknown++;check(!actual.utility().known(),"Unproved suppressor survival/party/duration gained scope: "+c.data());}
                 if(c.s("id").equals("recoil-ko")){String key=end+":"+c.b("enemy")+":"+c.s("ability")+":"+c.n("ownBench");if(c.n("foeBench")==0)hidden.put(key,actual);else check(actual.equals(hidden.get(key)),"Hidden opponent party changed suppression");}

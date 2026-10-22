@@ -92,7 +92,6 @@ final class DownloadEntryRegression {
                 boolean supported=!unsupported&&(switching||c.n("ownBench")==1)&&entered&&survived;
                 if(c.s("mode").equals("pivot")&&c.n("targetDefense")<100)supported=false; // unsupported/KO-crossing damage domain
                 if(end&&Set.of("tox","slp","frz").contains(expected.get("selfStatus").getAsString()))supported=false;
-                if(end&&!c.s("weather").equals("none")&&Set.of("airlock","cloudnine").contains(c.s("targetAbility")))supported=false;
                 if(c.s("id").equals("blocked")&&c.s("mode").equals("pivot"))supported=true;
                 if(c.s("id").equals("queued-stage")&&c.s("reply").equals("ironhead")&&c.s("mode").equals("pivot"))supported=true; // native flinch is a bounded no-entry branch
                 if(c.s("id").equals("recoil-boundary")&&c.n("hp")==100&&c.s("mode").equals("pivot"))supported=true;

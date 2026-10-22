@@ -169,7 +169,9 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
         ['Abilities','chlorophyll','onModifySpe','rating'],['Abilities','swiftswim','onModifySpe','rating'],
         ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num'],
         ['Items','utilityumbrella','onStart','num'],
-        ['Abilities','airlock','onStart','suppressWeather'],['Abilities','cloudnine','onStart','suppressWeather']]){
+        ['Abilities','airlock','onStart','suppressWeather'],['Abilities','cloudnine','onStart','suppressWeather'],
+        ['Abilities','airlock','onSwitchIn','suppressWeather'],['Abilities','cloudnine','onSwitchIn','suppressWeather'],
+        ['Abilities','airlock','onEnd','suppressWeather'],['Abilities','cloudnine','onEnd','suppressWeather']]){
       const effects=battle.dex.dataCache[tableName],definition=effects[id];
       receipt=capture();effects[id]={...definition,[metadata]:typeof definition[metadata]==='boolean'?!definition[metadata]:definition[metadata]+1};
       check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Residual metadata omitted: '+id);

@@ -244,6 +244,7 @@ def main():
         subprocess.run(['node', 'verification/weather_ability_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/roster_ability_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/download_entry_oracle.cjs', folder], check=True)
+        subprocess.run(['node', 'verification/weather_entry_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/toxic_entry_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/status_speed_oracle.cjs', folder], check=True)
         subprocess.run(['node', 'verification/psychic_terrain_oracle.cjs', folder], check=True)

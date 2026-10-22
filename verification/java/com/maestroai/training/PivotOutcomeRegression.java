@@ -52,7 +52,7 @@ final class PivotOutcomeRegression {
             int hp=i==0?(c.b("enemy")?c.n("targetHp"):c.n("hp")):c.n("reserveHp"),max=i==0?1000:c.n("reserveMax");
             var types=i==0?List.of("normal"):c.types();String held=i==0?(c.b("enemy")?"none":item(c.s("item"))):item(c.s("reserveItem"));
             pokemon.add(new OwnRequestTransport.Pokemon(new OwnRequestEvidence.Sample(i==0?active:new UUID(0,46+i),"p1: Own"+i,
-                    hp+"/"+max,i==0,i==0?"runaway":c.s("reserveAbility"),types),100,
+                    hp+"/"+max,i==0,i==0&&c.data().has("userAbility")&&!c.b("enemy")?c.s("userAbility"):i==0?"runaway":c.s("reserveAbility"),types),100,
                     Map.of("atk",220,"def",220,"spa",220,"spd",220,"spe",i==0?(c.b("enemy")?c.n("targetSpeed"):c.n("userSpeed")):220),held,types,i>0&&c.data().has("reserveStatus")?c.s("reserveStatus"):"none",false));
         }
         var request=new OwnRequestTransport.Request("p1",OwnRequestTransport.Mode.MOVE,pokemon);
@@ -65,10 +65,16 @@ final class PivotOutcomeRegression {
     static Fixture fixture(Case c,String missing){
         var owner=owner(c);var protocol=new PublicProtocolEvidence();
         var events=new StringBuilder("update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L100|100/100\n|switch|p2a: Foe|Mew, L100|100/100\n");
-        if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|").append(!c.b("enemy")&&c.data().has("targetAbility")?c.s("targetAbility"):"runaway").append('\n');
+        if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|").append(c.b("enemy")&&c.data().has("userAbility")?c.s("userAbility"):!c.b("enemy")&&c.data().has("targetAbility")?c.s("targetAbility"):"runaway").append('\n');
         if(!missing.equals("opponent-item"))events.append(c.b("enemy")&&c.s("item").equals("lifeorb")?"|-item|p2a: Foe|Life Orb\n":!c.b("enemy")&&c.data().has("targetItem")&&!c.s("targetItem").equals("none")?"|-item|p2a: Foe|"+c.s("targetItem")+"\n":"|-enditem|p2a: Foe|Sitrus Berry\n");
         events.append("|turn|1\n|turn|2");
-        if(c.data().has("weather")&&!c.s("weather").equals("none"))events.append("\n|-weather|").append(c.s("weather"));
+        if(c.data().has("weather")&&!c.s("weather").equals("none")){
+            events.append("\n|-weather|").append(c.s("weather"));
+            if(c.data().has("weatherMode")&&c.s("weatherMode").equals("upkeep"))events.append("|[upkeep]");
+            if(c.data().has("weatherMode")&&c.s("weatherMode").equals("ended"))events.append("\n|-weather|none");
+        }
+        if(c.data().has("targetWind")&&c.b("targetWind"))events.append("\n|-sidestart|p2: Foe|Tailwind");
+        if(c.data().has("trickRoom")&&c.b("trickRoom"))events.append("\n|-fieldstart|move: Trick Room");
         if(missing.equals("gravity"))events.append("\n|-fieldstart|move: Gravity");
         if(missing.equals("ambiguous"))events.append("\n|replace|p2a: Foe|Zoroark, L100");
         if(missing.equals("suppression"))events.append("\n|-endability|p2a: Foe|Run Away");
@@ -87,13 +93,17 @@ final class PivotOutcomeRegression {
         var scopes=ExecutionCoverage.Scopes.receipt(op->missing.equals(op.name().toLowerCase(Locale.ROOT)+"-scope")?Known.unknown():YES,current::get);
         var own=provider.observation("p1a");var foe=provider.observation("p2a");
         var bindings=new HashMap<String,ScopedExecution.Binding>();
-        bindings.put("self",new ScopedExecution.Binding(own,missing.equals("own-item")?Known.unknown():known(c.b("enemy")?"none":item(c.s("item"))),known("runaway"),YES,owner.lease()));
+        bindings.put("self",new ScopedExecution.Binding(own,missing.equals("own-item")?Known.unknown():known(c.b("enemy")?"none":item(c.s("item"))),known(c.data().has("userAbility")&&!c.b("enemy")?c.s("userAbility"):"runaway"),YES,owner.lease()));
         bindings.put("opponent",new ScopedExecution.Binding(foe,foe.item(),foe.ability()));
         var profiles=new HashMap<String,Profile>();
         profiles.put("self",profile("self",1000,c.b("enemy")?c.n("targetSpeed"):c.n("userSpeed"),List.of("normal")));
         profiles.put("opponent",profile("opponent",1000,c.b("enemy")?c.n("userSpeed"):c.n("targetSpeed"),List.of("normal")));
         String defender=c.b("enemy")?"self":"opponent";
         var targetProfile=profiles.get(defender);var targetStats=new TreeMap<>(targetProfile.stats());
+        for(String stat:List.of("atk","spa")){
+            String key=stat.equals("atk")?"targetAttack":"targetSpecialAttack";
+            if(c.data().has(key))targetStats.put(stat,known(IntRange.exact(c.n(key))));
+        }
         for(String stat:List.of("def","spd")){
             String key=stat.equals("def")?"targetDefense":"targetSpecialDefense";
             if(c.data().has(key))targetStats.put(stat,known(IntRange.exact(c.n(key))));
@@ -141,7 +151,8 @@ final class PivotOutcomeRegression {
         if(c.b("enemy"))self=targetFacts;else opponent=targetFacts;
         boolean trapped=missing.equals("trapped");
         var snapshot=new BattleSnapshot(2,self,opponent,bench,List.of(),List.of(c.action()),missing.equals("no-choice")?List.of():choices,Map.of(),false,null);
-        var context=new PublicTransitionState.Context(known(new Interval(ownHp,ownHp)),known(new Interval(foeHp,foeHp)),known("none"),known("none"),hazards,foeHazards,targets,Map.of(),Set.of());
+        var targetStatus=known(c.data().has("targetStatus")?c.s("targetStatus"):"none");
+        var context=new PublicTransitionState.Context(known(new Interval(ownHp,ownHp)),known(new Interval(foeHp,foeHp)),c.b("enemy")?targetStatus:known("none"),c.b("enemy")?known("none"):targetStatus,hazards,foeHazards,targets,Map.of(),Set.of());
         var mechanics=new PublicMechanics(Map.of(),opponent.knownBoosts(),Set.of(),false,false,trapped,0,new Evidence(context,Map.of(),Map.of()));
         return new Fixture(c,snapshot,mechanics,Map.copyOf(profiles),execution,owner.transport(),current,fields);
     }

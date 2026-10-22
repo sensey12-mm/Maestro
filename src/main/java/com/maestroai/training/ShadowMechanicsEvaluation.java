@@ -47,7 +47,7 @@ public final class ShadowMechanicsEvaluation {
         public Comparison { rankings = List.copyOf(rankings); }
     }
     private record Progress(State state, double dealtLow, double dealtHigh,
-                             double lostLow, double lostHigh, Set<String> unknown, boolean skipNext) {}
+                             double lostLow, double lostHigh, Set<String> unknown, boolean skipNext,String activeOwn) {}
 
     public static Comparison compare(BattleSnapshot snapshot, PublicMechanics mechanics,
                                      Map<String, Profile> profiles, List<Plan> plans,
@@ -94,7 +94,7 @@ public final class ShadowMechanicsEvaluation {
             List<Line> lines = new ArrayList<>(); Set<String> unknown = new TreeSet<>();
             for (List<Turn> turns : plan.scenarios()) {
                 if (turns.size() != horizon) throw new IllegalArgumentException("incomparable horizon lengths");
-                List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of(),false));
+                List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of(),false,"self"));
                 for (int i = 0; i < turns.size(); i++) {
                     List<Progress> expanded = new ArrayList<>();
                     for (Progress branch : branches) {
@@ -239,8 +239,9 @@ public final class ShadowMechanicsEvaluation {
             Map<String,Profile> profiles,Critical critical,ScopedExecution execution,
             PublicMechanics mechanics,List<String> sourceLegalSwitches) {
         if(!p.unknown().isEmpty())return List.of(p);
+        execution=participants(p,execution);
         if(p.skipNext())return List.of(new Progress(p.state(),p.dealtLow(),p.dealtHigh(),
-                p.lostLow(),p.lostHigh(),p.unknown(),false));
+                p.lostLow(),p.lostHigh(),p.unknown(),false,p.activeOwn()));
         Actor attacker=own?p.state().self():p.state().opponent();
         Actor target=own?p.state().opponent():p.state().self();
         if(zero(attacker)||zero(target)&&!p.state().forcedReplacement())return List.of(p);
@@ -309,7 +310,7 @@ public final class ShadowMechanicsEvaluation {
         var state=state(primary.state(),own?primary.state().self():modified,
                 own?modified:primary.state().opponent(),primary.state().actionKind(),primary.state().action());
         var proc=new Progress(state,primary.dealtLow(),primary.dealtHigh(),primary.lostLow(),
-                primary.lostHigh(),primary.unknown(),effect.flinch());
+                primary.lostHigh(),primary.unknown(),effect.flinch(),primary.activeOwn());
         return effect.chance()==100?List.of(proc):List.of(primary,proc);
     }
     private static boolean statusCanProc(Actor actor,String change,Map<String,Profile> profiles) {
@@ -363,7 +364,7 @@ public final class ShadowMechanicsEvaluation {
                 Actor healed = actor(attacker, new Interval(Math.min(1, hp.low() + recovery), Math.min(1, hp.high() + recovery)), attacker.stages());
                 State changed = state(p.state(), own ? healed : target, own ? target : healed, p.state().actionKind(), p.state().action());
                 return new Progress(changed, p.dealtLow() - (own ? 0 : high), p.dealtHigh() - (own ? 0 : low),
-                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown(),p.skipNext());
+                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown(),p.skipNext(),p.activeOwn());
             }
             Map<String, Integer> stages = new TreeMap<>(attacker.stages());
             for (var e : move.boosts().entrySet()) {
@@ -520,6 +521,7 @@ public final class ShadowMechanicsEvaluation {
                                      ScopedExecution execution) {
         if(!p.unknown().isEmpty())return p;
         if(execution==null)return unknown(p,"RESIDUAL_RUNTIME_SCOPE_UNKNOWN");
+        execution=participants(p,execution);
         // A KO during the action queue may have ended the battle before residuals.
         // Only positive own reserve evidence establishes a supported continuation.
         if(possibleFaint(p.state().opponent()))return unknown(p,"RESIDUAL_OPPONENT_PARTY_CLOSURE_UNKNOWN");
@@ -640,7 +642,7 @@ public final class ShadowMechanicsEvaluation {
         double lostLow=Math.min(low-afterLow,high-afterHigh)/(double)max;
         double lostHigh=Math.max(low-afterLow,high-afterHigh)/(double)max;
         return new Progress(s,p.dealtLow()+(own?0:lostLow),p.dealtHigh()+(own?0:lostHigh),
-                p.lostLow()+(own?lostLow:0),p.lostHigh()+(own?lostHigh:0),p.unknown(),p.skipNext());
+                p.lostLow()+(own?lostLow:0),p.lostHigh()+(own?lostHigh:0),p.unknown(),p.skipNext(),p.activeOwn());
     }
     /** Positive own-reserve evidence only. An empty list never proves party
      * exhaustion; opponent roster size and identity are never consulted.
@@ -725,7 +727,9 @@ public final class ShadowMechanicsEvaluation {
         if(!boosts.known())return unknown(swapped,"ENTRY_ABILITY_DEFENSIVE_EVIDENCE_OR_PARTICIPATION_UNKNOWN");
         Actor boosted=stageEffect(swapped.state().self(),boosts.value());
         if(boosted==null)return unknown(swapped,"ENTRY_ABILITY_STAGE_DOMAIN_UNKNOWN");
-        return replace(swapped,state(swapped.state(),boosted,swapped.state().opponent(),kind,action));
+        swapped=replace(swapped,state(swapped.state(),boosted,swapped.state().opponent(),kind,action));
+        return new Progress(swapped.state(),swapped.dealtLow(),swapped.dealtHigh(),swapped.lostLow(),swapped.lostHigh(),
+                swapped.unknown(),swapped.skipNext(),id);
     }
     private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
         var stages=new TreeMap<>(actor.stages());
@@ -744,7 +748,7 @@ public final class ShadowMechanicsEvaluation {
         State state=state(p.state(),own?after:p.state().self(),own?p.state().opponent():after,
                 p.state().actionKind(),p.state().action());
         return new Progress(state,p.dealtLow()-(own?0:hi),p.dealtHigh()-(own?0:lo),
-                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown(),p.skipNext());
+                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown(),p.skipNext(),p.activeOwn());
     }
     private static Progress hurt(Progress p, boolean self, Interval damage) {
         Actor a = self ? p.state().self() : p.state().opponent(); Interval hp = a.hp().value();
@@ -753,7 +757,7 @@ public final class ShadowMechanicsEvaluation {
         State s = state(p.state(), self ? changed : p.state().self(), self ? p.state().opponent() : changed,
                 p.state().actionKind(), p.state().action());
         return new Progress(s, p.dealtLow() + (self ? 0 : low), p.dealtHigh() + (self ? 0 : high),
-                p.lostLow() + (self ? low : 0), p.lostHigh() + (self ? high : 0), p.unknown(),p.skipNext());
+                p.lostLow() + (self ? low : 0), p.lostHigh() + (self ? high : 0), p.unknown(),p.skipNext(),p.activeOwn());
     }
     private static Actor actor(Actor a, Interval hp, Map<String, Integer> stages) {
         var f = a.facts(); double point = hp.low() == hp.high() ? hp.low() : BattleSnapshot.UNKNOWN_HP_FRACTION;
@@ -768,11 +772,15 @@ public final class ShadowMechanicsEvaluation {
                 kind, action, List.of(), List.of(), false, false, s.forcedReplacement(), false);
     }
     private static Progress replace(Progress p, State s) {
-        return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown(),p.skipNext());
+        return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown(),p.skipNext(),p.activeOwn());
     }
     private static Progress unknown(Progress p, String reason) {
         Set<String> unknown = new TreeSet<>(p.unknown()); unknown.add(reason);
-        return new Progress(p.state(), p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), Set.copyOf(unknown),p.skipNext());
+        return new Progress(p.state(), p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), Set.copyOf(unknown),p.skipNext(),p.activeOwn());
+    }
+    private static ScopedExecution participants(Progress p,ScopedExecution execution) {
+        return execution==null?null:execution.conditionalParticipants(p.activeOwn(),
+                p.state().forcedReplacement()&&zero(p.state().self()));
     }
     private static boolean zero(Actor a) { return a.hp().known() && a.hp().value().high() == 0; }
     private static boolean possibleFaint(Actor a) { return a.hp().known() && a.hp().value().low() == 0; }
