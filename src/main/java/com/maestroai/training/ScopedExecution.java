@@ -184,9 +184,9 @@ public final class ScopedExecution {
             // Insomnia has no modifier on an already legal awake action. Its
             // sleep/Yawn immunity does not prove that Update cured current sleep.
             need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "insomnia", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower").contains(b.ability().value()));
-            // Download's witnessed active boosts are already in the public stage
-            // vector. A reserve's future Download boost needs a separate entry model.
-            need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !Set.of("download","airlock","cloudnine").contains(b.ability().value()));
+            // Download's entry boost is separately gated by current defender
+            // evidence; this certificate covers only entry HP/speed arithmetic.
+            need(role + ":ENTRY_ABILITY_SCOPE", !reserve || !b.ability().known() || !Set.of("airlock","cloudnine").contains(b.ability().value()));
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
             else {
                 var a = field.actor(b.observation());
@@ -197,6 +197,10 @@ public final class ScopedExecution {
         Certificate finish() { return new Certificate(field, op, required, missing, () -> scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
     }
     private boolean supported(String role, boolean reserve) {
+        // Raw reserve profiles cannot certify an ordinary future actor before
+        // Download's target-dependent entry effect has been established. The
+        // scoped evaluator certifies entry and subsequent operations separately.
+        if(reserve&&ability(role).equals("download"))return false;
         for (Operation op : Operation.values()) { var c = new Check(op); c.actor(role, reserve); if (!c.finish().supported()) return false; }
         return field.weather().known() && field.terrain().known() && field.trickRoom().known() && field.magicRoom().known();
     }
@@ -336,6 +340,36 @@ public final class ScopedExecution {
         c.need("OWN_MAX_HP_PROFILE_BINDING", maxHpMatches(maxHp, reserve));
         c.need("COMPLETE_HAZARD_LAYERS", hazards.complete());
         return c.finish();
+    }
+    /** Native Download uses getStat(false,true): observed stages and integer
+     * floors, without ModifyDef/ModifySpD (including sand's Rock bonus). Called
+     * after all entry hazards with proven living participants. A public interval
+     * may prove the selection; overlapping alternatives never become a build fact.
+     */
+    Known<Map<String,Integer>> entryAbilityBoosts(Profile reserve,Actor arriving,Profile foe,Actor target) {
+        bound(reserve,arriving);var c=new Check(Operation.ENTRY);c.actor(arriving.id(),true);
+        if(!ability(arriving.id()).equals("download"))
+            return c.finish().supported()?Known.of(Map.of(),field.token()+":no-modeled-entry-boost"):Known.unknown();
+        if(foe==null)return Known.unknown();
+        bound(foe,target);c.actor(target.id(),false);
+        c.need("DOWNLOAD_OPPONENT_BINDING",target.id().equals("opponent"));
+        c.need("DOWNLOAD_ENTRY_SURVIVAL",arriving.hp().known()&&arriving.hp().value().low()>0&&!arriving.facts().fainted());
+        c.need("DOWNLOAD_TARGET_PARTICIPATION",target.hp().known()&&target.hp().value().low()>0&&!target.facts().fainted());
+        for(String stat:List.of("def","spd")) {
+            c.need("DOWNLOAD_PUBLIC_"+stat.toUpperCase(Locale.ROOT),foe.stat(stat).known());
+            Integer boost=target.stages().get(stat);
+            c.need("DOWNLOAD_CURRENT_"+stat.toUpperCase(Locale.ROOT)+"_STAGE",boost!=null&&boost>=-6&&boost<=6);
+        }
+        if(!c.finish().supported())return Known.unknown();
+        var def=foe.stat("def").value();var spd=foe.stat("spd").value();
+        int dl=stage(def.low(),target.stages().get("def")),dh=stage(def.high(),target.stages().get("def"));
+        int sl=stage(spd.low(),target.stages().get("spd")),sh=stage(spd.high(),target.stages().get("spd"));
+        Map<String,Integer> change;
+        if(dh==0&&sh==0)change=Map.of();
+        else if(dl>0&&dl>=sh)change=Map.of("spa",1); // positive ties select SpA
+        else if(sl>0&&(dh==0||dh<sl))change=Map.of("atk",1);
+        else return Known.unknown();
+        return c.finish().supported()?Known.of(change,field.token()+":source-Download-entry-comparison"):Known.unknown();
     }
     /** Entry status and side changes are separate from the existing HP/speed
      * result. The caller must prove survival through all entry hazards first. */

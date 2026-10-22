@@ -717,7 +717,15 @@ public final class ShadowMechanicsEvaluation {
         var entered=new State(arriving,before.opponent(),effects.hazards(),before.opponentHazards(),before.ambiguity(),before.unresolved(),
                 kind,action,before.legalMoves(),before.legalSwitches(),before.nextRequestKnown(),before.forcedAction(),before.forcedReplacement(),before.trapped());
         Progress swapped=replace(p,entered);
-        return hurt(swapped,true,sourceEntry.damage().value());
+        swapped=hurt(swapped,true,sourceEntry.damage().value());
+        // Native runSwitch dispatches hazards before Start. Use the opponent's
+        // current conditional stages, including any faster action before a pivot.
+        var boosts=execution.entryAbilityBoosts(reserve,swapped.state().self(),
+                profiles.get(before.opponent().id()),before.opponent());
+        if(!boosts.known())return unknown(swapped,"ENTRY_ABILITY_DEFENSIVE_EVIDENCE_OR_PARTICIPATION_UNKNOWN");
+        Actor boosted=stageEffect(swapped.state().self(),boosts.value());
+        if(boosted==null)return unknown(swapped,"ENTRY_ABILITY_STAGE_DOMAIN_UNKNOWN");
+        return replace(swapped,state(swapped.state(),boosted,swapped.state().opponent(),kind,action));
     }
     private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
         var stages=new TreeMap<>(actor.stages());

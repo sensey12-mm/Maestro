@@ -171,7 +171,7 @@
   // exception messages, actor data or a source-text substitute for identity.
   const roleSpecs = [
     ['BATTLE','Battle',null],['ACTIONS','BattleActions',null],['QUEUE','BattleQueue',null],['BASIC_EFFECT','BasicEffect',null],
-    ['FIELD','Field',null],['POKEMON','Pokemon',null],['REGISTRY_BASE','REGISTRY_BASE',null],
+    ['FIELD','Field',null],['POKEMON','Pokemon',null],['SIDE','Side',null],['REGISTRY_BASE','REGISTRY_BASE',null],
     ...['ability','heldItem','move','bagItem','species'].map(k=>['REGISTRY_'+k.toUpperCase(),null,k]),
     ...['dex','moves','items','abilities','species','conditions','formats'].map(k=>['DEX_'+k.toUpperCase(),null,k])
   ].map(([role,ctor,key])=>{
@@ -182,7 +182,7 @@
       && typeof Object.getOwnPropertyDescriptor(proto,n).value==='function').sort()};
   });
   const registryRoot=modules.Cobblemon.registries;
-  const sourceConstructors=Object.fromEntries(['Battle','BattleActions','BattleQueue','Field','Pokemon',
+  const sourceConstructors=Object.fromEntries(['Battle','BattleActions','BattleQueue','Field','Pokemon','Side',
     'Ability','Item','DataMove','BasicEffect'].map(k=>[k,modules[k]]));
   const normalizationHelpers={deepClone:dex.deepClone,deepFreeze:dex.deepFreeze};
   const diagnosticTokens=new Set();

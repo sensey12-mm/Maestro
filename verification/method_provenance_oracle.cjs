@@ -6,7 +6,7 @@ global.require=require('node:module').createRequire(path.join(root,'index.js'));
 const js=s=>vm.runInThisContext(s);
 js(fs.readFileSync(path.join(root,'index.js'),'utf8'));
 const modules=js(`({Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,
-  BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,
+  BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,Side:require('./sim/side').Side,
   Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,DataMove:require('./sim/dex-moves').DataMove,
   BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,
   Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon})`);
@@ -53,6 +53,13 @@ const helper=battle.toID;battle.toID=()=>{calls++;return '';};
 assert(audit(battle).failures.includes('HELPER/toID/IDENTITY'));battle.toID=helper;
 const shadowModules={...modules,BattleActions:function PRIVATE_NAME(){calls++;}};
 assert(JSON.parse(anchor.auditMethods(shadowModules)).failures.includes('CONSTRUCTOR/BattleActions/IDENTITY'));
+assert(JSON.parse(anchor.auditMethods({...modules,Side:function(){calls++;}})).failures.includes('CONSTRUCTOR/Side/IDENTITY'));
+const sideProto=modules.Side.prototype,sideSlot=Object.getOwnPropertyDescriptor(sideProto,'foes');
+sideProto.foes=vm.runInThisContext('({'+sideSlot.value.toString()+'}).foes');
+assert(audit().failures.includes('SIDE/foes/IDENTITY'));assert.throws(capture,/unverified engine method position/);
+Object.defineProperty(sideProto,'foes',{configurable:true,get(){calls++;throw Error('PRIVATE_SIDE');}});
+assert(audit().failures.includes('SIDE/foes/ACCESSOR'));assert.equal(calls,0);
+Object.defineProperty(sideProto,'foes',sideSlot);assert.deepEqual(audit().failures,[]);
 const originalRegistry=modules.Cobblemon.registries.move;
 modules.Cobblemon.registries.move=new Proxy(originalRegistry,{getOwnPropertyDescriptor(){calls++;throw Error('PRIVATE_NAME');},getPrototypeOf(){calls++;throw Error('PRIVATE_NAME');}});
 assert(audit().failures.includes('REGISTRY_MOVE/UNLISTED_PUBLIC_SLOT/IDENTITY'));assert.equal(calls,0);

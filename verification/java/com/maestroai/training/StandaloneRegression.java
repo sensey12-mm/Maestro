@@ -347,6 +347,7 @@ public final class StandaloneRegression {
         WeatherAbilityRegression.run();
         ToxicEntryRegression.run();
         RosterAbilityRegression.run();
+        DownloadEntryRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

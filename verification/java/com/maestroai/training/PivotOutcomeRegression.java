@@ -65,14 +65,16 @@ final class PivotOutcomeRegression {
     static Fixture fixture(Case c,String missing){
         var owner=owner(c);var protocol=new PublicProtocolEvidence();
         var events=new StringBuilder("update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L100|100/100\n|switch|p2a: Foe|Mew, L100|100/100\n");
-        if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|Run Away\n");
-        events.append(c.b("enemy")&&c.s("item").equals("lifeorb")?"|-item|p2a: Foe|Life Orb\n":"|-enditem|p2a: Foe|Sitrus Berry\n");
+        if(!missing.equals("opponent-ability"))events.append("|-ability|p2a: Foe|").append(!c.b("enemy")&&c.data().has("targetAbility")?c.s("targetAbility"):"runaway").append('\n');
+        if(!missing.equals("opponent-item"))events.append(c.b("enemy")&&c.s("item").equals("lifeorb")?"|-item|p2a: Foe|Life Orb\n":!c.b("enemy")&&c.data().has("targetItem")&&!c.s("targetItem").equals("none")?"|-item|p2a: Foe|"+c.s("targetItem")+"\n":"|-enditem|p2a: Foe|Sitrus Berry\n");
         events.append("|turn|1\n|turn|2");
         if(c.data().has("weather")&&!c.s("weather").equals("none"))events.append("\n|-weather|").append(c.s("weather"));
         if(missing.equals("gravity"))events.append("\n|-fieldstart|move: Gravity");
         if(missing.equals("ambiguous"))events.append("\n|replace|p2a: Foe|Zoroark, L100");
+        if(missing.equals("suppression"))events.append("\n|-endability|p2a: Foe|Run Away");
+        if(missing.equals("wonder-room"))events.append("\n|-fieldstart|move: Wonder Room");
         if(c.b("magicRoom"))events.append("\n|-fieldstart|move: Magic Room");
-        if(c.b("protect"))events.append("\n|-singleturn|p2a: Foe|Protect");
+        if(c.b("protect"))events.append("\n|-singleturn|").append(c.b("enemy")?"p1a: Own":"p2a: Foe").append("|Protect");
         if(c.data().has("witnessToxic")&&c.b("witnessToxic")){
             events.append("\n|move|p2a: Foe|Toxic Spikes|p1a: Own");
             if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
@@ -90,6 +92,16 @@ final class PivotOutcomeRegression {
         var profiles=new HashMap<String,Profile>();
         profiles.put("self",profile("self",1000,c.b("enemy")?c.n("targetSpeed"):c.n("userSpeed"),List.of("normal")));
         profiles.put("opponent",profile("opponent",1000,c.b("enemy")?c.n("userSpeed"):c.n("targetSpeed"),List.of("normal")));
+        String defender=c.b("enemy")?"self":"opponent";
+        var targetProfile=profiles.get(defender);var targetStats=new TreeMap<>(targetProfile.stats());
+        for(String stat:List.of("def","spd")){
+            String key=stat.equals("def")?"targetDefense":"targetSpecialDefense";
+            if(c.data().has(key))targetStats.put(stat,known(IntRange.exact(c.n(key))));
+            if(c.data().has(stat+"Low"))targetStats.put(stat,known(new IntRange(c.n(stat+"Low"),c.n(stat+"High"))));
+            if(missing.equals("foe-"+stat))targetStats.remove(stat);
+        }
+        var targetTypes=new ArrayList<String>();if(c.data().has("targetTypes"))c.data().getAsJsonArray("targetTypes").forEach(v->targetTypes.add(v.getAsString()));else targetTypes.add("normal");
+        profiles.put(defender,new Profile(defender,targetProfile.level(),targetProfile.maxHp(),targetStats,known(targetTypes),YES));
         var bench=new ArrayList<BattleSnapshot.Combatant>();var choices=new ArrayList<String>();
         for(int i=0;i<c.n("ownBench");i++){
             String id="reserve"+i;double hp=c.n("reserveHp")/(double)c.n("reserveMax");
@@ -118,10 +130,19 @@ final class PivotOutcomeRegression {
         if(missing.equals("reserve-target"))targets.clear();
         double ownHp=(c.b("enemy")?c.n("targetHp"):c.n("hp"))/1000.0,foeHp=(c.b("enemy")?c.n("hp"):c.n("targetHp"))/1000.0;
         var self=facts(ownHp,List.of("normal"),List.of());var opponent=facts(foeHp,List.of("normal"),List.of(c.reply()));
+        var targetStages=stages();
+        for(String stat:List.of("def","spd")){
+            String key=stat.equals("def")?"targetDefStage":"targetSpdStage";
+            if(c.data().has(key))targetStages.put(stat,c.n(key));
+            if(missing.equals("foe-"+stat+"-stage"))targetStages.remove(stat);
+        }
+        var old=c.b("enemy")?self:opponent;
+        var targetFacts=new BattleSnapshot.Combatant(old.species(),old.hpFraction(),targetTypes,targetStages,old.revealedMoves(),null,null,old.fainted());
+        if(c.b("enemy"))self=targetFacts;else opponent=targetFacts;
         boolean trapped=missing.equals("trapped");
         var snapshot=new BattleSnapshot(2,self,opponent,bench,List.of(),List.of(c.action()),missing.equals("no-choice")?List.of():choices,Map.of(),false,null);
         var context=new PublicTransitionState.Context(known(new Interval(ownHp,ownHp)),known(new Interval(foeHp,foeHp)),known("none"),known("none"),hazards,foeHazards,targets,Map.of(),Set.of());
-        var mechanics=new PublicMechanics(Map.of(),stages(),Set.of(),false,false,trapped,0,new Evidence(context,Map.of(),Map.of()));
+        var mechanics=new PublicMechanics(Map.of(),opponent.knownBoosts(),Set.of(),false,false,trapped,0,new Evidence(context,Map.of(),Map.of()));
         return new Fixture(c,snapshot,mechanics,Map.copyOf(profiles),execution,owner.transport(),current,fields);
     }
     private static ShadowMechanicsEvaluation.Ranking evaluate(Fixture f){return evaluate(f,f.profiles(),f.execution());}
@@ -181,7 +202,7 @@ final class PivotOutcomeRegression {
                 +";return JSON.stringify(exports.run(require('./sim/battle').Battle));})()").asString()).getAsJsonArray();
         check(rows.size()==35,"Native pivot inventory changed");
         Set<String> abstentions=Set.of("target-ko","target-last","possible-target-ko","recoil-last","entry-ko","ambiguous-reserve",
-                "no-reserve","opponent-pivot","download-entry");
+                "no-reserve","opponent-pivot");
         ShadowMechanicsEvaluation.Ranking hidden=null;
         for(var value:rows){
             var row=value.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));

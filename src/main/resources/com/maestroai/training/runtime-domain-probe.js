@@ -219,13 +219,13 @@
   if (sourceAnchor) for (const key of ['toID','trunc','clampIntRange'])
     if (!sourceAnchor.hasHelper(key,battle[key])) throw Error('unverified engine helper position');
   const core = {
-    constructors: tagged('ENGINE_CONSTRUCTORS',()=>canonical({Battle: modules.Battle, Pokemon: modules.Pokemon,
+    constructors: tagged('ENGINE_CONSTRUCTORS',()=>canonical({Battle: modules.Battle, Pokemon: modules.Pokemon, Side: modules.Side,
       BattleActions: modules.BattleActions, BattleQueue: modules.BattleQueue, Field: modules.Field})),
     registryImplementation: registryAudit.implementation,
     helpers: tagged('ENGINE_HELPERS',()=>canonical({toID: battle.toID, trunc: battle.trunc, clampIntRange: battle.clampIntRange})),
     battle: methods(battle, modules.Battle.prototype, 'BATTLE'), actions: methods(battle.actions, modules.BattleActions.prototype, 'ACTIONS'),
     queue: methods(battle.queue, modules.BattleQueue.prototype, 'QUEUE'), field: methods(battle.field, modules.Field.prototype, 'FIELD'),
-    pokemon: methods(null, modules.Pokemon.prototype, 'POKEMON'), dex: methods(dex, Object.getPrototypeOf(dex), 'DEX'),
+    pokemon: methods(null, modules.Pokemon.prototype, 'POKEMON'), side: methods(null, modules.Side.prototype, 'SIDE'), dex: methods(dex, Object.getPrototypeOf(dex), 'DEX'),
     moves: methods(dex.moves, Object.getPrototypeOf(dex.moves), 'DEX_MOVES'), items: methods(dex.items, Object.getPrototypeOf(dex.items), 'DEX_ITEMS'),
     abilities: methods(dex.abilities, Object.getPrototypeOf(dex.abilities), 'DEX_ABILITIES'),
     species: methods(dex.species, Object.getPrototypeOf(dex.species), 'DEX_SPECIES'),
@@ -303,6 +303,7 @@
     [battle,'dex'],[battle,'actions'],[battle,'queue'],[battle,'field'],[battle,'format'],[battle,'ruleTable'],
     [battle,'events'],[battle,'gen'],[battle,'gameType'],[battle,'toID'],[battle,'trunc'],[battle,'clampIntRange'],
     [dex,'dataCache'],[dex,'currentMod'],[modules.Cobblemon,'registries'],
+    [modules,'Side'],
     [battle.actions,'battle'],[battle.actions,'dex'],[battle.field,'battle'],[battle.queue,'battle'],
     ...['moves','items','abilities','species','conditions','formats'].flatMap(k=>[[dex,k],[dex[k],'dex']]),
     ...['ability','heldItem','move','bagItem','species'].map(k=>[registries,k]),

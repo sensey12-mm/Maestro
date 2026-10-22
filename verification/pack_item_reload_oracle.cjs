@@ -7,7 +7,7 @@ global.require=require('node:module').createRequire(path.join(root,'index.js'));
 const js=s=>vm.runInThisContext(s);
 js(fs.readFileSync(path.join(root,'index.js'),'utf8'));
 const modules=js(`({Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,
-  BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,
+  BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,Side:require('./sim/side').Side,
   Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,DataMove:require('./sim/dex-moves').DataMove,
   BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,
   Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon})`);

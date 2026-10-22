@@ -65,13 +65,13 @@ final class ToxicEntryRegression {
         for(var v:rows){var row=v.getAsJsonObject();var c=new Case(row.getAsJsonObject("config"));var f=fixture(c,"");
             if(!row.get("entry").isJsonNull()&&c.n("ownBench")>0){var e=row.getAsJsonObject("entry");var profile=f.profiles().get("reserve0");var hazards=new Hazards(c.hazards(),true,SOURCE);
                 var cert=f.execution().entryCoverage(hazards,known(c.n("reserveMax")),profile);
-                if(!c.s("reserveAbility").equals("download")&&e.get("hp").getAsInt()>0){entries++;check(cert.supported(),"Native entry lacks source coverage");
+                if(e.get("hp").getAsInt()>0){entries++;check(cert.supported(),"Native entry lacks source coverage");
                     var arithmetic=f.execution().entry(hazards,known(c.n("reserveMax")),profile);double nativeLoss=(e.get("before").getAsDouble()-e.get("hp").getAsDouble())/e.get("max").getAsDouble();
                     check(arithmetic.damage().known()&&Math.abs(arithmetic.damage().value().low()-nativeLoss)<1e-10&&Math.abs(arithmetic.damage().value().high()-nativeLoss)<1e-10,"Native entry HP rounding differs: "+c.data());
                     check(arithmetic.speedDelta().known()&&arithmetic.speedDelta().value()==e.get("speed").getAsInt(),"Native Sticky Web delta differs");
                     var effects=f.execution().entryEffects(hazards,known(c.n("reserveMax")),profile,known(c.s("reserveStatus")));
                     check(effects.status().known()&&effects.status().value().equals(e.get("status").getAsString())&&effects.hazards().layers().equals(hazards(e.getAsJsonObject("hazards"))),"Native entry status/absorption differs: "+c.data()+" / "+effects+" / "+e);
-                }else if(c.s("reserveAbility").equals("download"))check(!cert.supported(),"Unproved Download entry gained scope");
+                }
             }
             if(c.b("enemy")){
                 if(c.s("mode").equals("pivot"))check(!rank(f,false,false).utility().known(),"Unknown opponent replacement was selected");
@@ -82,7 +82,7 @@ final class ToxicEntryRegression {
                 var actual=rank(f,end,switching);var expected=row.getAsJsonObject(end?"post":"pre");
                 boolean alive=expected.get("foeHp").getAsDouble()>0&&expected.get("selfHp").getAsDouble()>0;
                 boolean entered=!row.get("entry").isJsonNull()&&row.getAsJsonObject("entry").get("hp").getAsInt()>0;
-                boolean supported=(switching||c.n("ownBench")==1)&&!c.s("reserveAbility").equals("download")&&alive&&entered
+                boolean supported=(switching||c.n("ownBench")==1)&&alive&&entered
                     &&!(end&&Set.of("tox","slp","frz").contains(expected.get("selfStatus").getAsString()));
                 if(c.s("id").equals("reserve-after-hit"))supported=true;
                 if(supported){bounded++;check(actual.utility().known()&&actual.lines().stream().anyMatch(l->matches(l,expected)&&l.state().selfHazards().layers().equals(hazards(expected.getAsJsonObject("hazards")))),"Native composed entry excluded: "+c.data()+" / end="+end+" / "+expected+" / "+actual);}

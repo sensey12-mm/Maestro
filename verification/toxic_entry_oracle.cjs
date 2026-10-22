@@ -15,7 +15,7 @@ exports.run=function(Battle){
  for(const weather of ['sandstorm','sunnyday','raindance'])for(const reserveAbility of ['runaway','magicguard','raindish','solarpower'])
   for(const reserveItem of ['leftovers','utilityumbrella'])seeds.push({id:'weather-status',weather,reserveAbility,reserveItem,hazards:{toxicspikes:1,spikes:1}});
  for(const ownBench of [0,1,2])for(const foeBench of [0,1])seeds.push({id:'party',ownBench,foeBench,hazards:{toxicspikes:1}});
- seeds.push({id:'unsupported-entry',reserveAbility:'download',hazards:{toxicspikes:1}},
+ seeds.push({id:'download-entry',reserveAbility:'download',hazards:{toxicspikes:1}},
   {id:'unknown-counter',hazards:{toxicspikes:2}},
   {id:'reply-attack',reply:'tackle',hazards:{toxicspikes:1}},
   {id:'reply-miss',reply:'fireblast',hazards:{toxicspikes:1}},

@@ -181,6 +181,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       effects[id]=definition;check(capture().current()&&!receipt.current(),'Residual callback restoration revived receipt: '+id);
     }
     for(const [group,tableName,id,metadata] of [['ability','Abilities','sandrush','rating'],['ability','Abilities','sandforce','rating'],
+        ['ability','Abilities','download','rating'],
         ['ability','Abilities','insomnia','rating'],['ability','Abilities','asonespectrier','rating'],['ability','Abilities','shadowshield','rating'],
         ['heldItem','Items','lifeorb','num'],['heldItem','Items','mewtwonitey','num'],
         ['ability','Abilities','raindish','rating'],['ability','Abilities','solarpower','onModifySpAPriority'],
@@ -210,6 +211,21 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
         check(capture().current()&&!receipt.current(),'Sand ability source restoration revived receipt: '+id+'.'+slot);
       }
       receipt=capture();registryEffect.reset();check(!receipt.current()&&capture().current(),'Sand ability registry reset retained receipt: '+id);
+    }
+    // Download enumerates living foes through public Side prototypes. No side
+    // instance, actor or private party is read to attest these dependencies.
+    for(const slot of ['foes','allies','foePokemonLeft']){
+      const prototype=modules.Side.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];
+      receipt=capture();prototype[slot]=foreign;
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign Download side helper retained scope: '+slot);
+      prototype[slot]=method;check(capture().current()&&!receipt.current(),'Side helper restoration revived receipt: '+slot);
+    }
+    {
+      const Side=modules.Side;receipt=capture();modules.Side=function(){callbackCalls++;};
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(rejected&&!receipt.current(),'Foreign Side constructor retained scope');
+      modules.Side=Side;check(capture().current()&&!receipt.current(),'Side constructor restoration revived receipt');
     }
     for(const slot of ['residualEvent','faintMessages']){
       const prototype=modules.Battle.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];
@@ -292,7 +308,7 @@ if (typeof process !== 'undefined' && process.argv && require.main === module) {
   const js = source => vm.runInThisContext(source);
   js(fs.readFileSync(path.join(root, 'index.js'), 'utf8'));
   const modules = js(`({Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,
-    BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,
+    BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,Side:require('./sim/side').Side,
     Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,DataMove:require('./sim/dex-moves').DataMove,
     BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,
     Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon})`);
