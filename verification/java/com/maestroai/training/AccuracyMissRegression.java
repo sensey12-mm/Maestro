@@ -54,7 +54,7 @@ final class AccuracyMissRegression {
             check(!evaluate(fixture(c,"",known(new Interval(0,.5)))).utility().known(),"Unproved survival certified accuracy execution");
             for(String unsupported:List.of("blunderpolicy","widelens","brightpowder"))check(!evaluate(fixture(change(c,"item",unsupported),"")).utility().known(),"Unsupported miss/accuracy item became known: "+unsupported);
             for(String ability:List.of("compoundeyes","noguard"))check(!evaluate(fixture(change(c,"ability",ability),"")).utility().known(),"Unsupported accuracy ability became known: "+ability);
-            check(!evaluate(fixture(change(c,"weather","hail"),"")).utility().known(),"Unsupported weather became known");
+            check(!evaluate(fixture(change(c,"weather","desolateland"),"")).utility().known(),"Unsupported weather became known");
             var swift=number(number(change(c,"move","swift"),"accuracyStage",-6),"targetEvasionStage",6);
             check(accuracy(fixture(swift,"accuracy-stage")).value()==100&&evaluate(fixture(swift,"accuracy-stage")).utility().known(),"Always-hit Swift incorrectly required accuracy stages");
             var rain=number(number(change(change(c,"move","thunder"),"weather","raindance"),"accuracyStage",-6),"targetEvasionStage",6);

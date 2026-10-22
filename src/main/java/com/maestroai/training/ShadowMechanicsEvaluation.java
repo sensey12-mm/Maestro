@@ -543,27 +543,35 @@ public final class ShadowMechanicsEvaluation {
         }
         var effectiveWeather=execution.effectiveWeather(p.state().self(),p.state().opponent());
         if(!effectiveWeather.known())return unknown(p,"RESIDUAL_WEATHER_PARTICIPATION_UNKNOWN");
-        if(execution.field().weather().value().equals("sandstorm")) {
-            var active=execution.field().sandstormAtResidual();
-            if(!active.known())return unknown(p,"SANDSTORM_RESIDUAL_DURATION_UNKNOWN");
+        if(Set.of("sandstorm","hail","snow").contains(execution.field().weather().value())) {
+            var active=execution.field().weatherAtResidual();
+            if(!active.known())return unknown(p,"WEATHER_RESIDUAL_DURATION_UNKNOWN");
             // Native weather order 1 runs eachEvent(Weather) for all actives
             // before faintMessages. A first weather KO does not skip the other
-            // actor's chip; terminal/continuation checks precede Leftovers.
+            // actor's weather chip or Ice Body recovery. Snow has no chip;
+            // terminal/continuation checks precede Leftovers.
             for(boolean own:List.of(true,false)) {
                 Actor actor=own?p.state().self():p.state().opponent();
                 if(zero(actor))continue;
                 Profile profile=profiles.get(actor.id());
-                if(effectiveWeather.value().equals("sandstorm")&&!execution.sandstormImmune(profile)) {
+                if(effectiveWeather.value().equals("sandstorm")&&!execution.sandstormImmune(profile)
+                        ||effectiveWeather.value().equals("hail")&&!execution.hailImmune(profile)) {
                     int max=profile.maxHp().value().low();
                     p=residualHp(p,own,max,-Math.max(1,max/16));
                     if(!p.unknown().isEmpty())return p;
                 }
+                if(Set.of("hail","snow").contains(effectiveWeather.value())
+                        &&execution.currentAbility(actor.id()).equals("icebody")) {
+                    int max=profile.maxHp().value().low();
+                    p=residualHp(p,own,max,Math.max(1,max/16));
+                    if(!p.unknown().isEmpty())return p;
+                }
             }
             p=clearFaintedStages(p);
-            if(possibleFaint(p.state().opponent()))return unknown(p,"SANDSTORM_OPPONENT_PARTY_CLOSURE_UNKNOWN");
+            if(possibleFaint(p.state().opponent()))return unknown(p,"WEATHER_OPPONENT_PARTY_CLOSURE_UNKNOWN");
             if(possibleFaint(p.state().self())) {
                 if(!zero(p.state().self())||!certifiedOwnReserve(mechanics,profiles,execution,p.state().self().id()))
-                    return unknown(p,"SANDSTORM_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
+                    return unknown(p,"WEATHER_OWN_SURVIVAL_OR_PARTY_CLOSURE_UNKNOWN");
                 p=pendingOwnReplacement(p);
             }
         }

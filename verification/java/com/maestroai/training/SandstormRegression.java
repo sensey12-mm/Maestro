@@ -96,7 +96,7 @@ final class SandstormRegression {
                     "types","target-types","attacker-types","target-max","status","suppression","ambiguous","forged-opponent","gravity","magnet-rise","unsupported-terrain"))
                 check(!residual(fixture(c,missing)).utility().known(),"Goggles/Sand Veil bypassed residual evidence: "+missing);
             check(!residual(fixture(c,"",known(new Interval(0,.5)))).utility().known(),"Goggles inferred survival/party closure");
-            check(!residual(fixture(change(c,"weather","hail"),"")).utility().known(),"Goggles extended unsupported hail outcomes");
+            check(!residual(fixture(change(c,"weather","primordialsea"),"")).utility().known(),"Goggles extended unsupported extreme-weather outcomes");
             var expired=fixture(c,"");var cert=expired.execution().residualCoverage(expired.profiles().get("self"),expired.state().self());expired.owner().endChoice();
             check(!cert.supported()&&!residual(expired).utility().known(),"Expired owner retained Goggles residual protection");
             var source=fixture(c,"");var sourceCert=coverage(source);source.current().set(false);
@@ -129,7 +129,7 @@ final class SandstormRegression {
             check(damage(ended,Critical.BOTH).points().equals(damage(none,Critical.BOTH).points())&&speed(ended).equals(speed(none)),"Ended weather retained ability modifier");
             var restarted=fixture(change(c,"weatherMode","restart"),"");
             check(damage(f,Critical.BOTH).points().value().equals(damage(restarted,Critical.BOTH).points().value())&&speed(f).value().equals(speed(restarted).value()),"Restarted weather lost ability modifier");
-            var unsupported=fixture(change(c,"weather","snow"),"");
+            var unsupported=fixture(change(c,"weather","desolateland"),"");
             check(!damage(unsupported,Critical.BOTH).points().known()&&(!ability.equals("sandrush")||!speed(unsupported).known()),"Unproved Sand Rush weather gained speed");
             var source=fixture(c,"");var cert=coverage(source);source.current().set(false);
             check(!cert.supported()&&!speed(source).known()&&!residual(source).utility().known(),"Expired sand ability source retained arithmetic");

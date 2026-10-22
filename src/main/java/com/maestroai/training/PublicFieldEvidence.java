@@ -52,13 +52,13 @@ public final class PublicFieldEvidence {
             if(!weather.value().equals("sandstorm"))return Known.of(false,token());
             return weatherAtResidual();
         }
-        /** Ordinary sun, rain and sand share the native minimum five-phase
+        /** Ordinary sun, rain, sand, hail and snow share the native minimum five-phase
          * clock. Expiration precedes Weather callbacks on the fifth phase. */
         public Known<Boolean> weatherAtResidual() {
             requireCurrent(turn);
             if(!weather.known())return Known.unknown();
             if(weather.value().equals("none"))return Known.of(false,token());
-            if(!Set.of("sunnyday","raindance","sandstorm").contains(weather.value()))return Known.unknown();
+            if(!Set.of("sunnyday","raindance","sandstorm","hail","snow").contains(weather.value()))return Known.unknown();
             int age=turn-weatherStartTurn;
             return weatherStartTurn>0&&age>=0&&age<4?Known.of(true,token()+":native-minimum-weather-duration"):Known.unknown();
         }
@@ -172,9 +172,9 @@ public final class PublicFieldEvidence {
             if (event.equals("-weather")) {
                 String value = p.length >= 3 ? key(p[2]) : "";
                 boolean fresh=p.length==3&&(!weather.known()||!weather.value().equals(value));
-                if(!Set.of("sunnyday","raindance","sandstorm").contains(value))weatherStartTurn=-1;
+                if(!Set.of("sunnyday","raindance","sandstorm","hail","snow").contains(value))weatherStartTurn=-1;
                 else if(fresh)weatherStartTurn=Math.max(1,turn);
-                if (Set.of("none", "sunnyday", "raindance","sandstorm").contains(value)) weather = Known.of(value, SOURCE + ":weather-event");
+                if (Set.of("none", "sunnyday", "raindance","sandstorm","hail","snow").contains(value)) weather = Known.of(value, SOURCE + ":weather-event");
                 else { weather = Known.unknown(); unknown.add("UNSUPPORTED_WEATHER"); }
                 continue;
             }
@@ -234,7 +234,7 @@ public final class PublicFieldEvidence {
                 // certificate is still required before any field result is used.
                 // Terrain/Tailwind exact nested conditions are also attested;
                 // accepting its past setter does not add a selectable action.
-                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","toxicspikes","psychicterrain","tailwind","sandstorm").contains(key(p[3]));
+                boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","toxicspikes","psychicterrain","tailwind","sandstorm","hail","snowscape").contains(key(p[3]));
                 if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }

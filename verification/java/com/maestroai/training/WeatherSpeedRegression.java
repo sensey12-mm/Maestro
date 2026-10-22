@@ -62,7 +62,7 @@ final class WeatherSpeedRegression {
             for(String status:List.of("slp","frz","brn","psn","tox")){
                 var unresolved=fixture(change(c,"status",status),"");check(speed(unresolved).known()&&!evaluate(unresolved).utility().known(),"Speed arithmetic certified unresolved status execution");
             }
-            for(String weather:List.of("snow","desolateland","primordialsea"))check(!speed(fixture(change(c,"weather",weather),"")).known(),"Unsupported weather gained speed scope");
+            for(String weather:List.of("deltastream","desolateland","primordialsea"))check(!speed(fixture(change(c,"weather",weather),"")).known(),"Unsupported weather gained speed scope");
             for(String item:List.of("heatrock","damprock"))check(!speed(fixture(change(c,"item",item),"")).known(),"Unsupported weather item gained scope");
             check(!speed(fixture(change(c,"targetAbility","neutralizinggas"),"")).known(),"Unsupported ability suppression gained scope");
             var expired=fixture(c,"");var receipt=expired.execution().speedCoverage(expired.profiles().get(c.user()),user(expired));check(receipt.supported(),"Fresh speed receipt unavailable");expired.owner().endChoice();

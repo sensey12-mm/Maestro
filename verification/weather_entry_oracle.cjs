@@ -1,8 +1,9 @@
 'use strict';
 // Synthetic owner-side choices in either native position. No actual opponent
 // reserve, stat, ability or party closure is supplied to production as fact.
-exports.run=function(Battle){
+exports.run=function(Battle,coldOnly=false){
  const seeds=[];
+ if(!coldOnly){
  for(const weather of ['sandstorm','sunnyday','raindance'])for(const reply of ['fireblast','thunder','tackle','rocktomb','bulkup'])seeds.push({id:'weather-reply',weather,reply});
  for(const [targetAbility,weather]of [['sandrush','sandstorm'],['sandforce','sandstorm'],['sandveil','sandstorm'],['chlorophyll','sunnyday'],['swiftswim','raindance'],['raindish','raindance'],['solarpower','sunnyday'],['shadowshield','sandstorm']])
   for(const targetItem of ['utilityumbrella','leftovers','lifeorb'])for(const magicRoom of [false,true])seeds.push({id:'composition',targetAbility,weather,targetItem,magicRoom,reply:'thunder'});
@@ -25,6 +26,17 @@ exports.run=function(Battle){
   {id:'speed-chain',targetAbility:'swiftswim',weather:'raindance',targetItem:'choicescarf',targetWind:true,targetSpeed:101},
   {id:'speed-chain',targetAbility:'sandrush',weather:'sandstorm',targetItem:'choicescarf',targetWind:true,targetSpeed:101});
  for(const weather of ['sunnyday','raindance','sandstorm'])seeds.push({id:'miss',weather,reply:'thunder'});
+ }else{
+  for(const weather of ['snow','hail']){
+   seeds.push({id:'weather-reply',weather,reply:'psyshock',reserveTypes:['ice']});
+   seeds.push({id:'cold-speed',weather,targetAbility:'slushrush',targetItem:'choicescarf',targetWind:true,targetStatus:'par',targetSpeed:101,reply:'tackle'});
+   seeds.push({id:'cold-evasion',weather,targetAbility:'snowcloak',reply:'thunder'});
+   seeds.push({id:'cold-heal',weather,targetAbility:'icebody',targetItem:'leftovers',targetHp:500,reply:'bulkup'});
+   for(const reserveItem of ['', 'heavydutyboots'])for(const magicRoom of [false,true])
+    seeds.push({id:'hazards',weather,reserveItem,magicRoom,hazards:{stealthrock:1,spikes:3,stickyweb:1,toxicspikes:1},reserveTypes:['ice'],reply:'tackle'});
+   for(const weatherMode of ['upkeep','ended'])seeds.push({id:'clock',weather,weatherMode,reply:'bulkup'});
+  }
+ }
  const rows=[];
  for(const suppressor of ['airlock','cloudnine'])for(const direction of ['enter','depart','retain'])for(const mode of ['switch','pivot'])for(const seed of seeds)for(const enemy of [false,true]){
   if(direction==='retain'&&!['weather-reply','hazards','clock','recoil'].includes(seed.id))continue;

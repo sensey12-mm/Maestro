@@ -93,6 +93,7 @@ public final class ScopedExecution {
         case "sandrush" -> "sandstorm";
         case "chlorophyll" -> "sunnyday";
         case "swiftswim" -> "raindance";
+        case "slushrush" -> "snow";
         default -> null;
     };}
     /** Raw weather and its clock remain public field facts. Suppression only
@@ -155,9 +156,9 @@ public final class ScopedExecution {
                 &&Set.of("none","par","brn","psn").contains(actor.status().value()));
         c.need("RESIDUAL_HP",actor.hp().known());
         c.need("RESIDUAL_WEATHER",field.weather().known()
-                &&Set.of("none","sunnyday","raindance","sandstorm").contains(field.weather().value()));
-        if(field.weather().known()&&field.weather().value().equals("sandstorm"))
-            c.need("SANDSTORM_CURRENT_TYPES",profile.types().known());
+                &&Set.of("none","sunnyday","raindance","sandstorm","hail","snow").contains(field.weather().value()));
+        if(field.weather().known()&&Set.of("sandstorm","hail").contains(field.weather().value()))
+            c.need(field.weather().value().equals("hail")?"HAIL_CURRENT_TYPES":"SANDSTORM_CURRENT_TYPES",profile.types().known());
         c.need("RESIDUAL_TERRAIN",field.terrain().known()
                 &&Set.of("none","psychicterrain").contains(field.terrain().value()));
         return c.finish();
@@ -166,6 +167,10 @@ public final class ScopedExecution {
         return Set.of("magicguard","sandrush","sandforce","sandveil").contains(ability(profile.actor()))
                 ||item(profile.actor()).equals("safetygoggles")
                 ||profile.types().value().stream().anyMatch(Set.of("rock","ground","steel")::contains);
+    }
+    boolean hailImmune(Profile profile) {
+        return Set.of("magicguard","snowcloak","icebody").contains(ability(profile.actor()))
+                ||item(profile.actor()).equals("safetygoggles")||profile.types().value().contains("ice");
     }
     /** Active Power Herb requires current own binding and no Magic Room. */
     boolean activePowerHerb(String role) {
@@ -207,7 +212,7 @@ public final class ScopedExecution {
             // legal, successful action. Future PP/requests are not certified.
             // Insomnia has no modifier on an already legal awake action. Its
             // sleep/Yawn immunity does not prove that Update cured current sleep.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "insomnia", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "insomnia", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower", "slushrush", "snowcloak", "icebody").contains(b.ability().value()));
             // This actor check alone covers no entry ability activation.
             // Download and weather participation have separate entry gates.
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
@@ -289,10 +294,11 @@ public final class ScopedExecution {
         if(moveId.equals("swift") || moveId.equals("thunder")&&weather.value().equals("raindance"))
             return Known.of(100,coverage.source());
         int base=moveId.equals("thunder")&&weather.value().equals("sunnyday")?50:move(moveId).accuracy();
-        // Native ModifyAccuracy runs before stage truncation. Sand Veil acts
+        // Native ModifyAccuracy runs before stage truncation. Weather evasion acts
         // on the target's incoming numeric accuracy; always-hit checks above
         // retain their exemption. The source applies round-half-down here.
-        if(ability(t.id()).equals("sandveil")&&weather.value().equals("sandstorm"))
+        if(ability(t.id()).equals("sandveil")&&weather.value().equals("sandstorm")
+                ||ability(t.id()).equals("snowcloak")&&Set.of("hail","snow").contains(weather.value()))
             base=(base*3277+2047)/4096;
         int boost=Math.max(-6,Math.min(6,a.stages().get("accuracy")-t.stages().get("evasion")));
         int threshold=boost>=0?base*(3+boost)/3:base*3/(3-boost);
@@ -325,6 +331,7 @@ public final class ScopedExecution {
             c.need(a.id() + ":" + switch(ability(a.id())){
                 case "sandrush" -> "SAND_RUSH_WEATHER";
                 case "chlorophyll" -> "CHLOROPHYLL_WEATHER";
+                case "slushrush" -> "SLUSH_RUSH_WEATHER";
                 default -> "SWIFT_SWIM_WEATHER";
             }, actorWeather(c,a.id(),participants(a,others)).known());
         if (c.missing.isEmpty()) c.need("SUPPORTED_SPEED_ARITHMETIC_DOMAIN", computedSpeed(p, a,others).known());
@@ -505,7 +512,8 @@ public final class ScopedExecution {
     }
     private int sourceDefenseModifier(Move move,Profile target,String weather) {
         return weather.equals("sandstorm")&&move.defendingStat().equals("spd")
-                &&target.types().value().contains("rock")?6144:4096;
+                &&target.types().value().contains("rock")
+                ||weather.equals("snow")&&move.defendingStat().equals("def")&&target.types().value().contains("ice")?6144:4096;
     }
     private static Damage zero(String why) {
         return new Damage(Known.unknown(), Known.of(new Interval(0, 0), PublicFieldEvidence.SOURCE + ":" + why), Set.of(), PublicFieldEvidence.SOURCE);
@@ -545,7 +553,7 @@ public final class ScopedExecution {
         var weather=boostWeather!=null?actorWeather(new Check(Operation.SPEED),a.id(),participants(a,others)):field.weather();
         if(boostWeather!=null&&!weather.known())return Known.unknown();
         int[] modifiers={item(a.id()).equals("choicescarf")?6144:4096,
-                wind.value()?8192:4096,boostWeather!=null&&weather.value().equals(boostWeather)?8192:4096};
+                wind.value()?8192:4096,boostWeather!=null&&(weather.value().equals(boostWeather)||ability(a.id()).equals("slushrush")&&weather.value().equals("hail"))?8192:4096};
         int low=Integer.MAX_VALUE, high=0;
         // Paralysis flushes the preceding modifier chain, floors speed / 2,
         // then lets the remaining callbacks form a new chain. Actor callbacks

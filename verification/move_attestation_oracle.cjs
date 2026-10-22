@@ -14,7 +14,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
     check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
     check(!table[id].flags?.powder,'Selectable powder move requires separate Goggles hit protection coverage: '+id);
   }
-  const fieldDependencies=['psychicterrain','tailwind','sandstorm','spikes','stealthrock','stickyweb','toxicspikes'];
+  const fieldDependencies=['psychicterrain','tailwind','sandstorm','hail','snowscape','spikes','stealthrock','stickyweb','toxicspikes'];
   for(const id of fieldDependencies){
     check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
     check(!selectable.includes(id),'Field dependency became a selectable calculator action: '+id);
@@ -140,6 +140,27 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(capture().current()&&!receipt.current(),'Sandstorm setter restoration revived receipt');
     }
 
+    for(const id of ['hail','snow']){
+      const conditions=battle.dex.dataCache.Conditions,definition=conditions[id];
+      for(const slot of Object.keys(definition).filter(k=>typeof definition[k]==='function')){
+        const foreign=eval('({'+definition[slot].toString()+'})')[slot];
+        receipt=capture();conditions[id]={...definition,[slot]:foreign};
+        let rejected=false;try{capture();}catch(unverified){rejected=true;}
+        check(foreign!==definition[slot]&&foreign.toString()===definition[slot].toString()&&rejected&&!receipt.current(),'Foreign cold-weather callback retained scope: '+id+'.'+slot);
+        conditions[id]=definition;check(capture().current()&&!receipt.current(),'Cold-weather restoration revived old receipt: '+id);
+      }
+      for(const slot of ['duration','onFieldResidualOrder',...(id==='snow'?['onModifyDefPriority']:[])]){
+        receipt=capture();conditions[id]={...definition,[slot]:definition[slot]+1};
+        check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Cold-weather lifecycle/order omitted: '+id+'.'+slot);
+        conditions[id]=definition;check(capture().current()&&!receipt.current(),'Cold-weather metadata revived lease: '+id);
+      }
+    }
+    for(const id of ['hail','snowscape']){
+      const definition=table[id];receipt=capture();table[id]={...definition,weather:'RainDance'};
+      check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Cold setter weather omitted: '+id);
+      table[id]=definition;check(capture().current()&&!receipt.current(),'Cold setter restoration revived old receipt: '+id);
+    }
+
     // Status callbacks execute outside move definitions. Full public condition
     // attestation must reject identical-text closures without reading actors.
     const conditions=battle.dex.dataCache.Conditions;
@@ -165,7 +186,8 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
 
     for(const [tableName,id,slot,metadata] of [['Items','leftovers','onResidual','onResidualSubOrder'],['Abilities','magicguard','onDamage','rating'],
         ['Abilities','sandforce','onBasePower','onBasePowerPriority'],['Abilities','sandrush','onModifySpe','rating'],
-        ['Abilities','raindish','onWeather','rating'],['Abilities','solarpower','onModifySpA','onModifySpAPriority'],
+        ['Abilities','slushrush','onModifySpe','rating'],['Abilities','snowcloak','onModifyAccuracy','onModifyAccuracyPriority'],
+        ['Abilities','icebody','onWeather','rating'],['Abilities','raindish','onWeather','rating'],['Abilities','solarpower','onModifySpA','onModifySpAPriority'],
         ['Abilities','chlorophyll','onModifySpe','rating'],['Abilities','swiftswim','onModifySpe','rating'],
         ['Abilities','sandveil','onModifyAccuracy','onModifyAccuracyPriority'],['Items','safetygoggles','onImmunity','num'],
         ['Items','utilityumbrella','onStart','num'],
@@ -186,7 +208,8 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
         ['ability','Abilities','download','rating'],
         ['ability','Abilities','insomnia','rating'],['ability','Abilities','asonespectrier','rating'],['ability','Abilities','shadowshield','rating'],
         ['heldItem','Items','lifeorb','num'],['heldItem','Items','mewtwonitey','num'],
-        ['ability','Abilities','raindish','rating'],['ability','Abilities','solarpower','onModifySpAPriority'],
+        ['ability','Abilities','slushrush','rating'],['ability','Abilities','snowcloak','onModifyAccuracyPriority'],
+        ['ability','Abilities','icebody','rating'],['ability','Abilities','raindish','rating'],['ability','Abilities','solarpower','onModifySpAPriority'],
         ['ability','Abilities','chlorophyll','rating'],['ability','Abilities','swiftswim','rating'],
         ['ability','Abilities','sandveil','onModifyAccuracyPriority'],['heldItem','Items','safetygoggles','num'],
         ['heldItem','Items','utilityumbrella','num'],

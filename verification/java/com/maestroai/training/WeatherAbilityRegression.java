@@ -50,7 +50,7 @@ final class WeatherAbilityRegression {
                 var uncertain=fixture(change(c,"targetAbility",suppressor),"",known(new Interval(0,.5)));
                 check(!damage(uncertain,Critical.BOTH).points().known()&&!rank(uncertain,true).utility().known(),"Unproved suppression participation gained scope");
             }
-            for(String unsupported:List.of("desolateland","primordialsea","snow"))check(!rank(fixture(change(c,"weather",unsupported),""),true).utility().known(),"Unsupported weather gained ability scope");
+            for(String unsupported:List.of("desolateland","primordialsea","deltastream"))check(!rank(fixture(change(c,"weather",unsupported),""),true).utility().known(),"Unsupported weather gained ability scope");
             var source=fixture(c,"");var cert=source.execution().residualCoverage(source.profiles().get("self"),source.state().self());source.current().set(false);
             check(!cert.supported()&&!rank(source,true).utility().known(),"Expired source retained weather ability receipt");
             var expired=fixture(c,"");var old=expired.execution().residualCoverage(expired.profiles().get("self"),expired.state().self());expired.owner().endChoice();

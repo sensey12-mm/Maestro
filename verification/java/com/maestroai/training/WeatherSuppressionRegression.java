@@ -70,7 +70,7 @@ final class WeatherSuppressionRegression {
             check(!withdrawn.utility().known()&&withdrawn.lines().stream().allMatch(l->l.state().equals(closing.state())),"Closing weather receipt leaked states");
             var upkeep=change(c,"weatherMode","upkeep");
             check(rank(fixture(upkeep,""),false).utility().known()&&!rank(fixture(upkeep,""),true).utility().known(),"Suppression inferred weather lifetime");
-            for(String weather:List.of("hail","snow"))check(!rank(fixture(change(c,"weather",weather),""),true).utility().known(),"Suppression certified unsupported weather");
+            for(String weather:List.of("desolateland","primordialsea"))check(!rank(fixture(change(c,"weather",weather),""),true).utility().known(),"Suppression certified unsupported weather");
             var bench=change(number(change(c,"targetAbility","runaway"),"ownBench",1),"ownBenchAbility",suppressor);var reserve=fixture(bench,"");
             check(reserve.execution().effectiveWeather(reserve.state().self(),reserve.state().opponent()).value().equals("sandstorm"),"Inactive own reserve suppressed weather");
             check(reserve.execution().entryCoverage(reserve.state().selfHazards(),known(1000),reserve.profiles().get("reserve0")).supported()&&!reserve.execution().profile(reserve.profiles().get("reserve0"),true).ordinaryEffects().known(),"Entry arithmetic incorrectly certified active suppression");

@@ -79,7 +79,7 @@ final class ModifierCompositionRegression {
         var lease=ledger.beginChoice(battle,actor,second,active,false,()->true);
         if(!lease.current())throw new AssertionError("Modifier fixture did not issue a real owner receipt");
         String foeItem=c.b("enemy")?c.s("item"):c.s("targetItem"),foeAbility=c.b("enemy")?c.s("ability"):c.s("targetAbility");
-        var events=new StringBuilder("update\n|gen|9\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L")
+        var events=new StringBuilder("update\n|gen|"+(c.data().has("generation")?c.n("generation"):9)+"\n|gametype|singles\n|start\n|switch|p1a: Own|Mew, L")
                 .append(ownUser?c.n("level"):100).append("|100/100\n|switch|p2a: Foe|Mew, L")
                 .append(ownUser?100:c.n("level")).append("|100/100\n");
         if(!missing.equals("opponent-item"))events.append(foeItem.equals("none")?"|-enditem|p2a: Foe|Sitrus Berry\n":"|-item|p2a: Foe|"+foeItem+"\n");
@@ -99,9 +99,9 @@ final class ModifierCompositionRegression {
             events.append("\n|-fieldstart|move: Psychic Terrain");
         }
         if(c.data().has("witnessWeather")&&c.b("witnessWeather")){
-            events.append("\n|move|p2a: Foe|Sandstorm|p2a: Foe");
+            events.append("\n|move|p2a: Foe|").append(c.data().has("witnessWeatherMove")?c.s("witnessWeatherMove"):"Sandstorm").append("|p2a: Foe");
             if(missing.equals("indirect-setter"))events.append("|[from] ability: Copycat");
-            events.append("\n|-weather|Sandstorm");
+            events.append("\n|-weather|").append(c.s("weather"));
         }
         events.append("\n|turn|2");
         for(String key:List.of("wind","targetWind"))if(c.data().has(key)&&c.b(key)){

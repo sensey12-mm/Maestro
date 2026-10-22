@@ -25,10 +25,10 @@ final class WeatherEntryRegression {
                 :ShadowMechanicsEvaluation.compare(f.snapshot(),f.mechanics(),f.profiles(),plans,known(false),Critical.BOTH,action,f.execution())).rankings().getFirst();
     }
     static void run(){
-        for(String ability:List.of("airlock","cloudnine"))for(boolean entering:List.of(false,true))for(boolean switching:List.of(false,true)){
-            var c=base(ability,entering);var f=fixture(c,"");var state=root(f);
+        for(String ability:List.of("airlock","cloudnine"))for(boolean entering:List.of(false,true))for(boolean switching:List.of(false,true))for(String rawWeather:List.of("sandstorm","snow","hail")){
+            var c=change(base(ability,entering),"weather",rawWeather);var f=fixture(c,"");var state=root(f);
             var before=f.execution().effectiveWeather(state.self(),state.opponent());
-            check(before.known()&&before.value().equals(entering?"sandstorm":"none"),"Inactive reserve changed root weather");
+            check(before.known()&&before.value().equals(entering?rawWeather:"none"),"Inactive reserve changed root weather");
             var entry=f.execution().entryCoverage(state.selfHazards(),known(1000),f.profiles().get("reserve0"));
             check(entry.supported(),"Supported entry arithmetic stayed unknown");
             if(entering)check(!f.execution().profile(f.profiles().get("reserve0"),true).ordinaryEffects().known(),"Entry arithmetic certified an ordinary active suppressor");
@@ -36,7 +36,7 @@ final class WeatherEntryRegression {
             check(actual.utility().known()&&actual.lines().stream().allMatch(l->l.state().self().id().equals("reserve0")),"Certified weather entry/departure stayed UNKNOWN: "+actual);
             var after=actual.lines().getFirst().state();
             var frame=f.execution().conditionalParticipants("reserve0",false);var weather=frame.effectiveWeather(after.self(),after.opponent());
-            check(weather.known()&&weather.value().equals(entering?"none":"sandstorm"),"Proven entry frame retained the departed ability");
+            check(weather.known()&&weather.value().equals(entering?"none":rawWeather),"Proven entry frame retained the departed ability");
             check(!frame.effectiveWeather(after.self(),state.self(),after.opponent()).known(),"Foreign active actor gained frame participation");
             check(!f.execution().effectiveWeather(after.self(),after.opponent()).known(),"Unentered raw reserve gained weather participation");
             check(f.execution().effectiveWeather(state.self(),state.opponent()).equals(before),"Conditional entry leaked into root weather");
@@ -70,11 +70,13 @@ final class WeatherEntryRegression {
         }
         System.out.println("Weather entry evidence regressions PASS: "+checks+" checks; certified participation, branch isolation, hazards, missing evidence and receipt withdrawal");
     }
-    static void differential(Context engine)throws Exception{
+    static void differential(Context engine)throws Exception{differential(engine,false);}
+    static void coldDifferential(Context engine)throws Exception{differential(engine,true);}
+    private static void differential(Context engine,boolean cold)throws Exception{
         String source=Files.readString(Path.of("verification/weather_entry_oracle.cjs"));
-        var rows=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle));})()").asString()).getAsJsonArray();
-        check(rows.size()==1976,"Native weather entry inventory changed: "+rows.size());
-        System.out.println("Weather entry native inventory captured: "+rows.size()+" queued cases");
+        var rows=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle,"+cold+"));})()").asString()).getAsJsonArray();
+        check(rows.size()==(cold?432:1976),"Native weather entry inventory changed: "+rows.size());
+        System.out.println((cold?"Cold weather entry native inventory captured: ":"Weather entry native inventory captured: ")+rows.size()+" queued cases");
         int bounded=0,unknown=0,probes=0,damageRolls=0;var hidden=new HashMap<String,ShadowMechanicsEvaluation.Ranking>();
         for(var value:rows){var row=value.getAsJsonObject();var nativeCase=new Case(row.getAsJsonObject("config"));
             // Both native positions are DECLARED own-entry counterfactuals.
@@ -113,7 +115,7 @@ final class WeatherEntryRegression {
             }
             if(nativeCase.b("enemy")&&!switching){var other=rank(fixture(nativeCase,""),false,false);check(!other.utility().known()||nativeCase.b("protect"),"Actual hidden opponent replacement gained weather scope");}
         }
-        System.out.println("Weather entry native differential PASS: "+rows.size()+" queued entries/departures across both native roles; "+probes+" declared owner-entry probes, "+damageRolls+" critical/roll outcomes; "+bounded+" bounded / "+unknown+" UNKNOWN at two boundaries; damage, accuracy, speed, residuals, hazards, clocks and party privacy");
+        System.out.println((cold?"Cold weather entry native differential PASS:":"Weather entry native differential PASS:")+" "+rows.size()+" queued entries/departures across both native roles; "+probes+" declared owner-entry probes, "+damageRolls+" critical/roll outcomes; "+bounded+" bounded / "+unknown+" UNKNOWN at two boundaries; damage, accuracy, speed, residuals, hazards, clocks and party privacy");
     }
     private static Actor observed(String id,BattleSnapshot.Combatant facts,JsonObject row,String role){
         var stages=new TreeMap<String,Integer>();row.getAsJsonObject(role+"Stages").entrySet().forEach(e->stages.put(e.getKey(),e.getValue().getAsInt()));double hp=row.get(role+"Hp").getAsDouble();
