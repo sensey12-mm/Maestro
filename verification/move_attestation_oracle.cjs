@@ -2,6 +2,7 @@
 
 // Execute the real pinned registry/constructors and production probe. No battle
 // actors or requests are needed to test public move configuration provenance.
+const fieldDependencies=Object.freeze(['psychicterrain','tailwind','sandstorm','hail','snowscape','spikes','stealthrock','stickyweb','toxicspikes']);
 module.exports = function (modules, anchor, probe, battle, selectable) {
   let checks = 0, privateReads = 0, callbackCalls = 0;
   const check = (ok, why) => { checks++; if (!ok) throw Error(why); };
@@ -14,7 +15,6 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
     check(Object.hasOwn(covered, id), 'Selectable move missing from attestation: ' + id);
     check(!table[id].flags?.powder,'Selectable powder move requires separate Goggles hit protection coverage: '+id);
   }
-  const fieldDependencies=['psychicterrain','tailwind','sandstorm','hail','snowscape','spikes','stealthrock','stickyweb','toxicspikes'];
   for(const id of fieldDependencies){
     check(Object.hasOwn(covered,id),'Active field definition missing from attestation: '+id);
     check(!selectable.includes(id),'Field dependency became a selectable calculator action: '+id);
@@ -324,6 +324,9 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   }
   return JSON.stringify({checks, selected:selectable.length, fieldDependencies:fieldDependencies.length, badRegistries});
 };
+
+// Cheap cross-language inventory check precedes the full native callback suite.
+module.exports.fieldDependencies=fieldDependencies;
 
 if (typeof process !== 'undefined' && process.argv && require.main === module) {
   const fs = require('fs'), path = require('path'), vm = require('vm');

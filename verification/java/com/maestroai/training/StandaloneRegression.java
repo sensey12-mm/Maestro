@@ -333,7 +333,8 @@ public final class StandaloneRegression {
         check(CobblemonMechanics.move("geomancy").boosts().equals(Map.of("spa",2,"spd",2,"spe",2)));
         check(!MaestroOwnMoveAudit.completelySimulated("uturn"));
     }
-    public static void main(String[] args) {
+    public static void main(String[] args)throws Exception {
+        MoveAttestationRegression.inventory();
         BlockedHitRegression.run();
         HealingRecoilRegression.run();
         RecoilContinuationRegression.run();
