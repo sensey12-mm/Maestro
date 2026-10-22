@@ -26,6 +26,7 @@ final class PackSourceRegression {
                     .directory(simulator.getParent().toFile()).inheritIO().start();
             check(child.waitFor()==0,"production boot profile child failed");
             var runtime=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
+                    "-Dmaestroai.verificationRoot="+Path.of("").toAbsolutePath(),
                     "-cp",dependency+java.io.File.pathSeparator+System.getProperty("java.class.path"),
                     RuntimeCaptureRegression.class.getName())
                     .directory(simulator.getParent().toFile()).inheritIO().start();
@@ -116,6 +117,7 @@ final class PackSourceRegression {
             if (!layoutOnly) WeatherEntryRegression.differential(engine);
             if (!layoutOnly) ColdWeatherRegression.differential(engine);
             if (!layoutOnly) WeatherSetterRegression.differential(engine);
+            if (!layoutOnly) OwnMegaYRegression.differential(engine);
             if (!layoutOnly) StatusSpeedRegression.differential(engine);
             if (!layoutOnly) PsychicTerrainRegression.differential(engine);
             if (!layoutOnly) ModifierCompositionRegression.differential(engine);
@@ -149,6 +151,7 @@ final class PackSourceRegression {
             check(domain.effectiveState().known(),"narrow pack receipt absent");
             long comparisonStart=System.nanoTime();
             PublicPipelineRegression.run(domain);
+            OwnMegaYRegression.runtime(domain);
             NaturalAcceptanceRegression.run(domain);
             ModifierTacticalRegression.run(domain,damageOracle);
             ModifierTacticalRegression.policyComparisons(domain,policyOracle);

@@ -86,6 +86,15 @@
     if(sourceAnchor && !sourceAnchor.speciesEntry(id,species)) throw Error('public species identity alias unsupported');
     const h = hooks(species); if (Object.keys(h).length) speciesHooks[id] = h;
   }
+  // Permanent own-form evidence additionally depends on these exact public
+  // definitions. Keep the general opponent numeric catalog unchanged.
+  const ownMegaY = registries.species.contents.get('mewtwomegay') || data.Pokedex.mewtwomegay;
+  // Validate descriptors before reading metadata, and retain the whole source
+  // row in the lease so in-place scalar changes also expire old receipts.
+  const ownDefinition = ownMegaY ? canonical(ownMegaY) : null;
+  speciesHooks.$ownMegaY = ownDefinition ? {stats:ownDefinition.baseStats,types:ownDefinition.types,
+    baseSpecies:ownDefinition.baseSpecies,forme:ownDefinition.forme,abilities:ownDefinition.abilities,
+    requiredItem:ownDefinition.requiredItem,gender:ownDefinition.gender} : null;
   const catalog = {};
   for (const id of ['zoroark','gholdengo','ditto','mew','pikachu','blissey','shedinja','shuckle',
                     'genesect','calyrexshadow','arceus','xerneas','marshadow','mewtwo']) {

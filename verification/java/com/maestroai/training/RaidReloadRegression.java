@@ -67,10 +67,12 @@ final class RaidReloadRegression {
             if(++count<4)check(partial==null||!partial.effectiveState().known(),"partial raid profile gained scope");
         }
         for(String condition:fixtures.keySet())engine.eval("js","verificationStream.battle.dex.conditions.getByID('"+condition+"')");
+        OwnMegaYRegression.differential(engine);
         var domain=SimulatorDomainBridge.capture(service,id,choice::get);
         check(domain!=null&&domain.effectiveState().known(),"source-verified raid definitions rejected: "
                 +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
         PublicPipelineRegression.run(domain);
+        OwnMegaYRegression.runtime(domain);
         var beforeMutation=domain;
         String original;
         try(var reader=new BufferedReader(new StringReader(fixtures.get("shield").getAsString()))){

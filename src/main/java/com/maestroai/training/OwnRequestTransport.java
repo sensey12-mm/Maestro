@@ -123,6 +123,19 @@ public final class OwnRequestTransport {
         int colon = ident == null ? -1 : ident.indexOf(':');
         return colon < 0 ? "" : ident.substring(colon + 1).trim();
     }
+    /** Only a fresh MOVE request can rebind this owner's exact native Mega-Y
+     * history. The spectator observations and every opponent guard stay intact. */
+    public PublicFieldEvidence.Capture rebindOwnMegaY(Lease lease,RuntimeDomain domain,
+            PublicProtocolEvidence protocol,PublicMechanicsEvidence.Observation active,PublicFieldEvidence.Capture field){
+        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE)return field;
+        try{
+            var own=receipt.pokemon().stream().filter(p->p.dto().active()).findFirst().orElseThrow();
+            var proof=OwnMegaYEvidence.inspect(field,lease,domain,protocol,active,own,side,receiptTurn);
+            if(proof==null)return field;
+            var rebound=field.rebind(proof);
+            return proof.sourceCurrent()?rebound:rebound.withoutOwnedForm();
+        }catch(IllegalArgumentException|NoSuchElementException unavailable){return field;}
+    }
     /** Runtime entry/lifecycle proof. No caller-supplied 'ordinary' boolean.
      * A reserve needs witnessed initial construction or its actual public exit;
      * a pending switch is never treated as if it has already cleared volatiles.
@@ -140,8 +153,10 @@ public final class OwnRequestTransport {
             var a = field.actor(active);
             var actual = receipt.pokemon().stream().filter(p -> p.dto().active()).findFirst().orElseThrow();
             var selected = receipt.pokemon().stream().filter(p -> p.dto().uuid().equals(uuid) && p.dto().active() != reserve).findFirst().orElseThrow();
-            if (a == null || !a.covered() || !field.allActorsCovered() || !field.unknown().isEmpty() || active.ambiguous()
-                    || active.unsupportedEffects() || !active.slot().startsWith(side)
+            boolean rebound=field.ownedForm(active,lease);
+            if(!field.ownedSourceCurrent())missing.add("OWN_FORM_SOURCE_SCOPE_UNVERIFIED");
+            if (a == null || !a.covered() || !field.allActorsCovered() || !field.unknown().isEmpty()
+                    || (active.ambiguous()||active.unsupportedEffects())&&!rebound || !active.slot().startsWith(side)
                     // Pokemon.toString publishes UUID; own request.ident instead
                     // uses fullname/nickname. Do not equate those two APIs.
                     || !nickname(active.publicName()).equals(actual.dto().uuid().toString()))

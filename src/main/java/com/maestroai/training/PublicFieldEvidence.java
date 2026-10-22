@@ -26,16 +26,18 @@ public final class PublicFieldEvidence {
         private final Map<String, PublicMechanicsEvidence.Observation> observations;
         private final PublicProtocolEvidence protocol;
         private final List<String> events;
+        private final OwnMegaYEvidence ownForm;
         private Capture(PublicFieldEvidence owner, long epoch, int turn, Known<String> weather,
                         Known<String> terrain, Known<Boolean> trickRoom, Known<Boolean> magicRoom,
                         Map<String, Boolean> tailwind, Map<String, Active> actors, Set<String> unknown,
-                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn) {
+                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnMegaYEvidence ownForm) {
             this.owner = owner; this.epoch = epoch; this.turn = turn; this.weather = weather; this.terrain = terrain;
             this.trickRoom = trickRoom; this.magicRoom = magicRoom; this.tailwind = Map.copyOf(tailwind);
             this.actors = Map.copyOf(actors); this.unknown = Set.copyOf(unknown);
             this.evidence = evidence;
             this.protocol = protocol; this.events = protocol.mechanicsEvents();
             this.weatherStartTurn=weatherStartTurn;
+            this.ownForm=ownForm;
             var captured = new HashMap<String, PublicMechanicsEvidence.Observation>();
             actors.keySet().forEach(slot -> { var o = evidence.observation(slot); if (o != null) captured.put(slot, o); });
             this.observations = Map.copyOf(captured);
@@ -68,8 +70,20 @@ public final class PublicFieldEvidence {
         public Set<String> unknown() { return unknown; }
         public boolean allActorsCovered() {
             return actors.size() == 2 && actors.values().stream().allMatch(a -> a.covered())
-                    && observations.values().stream().allMatch(o -> !o.ambiguous() && !o.unsupportedEffects());
+                    && observations.size()==2 && observations.values().stream().allMatch(o ->
+                        !o.ambiguous()&&!o.unsupportedEffects() || ownForm!=null&&ownForm.owns(o));
         }
+        boolean ownedForm(PublicMechanicsEvidence.Observation o,OwnRequestTransport.Lease lease){
+            return ownForm!=null&&ownForm.lease==lease&&ownForm.owns(o);
+        }
+        boolean hasOwnedForm(){return ownForm!=null;}
+        boolean ownedSourceCurrent(){return ownForm==null||ownForm.sourceCurrent();}
+        Capture rebind(OwnMegaYEvidence proof){
+            requireCurrent(turn);
+            if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-form witness");
+            return owner.update(protocol,evidence,proof);
+        }
+        Capture withoutOwnedForm(){return owner.update(protocol,evidence);}
         public String token() { return SOURCE + ":epoch-" + epoch + ":turn-" + turn; }
         public void requireCurrent(int expectedTurn) {
             if (owner.current != this || owner.epoch != epoch || expectedTurn != turn)
@@ -144,6 +158,9 @@ public final class PublicFieldEvidence {
         String slot, name; int entry; boolean covered, transientFlinch; Set<String> volatiles = new HashSet<>();
     }
     public Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence) {
+        return update(protocol,evidence,null);
+    }
+    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnMegaYEvidence ownForm) {
         epoch++; Set<String> unknown = new TreeSet<>();
         unknown.addAll(protocol.coverageUnknown());
         if (!protocol.framed()) unknown.add("PUBLIC_ENVELOPE_PROVENANCE_UNKNOWN");
@@ -153,7 +170,9 @@ public final class PublicFieldEvidence {
         Map<String, Mutable> active = new HashMap<>(); Map<String, Integer> entries = new HashMap<>();
         boolean start = false, gen9 = false, singles = false; int turn = 0, weatherStartTurn=-1;
         if (!protocol.complete() || protocol.corrupted()) unknown.add("PUBLIC_STREAM_INCOMPLETE_OR_CORRUPT");
+        int eventIndex=0;
         for (String line : protocol.mechanicsEvents()) {
+            int index=eventIndex++;
             String[] p = line.split("\\|", -1); String event = p[1];
             if (event.equals("gen")) { if (gen9 || start) unknown.add("FORMAT_METADATA_CHANGED"); gen9 = p.length == 3 && p[2].equals("9"); continue; }
             if (event.equals("gametype")) { if (singles || start) unknown.add("FORMAT_METADATA_CHANGED"); singles = p.length == 3 && p[2].equals("singles"); continue; }
@@ -217,6 +236,7 @@ public final class PublicFieldEvidence {
             }
             Mutable a = active.get(slot);
             if (a == null || !a.name.equals(name)) { unknown.add("ACTOR_BINDING_UNKNOWN"); continue; }
+            if(ownForm!=null&&ownForm.admits(index,line))continue;
             if (event.equals("replace")) { a.covered = false; unknown.add("REVEAL_EXECUTION_HISTORY_UNRESOLVED"); continue; }
             if (event.equals("cant") && p.length > 3 && key(p[3]).equals("flinch")) {
                 a.transientFlinch = true; continue; // duration1 in the pinned conditions table
@@ -256,6 +276,6 @@ public final class PublicFieldEvidence {
         if (!start || !gen9 || !singles || turn == 0) unknown.add("WITNESSED_GEN9_SINGLES_START_OR_TURN_MISSING");
         Map<String, Active> actors = new HashMap<>();
         active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered && !a.transientFlinch)));
-        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn); return current;
+        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn,ownForm); return current;
     }
 }

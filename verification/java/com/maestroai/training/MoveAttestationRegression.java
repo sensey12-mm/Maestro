@@ -3,6 +3,8 @@ package com.maestroai.training;
 import com.cobblemon.mod.relocations.graalvm.polyglot.*;
 import com.google.gson.*;
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 
 /** Actual native registrations and production configuration leases; no actor/request inputs. */
@@ -43,6 +45,15 @@ final class MoveAttestationRegression {
                     altered.get("scopedRegistryEquivalent").getAsBoolean(),components),expected,true,()->true);
             if(domain.effectiveState().known() || domain.scopes().get(ExecutionCoverage.Operation.DAMAGE).known() || domain.scopes().get(ExecutionCoverage.Operation.ENTRY).known())
                 throw new AssertionError("Altered selected move retained an operation certificate");
+        }
+        for(var value:result.getAsJsonArray("badSpecies")) {
+            var altered=new TreeMap<>(expected);
+            altered.put("speciesHooks",HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getAsString().getBytes(StandardCharsets.UTF_8))));
+            var domain=new RuntimeDomain(new RuntimeDomain.Snapshot(true,false,false,altered),expected,true,()->true);
+            if(domain.effectiveState().known() || domain.scopes().get(ExecutionCoverage.Operation.DAMAGE).known()
+                    || domain.scopes().get(ExecutionCoverage.Operation.ENTRY).known())
+                throw new AssertionError("Altered own form retained an operation certificate");
         }
         System.out.println("Native selected-move attestation PASS: "+result.get("selected").getAsInt()+" IDs + "+result.get("fieldDependencies").getAsInt()+" field dependencies; "
                 +result.get("checks").getAsInt()+" checks; altered definitions withdraw Java operation scopes");

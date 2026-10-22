@@ -240,6 +240,7 @@ public final class ScopedExecution {
             // Unsupported weather is irrelevant to this limited priority/speed/entry/setup slice.
             field.unknown().stream().filter(reason -> !reason.equals("UNSUPPORTED_WEATHER") || op == Operation.DAMAGE).forEach(missing::add);
             need("SOURCE_DOMAIN_" + op, yes(scopes.get(op)));
+            if(field.hasOwnedForm())need("OWN_FORM_SOURCE_CATALOG_AND_DISPATCH",yes(scopes.get(Operation.DAMAGE)));
         }
         void need(String name, boolean supported) { required.add(name); if (!supported) missing.add(name); }
         void actor(String role, boolean reserve) {
@@ -263,7 +264,9 @@ public final class ScopedExecution {
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
             else {
                 var a = field.actor(b.observation());
-                need(role + ":CURRENT_PUBLIC_ENTRY", a != null && a.covered() && !b.observation().ambiguous() && !b.observation().unsupportedEffects());
+                need(role + ":CURRENT_PUBLIC_ENTRY", a != null && a.covered()
+                        && (!b.observation().ambiguous()&&!b.observation().unsupportedEffects()
+                            || !role.equals("opponent")&&field.ownedForm(b.observation(),b.lease())));
             }
             need(role + ":ITEM_SUPPRESSION", b.item().known() && b.item().value().equals("none") || field.magicRoom().known());
         }

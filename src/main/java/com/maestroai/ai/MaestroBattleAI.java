@@ -5845,6 +5845,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             Map<String, PublicMechanicsEvidence.Bound> ownedProfiles = new HashMap<>();
             ownFreshness.clear();
             var domainScopes = runtimeDomain == null ? com.maestroai.training.ExecutionCoverage.Scopes.unknown() : runtimeDomain.scopes();
+            // Rebuild the public capture for this choice before adding an
+            // independently owned, source-bound permanent-form witness.
+            fieldCapture=publicFieldEvidence.update(publicProtocolEvidence,publicMechanicsEvidence);
+            fieldCapture=ownTransport.rebindOwnMegaY(ownChoiceLease,runtimeDomain,publicProtocolEvidence,
+                    publicMechanicsEvidence.observation(activePokemon.getPNX()),fieldCapture);
             var scope = new PublicMechanicsEvidence.Scope(domainScopes.get(com.maestroai.training.ExecutionCoverage.Operation.DAMAGE),
                     fieldCapture == null ? PublicTransitionState.Known.unknown() : fieldCapture.trickRoom());
             ownedProfiles.put("self", ownMechanicsProfile("self", activePokemon.getBattlePokemon(), false));

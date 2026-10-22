@@ -26,7 +26,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   const descriptors = privateKeys.map(key => Object.getOwnPropertyDescriptor(battle, key));
   for (const key of privateKeys) Object.defineProperty(battle, key, {configurable:true,
     get() { privateReads++; throw Error('private actor state read'); }});
-  const badRegistries = [];
+  const badRegistries = [], badSpecies = [];
   const restored = ['geomancy', 'thunder', 'psystrike', 'fireblast', 'spectralthief',...fieldDependencies];
   try {
     // Every calculator move must accept genuine native normalization. Warmed
@@ -305,6 +305,41 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       check(capture().current()&&!receipt.current(),'Accuracy method restoration revived its receipt');
     }
 
+    // Permanent own-form rebinding depends on these native public methods;
+    // equal source text cannot authorize a foreign closure.
+    for(const slot of ['formeChange','setSpecies','getSwitchRequestData','setAbility','clearVolatile']){
+      const prototype=modules.Pokemon.prototype,method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];
+      receipt=capture();prototype[slot]=foreign;
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(method!==foreign&&method.toString()===foreign.toString()&&rejected&&!receipt.current(),'Foreign own-form lifecycle method retained scope: '+slot);
+      prototype[slot]=method;check(capture().current()&&!receipt.current(),'Own-form method restoration revived receipt: '+slot);
+    }
+    {
+      const species=battle.dex.dataCache.Pokedex,definition=species.mewtwomegay;
+      for(const [key,value] of Object.entries({baseStats:{...definition.baseStats,spa:definition.baseStats.spa+1},
+          types:['Ghost'],abilities:{0:'Pressure'},baseSpecies:'Mew',forme:'Mega-X',requiredItem:'Mewtwonite X',gender:'M'})){
+        receipt=capture();species.mewtwomegay={...definition,[key]:value};
+        const altered=JSON.parse(capture().json);
+        check(!receipt.current()&&altered.components.speciesHooks!==original.components.speciesHooks,'Own Mega-Y metadata omitted from proof: '+key);
+        badSpecies.push(altered.components.speciesHooks);
+        species.mewtwomegay=definition;check(capture().current()&&!receipt.current(),'Own form restoration revived receipt: '+key);
+      }
+      if(Object.getOwnPropertyDescriptor(definition,'baseSpecies').writable){
+        receipt=capture();definition.baseSpecies='Mew';
+        check(!receipt.current(),'In-place own form metadata retained receipt');
+        definition.baseSpecies='Mewtwo';check(capture().current()&&!receipt.current(),'In-place form restoration revived receipt');
+      }
+      species.mewtwomegay={...definition};
+      Object.defineProperty(species.mewtwomegay,'baseSpecies',{get(){callbackCalls++;return 'Mewtwo';},enumerable:true});
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(rejected&&callbackCalls===0,'Own form metadata accessor executed or gained provenance');
+      species.mewtwomegay=definition;
+      const items=battle.dex.dataCache.Items,item=items.mewtwonitey;
+      receipt=capture();items.mewtwonitey={...item,megaStone:'Mewtwo-Mega-X'};
+      check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Mega stone form omitted from item proof');
+      items.mewtwonitey=item;check(capture().current()&&!receipt.current(),'Mega stone restoration revived receipt');
+    }
+
     // An unused custom move may coexist, but receives no selected-operation
     // certificate. Its presence must not disable unrelated ordinary actions.
     table.unusedfixture = {name:'Unused Fixture', onHit() { callbackCalls++; }};
@@ -328,7 +363,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       else delete battle[key];
     });
   }
-  return JSON.stringify({checks, selected:selectable.length, fieldDependencies:fieldDependencies.length, badRegistries});
+  return JSON.stringify({checks, selected:selectable.length, fieldDependencies:fieldDependencies.length, badRegistries, badSpecies});
 };
 
 // Cheap cross-language inventory check precedes the full native callback suite.
