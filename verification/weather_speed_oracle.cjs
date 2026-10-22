@@ -60,7 +60,7 @@ exports.run=function(Battle){
   for(const ability of abilities)for(const status of ['slp','frz','brn','psn','tox'])for(const enemy of [false,true])
     speeds.push(speed(config({ability,weather:weatherFor(ability),status,item:'choicescarf',wind:true},enemy)));
   for(const ability of abilities)for(const room of [false,true])for(const enemy of [false,true])boundaries.push(speed(config({ability,weather:weatherFor(ability),item:'utilityumbrella',room},enemy)));
-  for(const ability of abilities)for(const weather of ['desolateland','primordialsea','snow'])for(const enemy of [false,true])boundaries.push(speed(config({ability,weather},enemy)));
+  for(const ability of abilities)for(const weather of ['desolateland','primordialsea','snow','hail'])for(const enemy of [false,true])boundaries.push(speed(config({ability,weather},enemy)));
   for(const ability of abilities)for(const enemy of [false,true])boundaries.push(speed(config({ability,weather:weatherFor(ability),targetAbility:'neutralizinggas'},enemy)));
   function exchange(c){
     const {b,self,foe,target}=battle(c);let observed=null,checking=false;const order=[];
