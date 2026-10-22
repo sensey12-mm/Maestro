@@ -29,29 +29,49 @@ public final class ScopedExecution {
     private final Scopes scopes;
     private final String activeOwn;
     private final boolean ownFainted;
+    /** Conditional entry result, never an observed public field or future request. */
+    static final class WeatherProjection {
+        private final PublicFieldEvidence.Capture origin;
+        private final Known<String> weather;
+        private final Known<Integer> duration;
+        private WeatherProjection(PublicFieldEvidence.Capture origin,String weather,int duration){
+            this.origin=origin;String source=origin.token()+":source-certified-conditional-weather-entry";
+            this.weather=Known.of(weather,source);this.duration=Known.of(duration,source);
+        }
+    }
+    private final WeatherProjection projectedWeather;
     public ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Known<Boolean> remainingEffects) {
         this(field, actors, Scopes.all(Objects.requireNonNull(remainingEffects)));
     }
     public ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Scopes scopes) {
-        this(field,actors,scopes,"self",false);
+        this(field,actors,scopes,"self",false,null);
     }
     private ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Scopes scopes,
-                            String activeOwn,boolean ownFainted) {
+                            String activeOwn,boolean ownFainted,WeatherProjection projectedWeather) {
         this.field = Objects.requireNonNull(field); this.actors = Map.copyOf(actors); this.scopes = Objects.requireNonNull(scopes);
-        this.activeOwn=activeOwn;this.ownFainted=ownFainted;
+        this.activeOwn=activeOwn;this.ownFainted=ownFainted;this.projectedWeather=projectedWeather;
+        if(projectedWeather!=null&&projectedWeather.origin!=field)throw new IllegalArgumentException("foreign weather projection");
         var a = actors.get("self"); var f = actors.get("opponent");
         if (a != null && f != null && a.observation() != null && f.observation() != null
                 && a.observation().slot().substring(0, 2).equals(f.observation().slot().substring(0, 2)))
             throw new IllegalArgumentException("own/opponent execution bindings share a side");
     }
     public PublicFieldEvidence.Capture field() { return field; }
-    ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes,activeOwn,ownFainted); }
+    ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes,activeOwn,ownFainted,projectedWeather); }
     /** Internal action-queue frame. The evaluator supplies a reserve only after
      * certified legal entry and survival, or fainting after proven continuation.
      * Neither an entry arithmetic certificate nor a raw reserve activates it. */
     ScopedExecution conditionalParticipants(String own,boolean fainted) {
         if(!own.equals("self")&&!reserve(own))throw new IllegalArgumentException("unbound own participant");
-        return new ScopedExecution(field,actors,scopes,own,fainted);
+        return new ScopedExecution(field,actors,scopes,own,fainted,projectedWeather);
+    }
+    ScopedExecution conditionalWeather(WeatherProjection weather){return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,weather);}
+    Known<String> rawWeather(){return projectedWeather==null?field.weather():projectionCurrent()?projectedWeather.weather:Known.unknown();}
+    private boolean projectionCurrent(){return sourceCurrent()&&yes(scopes.get(Operation.ENTRY))&&yes(scopes.get(Operation.DAMAGE));}
+    Known<Integer> projectedWeatherDuration(){return projectedWeather!=null&&projectionCurrent()?projectedWeather.duration:Known.unknown();}
+    Known<Boolean> weatherAtResidual(){
+        if(!sourceCurrent())return Known.unknown();
+        return projectedWeather==null?field.weatherAtResidual():projectionCurrent()?Known.of(true,projectedWeather.weather.source()):Known.unknown();
     }
     ScopedExecution calculationFrame() { return withScopes(scopes.calculationFrame()); }
     boolean sourceCurrent() {
@@ -89,6 +109,31 @@ public final class ScopedExecution {
     String currentItem(String role){return item(role);}
     String currentAbility(String role){return ability(role);}
     private static boolean weatherSuppressor(String ability){return Set.of("airlock","cloudnine").contains(ability);}
+    private static String setterWeather(String ability){return switch(ability){
+        case "drought"->"sunnyday";case "drizzle"->"raindance";case "sandstream"->"sandstorm";case "snowwarning"->"snow";default->null;
+    };}
+    /** Native Start follows hazard survival. Same-weather abilities never refresh
+     * Gen9 duration, even under suppression. Primal queue/form evidence is absent. */
+    Known<Optional<WeatherProjection>> entryWeather(Profile reserve,Actor arriving,Actor foe){
+        bound(reserve,arriving);var c=new Check(Operation.ENTRY);c.actor(arriving.id(),true);
+        if(!actors.containsKey(arriving.id()))return Known.unknown();
+        String next=setterWeather(ability(arriving.id()));
+        if(next==null)return c.finish().supported()?Known.of(Optional.ofNullable(projectedWeather),field.token()+":no-weather-entry"):Known.unknown();
+        c.need("WEATHER_ENTRY_DAMAGE_SOURCE",yes(scopes.get(Operation.DAMAGE)));
+        c.need("WEATHER_ENTRY_PROVEN_PARTICIPANT",activeOwn.equals(arriving.id())&&!ownFainted);
+        c.actor(foe.id(),false);
+        c.need("WEATHER_ENTRY_OPPONENT",foe.id().equals("opponent"));
+        c.need("WEATHER_ENTRY_SURVIVAL",arriving.hp().known()&&arriving.hp().value().low()>0&&!arriving.facts().fainted());
+        c.need("WEATHER_ENTRY_FOE_PARTICIPATION",foe.hp().known()&&foe.hp().value().low()>0&&!foe.facts().fainted());
+        c.need("WEATHER_ENTRY_EXISTING_WEATHER",rawWeather().known());
+        String species=arriving.facts().species()==null?"":arriving.facts().species().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");
+        c.need("WEATHER_ENTRY_FORM_AND_PRIMAL_QUEUE",!species.isEmpty()&&!species.startsWith("groudon")&&!species.startsWith("kyogre"));
+        if(!c.finish().supported())return Known.unknown();
+        if(rawWeather().value().equals(next))return Known.of(Optional.ofNullable(projectedWeather),field.token()+":same-weather-no-refresh");
+        String rock=switch(next){case "sunnyday"->"heatrock";case "raindance"->"damprock";case "sandstorm"->"smoothrock";default->"icyrock";};
+        var result=new WeatherProjection(field,next,item(arriving.id()).equals(rock)?8:5);
+        return c.finish().supported()?Known.of(Optional.of(result),result.weather.source()):Known.unknown();
+    }
     private static String speedWeather(String ability){return switch(ability){
         case "sandrush" -> "sandstorm";
         case "chlorophyll" -> "sunnyday";
@@ -101,8 +146,8 @@ public final class ScopedExecution {
      * Current single-actor queries use the other fresh public observation;
      * conditional multi-actor calculations supply both projected actors. */
     private Known<String> weather(Check c,Actor... participants){
-        c.need("EFFECTIVE_WEATHER",field.weather().known());
-        if(!field.weather().known())return Known.unknown();
+        c.need("EFFECTIVE_WEATHER",rawWeather().known());
+        if(!rawWeather().known())return Known.unknown();
         var projected=new HashMap<String,Actor>();
         for(var actor:participants){
             c.need("WEATHER_REPLACEMENT_PARTICIPATION",Set.of(activeOwn,"opponent").contains(actor.id()));
@@ -112,7 +157,7 @@ public final class ScopedExecution {
             c.actor(role,reserve(role));
             c.need(role+":WEATHER_ACTIVE_ENTRY",!reserve(role)||projected.containsKey(role));
         }
-        if(field.weather().value().equals("none"))return c.finish().supported()?field.weather():Known.unknown();
+        if(rawWeather().value().equals("none"))return c.finish().supported()?rawWeather():Known.unknown();
         boolean suppressed=false;
         for(String role:List.of(activeOwn,"opponent")){
             var binding=actors.get(role);
@@ -132,7 +177,7 @@ public final class ScopedExecution {
                 c.need(role+":WEATHER_SUPPRESSOR_PARTICIPATION",active);suppressed|=active;
             }
         }
-        return c.finish().supported()?Known.of(suppressed?"none":field.weather().value(),field.token()+":effective-weather"):Known.unknown();
+        return c.finish().supported()?Known.of(suppressed?"none":rawWeather().value(),field.token()+":effective-weather"):Known.unknown();
     }
     Known<String> effectiveWeather(Actor... participants){return weather(new Check(Operation.DAMAGE),participants);}
     /** Native sun/rain checks may be actor-specific. Damage and Thunder use
@@ -155,10 +200,10 @@ public final class ScopedExecution {
         c.need("RESIDUAL_STATUS",actor.status().known()
                 &&Set.of("none","par","brn","psn").contains(actor.status().value()));
         c.need("RESIDUAL_HP",actor.hp().known());
-        c.need("RESIDUAL_WEATHER",field.weather().known()
-                &&Set.of("none","sunnyday","raindance","sandstorm","hail","snow").contains(field.weather().value()));
-        if(field.weather().known()&&Set.of("sandstorm","hail").contains(field.weather().value()))
-            c.need(field.weather().value().equals("hail")?"HAIL_CURRENT_TYPES":"SANDSTORM_CURRENT_TYPES",profile.types().known());
+        c.need("RESIDUAL_WEATHER",rawWeather().known()
+                &&Set.of("none","sunnyday","raindance","sandstorm","hail","snow").contains(rawWeather().value()));
+        if(rawWeather().known()&&Set.of("sandstorm","hail").contains(rawWeather().value()))
+            c.need(rawWeather().value().equals("hail")?"HAIL_CURRENT_TYPES":"SANDSTORM_CURRENT_TYPES",profile.types().known());
         c.need("RESIDUAL_TERRAIN",field.terrain().known()
                 &&Set.of("none","psychicterrain").contains(field.terrain().value()));
         return c.finish();
@@ -181,7 +226,7 @@ public final class ScopedExecution {
     public Set<String> unresolved() {
         Set<String> reasons = new TreeSet<>(field.unknown());
         if (Arrays.stream(Operation.values()).anyMatch(op -> !yes(scopes.get(op)))) reasons.add("UNANNOUNCED_PACK_OR_EXECUTION_EFFECTS_UNRESOLVED");
-        if (!field.weather().known() || !field.terrain().known() || !field.trickRoom().known() || !field.magicRoom().known())
+        if (!rawWeather().known() || !field.terrain().known() || !field.trickRoom().known() || !field.magicRoom().known())
             reasons.add("PUBLIC_FIELD_SCOPE_UNKNOWN");
         return Set.copyOf(reasons);
     }
@@ -207,12 +252,12 @@ public final class ScopedExecution {
                 need(role + ":OWN_TRANSPORT_FRESHNESS", yes(b.ownTransportCurrent()) && (b.lease() == null || b.lease().turn() == field.turn()));
                 if (b.lease() != null) leases.add(b.lease());
             }
-            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles", "utilityumbrella").contains(b.item().value()));
+            need(role + ":CURRENT_ITEM", b.item().known() && Set.of("none", "heavydutyboots", "choicescarf", "laggingtail", "powerherb", "marshadiumz", "leftovers", "lifeorb", "mewtwonitey", "safetygoggles", "utilityumbrella", "heatrock", "damprock", "smoothrock", "icyrock").contains(b.item().value()));
             // Pressure affects PP consumption, not the outcome of one already
             // legal, successful action. Future PP/requests are not certified.
             // Insomnia has no modifier on an already legal awake action. Its
             // sleep/Yawn immunity does not prove that Update cured current sleep.
-            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "insomnia", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower", "slushrush", "snowcloak", "icebody").contains(b.ability().value()));
+            need(role + ":CURRENT_ABILITY", b.ability().known() && Set.of("runaway", "magicguard", "pressure", "insomnia", "levitate", "prankster", "stall", "download", "technician", "multitype", "fairyaura", "asonespectrier", "shadowshield", "sandrush", "sandforce", "sandveil", "airlock", "cloudnine", "chlorophyll", "swiftswim", "raindish", "solarpower", "slushrush", "snowcloak", "icebody", "drought", "drizzle", "sandstream", "snowwarning").contains(b.ability().value()));
             // This actor check alone covers no entry ability activation.
             // Download and weather participation have separate entry gates.
             if (reserve) need(role + ":OWN_RESERVE_CHANNEL", !role.equals("opponent") && b.observation() == null);
@@ -227,9 +272,9 @@ public final class ScopedExecution {
     private boolean supported(String role, boolean reserve) {
         // Raw reserves cannot certify Download or active weather suppression.
         // The evaluator establishes legal entry and participation separately.
-        if(reserve&&(ability(role).equals("download")||weatherSuppressor(ability(role))))return false;
+        if(reserve&&(ability(role).equals("download")||weatherSuppressor(ability(role))||setterWeather(ability(role))!=null))return false;
         for (Operation op : Operation.values()) { var c = new Check(op); c.actor(role, reserve); if (!c.finish().supported()) return false; }
-        return field.weather().known() && field.terrain().known() && field.trickRoom().known() && field.magicRoom().known();
+        return rawWeather().known() && field.terrain().known() && field.trickRoom().known() && field.magicRoom().known();
     }
     private Profile certified(Profile p) {
         return new Profile(p.actor(), p.level(), p.maxHp(), p.stats(), p.types(), Known.of(true, field.token() + ":operation-certified"));
@@ -550,7 +595,7 @@ public final class ScopedExecution {
         Known<Boolean> wind = b == null || b.observation() == null ? Known.unknown() : field.tailwind(b.observation().slot());
         if (!base.known() || !wind.known()) return Known.unknown();
         String boostWeather=speedWeather(ability(a.id()));
-        var weather=boostWeather!=null?actorWeather(new Check(Operation.SPEED),a.id(),participants(a,others)):field.weather();
+        var weather=boostWeather!=null?actorWeather(new Check(Operation.SPEED),a.id(),participants(a,others)):rawWeather();
         if(boostWeather!=null&&!weather.known())return Known.unknown();
         int[] modifiers={item(a.id()).equals("choicescarf")?6144:4096,
                 wind.value()?8192:4096,boostWeather!=null&&(weather.value().equals(boostWeather)||ability(a.id()).equals("slushrush")&&weather.value().equals("hail"))?8192:4096};

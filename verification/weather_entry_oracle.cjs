@@ -26,7 +26,7 @@ exports.run=function(Battle,coldOnly=false){
   {id:'speed-chain',targetAbility:'swiftswim',weather:'raindance',targetItem:'choicescarf',targetWind:true,targetSpeed:101},
   {id:'speed-chain',targetAbility:'sandrush',weather:'sandstorm',targetItem:'choicescarf',targetWind:true,targetSpeed:101});
  for(const weather of ['sunnyday','raindance','sandstorm'])seeds.push({id:'miss',weather,reply:'thunder'});
- }else{
+ }else if(coldOnly===true){
   for(const weather of ['snow','hail']){
    seeds.push({id:'weather-reply',weather,reply:'psyshock',reserveTypes:['ice']});
    seeds.push({id:'cold-speed',weather,targetAbility:'slushrush',targetItem:'choicescarf',targetWind:true,targetStatus:'par',targetSpeed:101,reply:'tackle'});
@@ -37,9 +37,31 @@ exports.run=function(Battle,coldOnly=false){
    for(const weatherMode of ['upkeep','ended'])seeds.push({id:'clock',weather,weatherMode,reply:'bulkup'});
   }
  }
+ if(coldOnly==='setter'){
+  // Declared owner choices in either native position, never hidden reserve facts.
+  seeds.length=0;
+  for(const weather of ['none','sunnyday','raindance','sandstorm','hail','snow'])for(const reply of ['fireblast','thunder','psyshock','bulkup'])
+   seeds.push({id:'weather-reply',weather,reply,reserveTypes:['ice','rock']});
+  for(const targetAbility of ['airlock','cloudnine','sandrush','sandforce','sandveil','chlorophyll','swiftswim','slushrush','snowcloak','icebody','raindish','solarpower'])
+   seeds.push({id:'setter-composition',weather:'none',targetAbility,targetItem:'leftovers',targetHp:500,reply:'thunder'});
+  for(const reserveItem of ['heatrock','damprock','smoothrock','icyrock','utilityumbrella'])for(const magicRoom of [false,true])
+   seeds.push({id:'setter-rock',weather:'none',reserveItem,magicRoom,reply:'fireblast'});
+  for(const weather of ['sunnyday','raindance','sandstorm','snow'])for(const weatherDuration of [1,8])
+   seeds.push({id:'setter-clock',weather,weatherMode:'upkeep',weatherDuration,targetAbility:{sunnyday:'solarpower',raindance:'raindish',sandstorm:'runaway',snow:'icebody'}[weather],reply:'bulkup'});
+  for(const reserveHp of [124,125,126])for(const reserveItem of ['', 'heavydutyboots'])for(const magicRoom of [false,true])
+   seeds.push({id:'entry-survival',weather:'none',reserveHp,reserveItem,magicRoom,hazards:{stealthrock:1},reply:'bulkup'});
+  for(const ownBench of [0,1,2])for(const foeBench of [0,1])seeds.push({id:'party',weather:'none',ownBench,foeBench,reply:'bulkup'});
+  seeds.push({id:'blocked',weather:'none',protect:true,reply:'bulkup'},
+   {id:'target-faint',weather:'none',targetHp:1,reply:'bulkup'},
+   {id:'slow',weather:'none',userSpeed:100,targetSpeed:300,reply:'fireblast'},
+   {id:'recoil',weather:'none',hp:100,item:'lifeorb',reply:'bulkup'},
+   {id:'queue-speed',weather:'raindance',targetAbility:'swiftswim',userSpeed:301,targetSpeed:201,reply:'tackle'},
+   {id:'queue-speed',weather:'sunnyday',targetAbility:'chlorophyll',userSpeed:301,targetSpeed:201,reply:'tackle'},
+   {id:'miss',weather:'none',reply:'thunder'});
+ }
  const rows=[];
- for(const suppressor of ['airlock','cloudnine'])for(const direction of ['enter','depart','retain'])for(const mode of ['switch','pivot'])for(const seed of seeds)for(const enemy of [false,true]){
-  if(direction==='retain'&&!['weather-reply','hazards','clock','recoil'].includes(seed.id))continue;
+ for(const suppressor of (coldOnly==='setter'?['drought','drizzle','sandstream','snowwarning']:['airlock','cloudnine']))for(const direction of ['enter','depart','retain'])for(const mode of ['switch','pivot'])for(const seed of seeds)for(const enemy of [false,true]){
+  if(direction==='retain'&&!(coldOnly==='setter'?['setter-clock','setter-rock']:['weather-reply','hazards','clock','recoil']).includes(seed.id))continue;
   const c={id:'entry',reply:'tackle',hp:500,targetHp:1000,userSpeed:300,targetSpeed:100,item:'',ownBench:1,foeBench:1,
    reserveMax:1000,reserveHp:1000,reserveTypes:['normal'],reserveItem:'',reserveStatus:'none',hazards:{},magicRoom:false,protect:false,
    weather:'sandstorm',weatherMode:'fresh',targetAbility:'runaway',targetItem:'none',targetTypes:['normal'],targetAttack:220,targetSpecialAttack:220,
@@ -61,8 +83,8 @@ exports.run=function(Battle,coldOnly=false){
   if(c.magicRoom)b.field.addPseudoWeather('magicroom',user);
   if(c.trickRoom)b.field.addPseudoWeather('trickroom',user);
   if(c.targetWind)target.side.addSideCondition('tailwind',target);
-  b.field.setWeather(c.weather,user);
-  if(c.weatherMode==='upkeep')b.field.weatherState.duration=1;
+  b.field.clearWeather();if(c.weather!=='none')b.field.setWeather(c.weather,user);
+  if(c.weatherMode==='upkeep')b.field.weatherState.duration=c.weatherDuration||1;
   if(c.weatherMode==='ended')b.field.clearWeather();
   if(c.protect)target.addVolatile('protect');
   for(const [id,layers]of Object.entries(c.hazards))for(let i=0;i<layers;i++)user.side.addSideCondition(id,target);
@@ -91,13 +113,58 @@ exports.run=function(Battle,coldOnly=false){
   if(mode==='switch')b.makeChoices(enemy?'move 1':'switch 2',enemy?'switch 2':'move 1');else b.makeChoices('move 1','move 1');
   if(!pre&&!b.ended&&b.requestState==='switch')b.makeChoices(enemy?'':'switch 2',enemy?'switch 2':'');
   if(!pre)throw Error('Native weather entry boundary missing '+JSON.stringify(c));
-  if(entry&&entry.selfHp>0&&c.targetAbility!=='neutralizinggas'){
+  if(coldOnly!=='setter'&&entry&&entry.selfHp>0&&c.targetAbility!=='neutralizinggas'){
    const expected=c.weatherMode==='ended'||direction!=='depart'||['airlock','cloudnine'].includes(c.targetAbility)?'none':c.weather;
    if(entry.effective!==expected)throw Error('Native active weather did not follow entry/departure');
   }
-  if(c.weatherMode==='upkeep'&&post.weather!=='none')throw Error('Suppressed weather clock stopped ticking');
+  if(coldOnly!=='setter'&&c.weatherMode==='upkeep'&&post.weather!=='none')throw Error('Suppressed weather clock stopped ticking');
   rows.push({config:c,entry,probe,pre,post,trace,ended:b.ended});
  }
  return rows;
 };
-if(typeof process!=='undefined'&&process.argv&&require.main===module){const rows=exports.run(require(require('path').resolve(process.argv[2],'sim/battle')).Battle);if(process.argv[3])require('fs').writeFileSync(process.argv[3],JSON.stringify(rows));console.log('Weather suppressor entry oracle PASS: '+rows.length+' queued entries/departures');}
+
+// Native generation and item clocks are labels; forecasts never read native counters.
+exports.setterClocks=function(Battle){
+ const rows=[];
+ for(const gen of [5,6,8,9])for(const ability of ['drought','drizzle','sandstream','snowwarning'])for(const extended of [false,true])for(const room of [false,true]){
+  const weather={drought:'sunnyday',drizzle:'raindance',sandstream:'sandstorm',snowwarning:gen===9?'snow':'hail'}[ability];
+  const item=extended?{drought:'heatrock',drizzle:'damprock',sandstream:'smoothrock',snowwarning:'icyrock'}[ability]:'';
+  const b=new Battle({formatid:'gen'+gen+'customgame',seed:[7,11,13,17]});
+  const set=(a,i)=>({species:'Mew',ability:a,item:i,moves:['splash'],movesInfo:[{pp:40,maxPp:40}],level:100});
+  b.setPlayer('p1',{team:[set(ability,item)]});b.setPlayer('p2',{team:[set('runaway','')]});if(b.requestState==='teampreview')b.makeChoices('team 1','team 1');
+  const user=b.p1.active[0];if(room)b.field.addPseudoWeather('magicroom',user);b.field.clearWeather();
+  b.singleEvent('Start',user.getAbility(),user.abilityState,user);
+  const duration=b.field.weatherState.duration;
+  if(b.field.weather!==weather||duration!==(gen===5?0:extended&&!room?8:5))throw Error('Native setter generation/item clock changed');
+  if(duration)b.field.weatherState.duration=2;
+  b.singleEvent('Start',user.getAbility(),user.abilityState,user);
+  rows.push({gen,ability,item,room,weather,duration,repeated:b.field.weatherState.duration});
+  if(b.field.weatherState.duration!==(duration?2:0))throw Error('Native same-weather ability refreshed duration');
+ }
+ return rows;
+};
+
+exports.setterPrimal=function(Battle){
+ const rows=[];
+ for(const ability of ['drought','drizzle'])for(const queued of [false,true]){
+  const b=new Battle({format:{mod:'cobblemon',gameType:'singles',gen:9,ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'},seed:[7,11,13,17]});
+  const set=(species,a)=>({species,ability:a,moves:['splash'],movesInfo:[{pp:40,maxPp:40}],level:100});
+  b.setPlayer('p1',{team:[set(ability==='drought'?'Groudon':'Kyogre',ability)]});b.setPlayer('p2',{team:[set('Mew','runaway')]});
+  if(b.requestState==='teampreview')b.makeChoices('team 1','team 1');
+  const user=b.p1.active[0];b.field.clearWeather();
+  if(queued)b.queue.insertChoice({choice:'runPrimal',pokemon:user});
+  b.singleEvent('Start',user.getAbility(),user.abilityState,user);
+  const weather=b.field.weather||'none';
+  if(weather!==(queued?'none':ability==='drought'?'sunnyday':'raindance'))throw Error('Native Primal queue weather deferral changed');
+  rows.push({ability,queued,weather});
+ }
+ return rows;
+};
+
+if(typeof process!=='undefined'&&process.argv&&require.main===module){
+ const Battle=require(require('path').resolve(process.argv[2],'sim/battle')).Battle,mode=process.argv[3]==='--setters'?'setter':false;
+ const rows=exports.run(Battle,mode);
+ if(process.argv[3]&&!process.argv[3].startsWith('--'))require('fs').writeFileSync(process.argv[3],JSON.stringify(rows));
+ console.log((mode?'Weather setter':'Weather suppressor entry')+' native oracle PASS: '+rows.length+' queued entries/departures');
+ if(mode){console.log('Weather setter native generation/duration oracle PASS: '+exports.setterClocks(Battle).length+' controls');console.log('Weather setter native Primal queue oracle PASS: '+exports.setterPrimal(Battle).length+' controls');}
+}

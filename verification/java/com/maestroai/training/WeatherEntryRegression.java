@@ -70,13 +70,15 @@ final class WeatherEntryRegression {
         }
         System.out.println("Weather entry evidence regressions PASS: "+checks+" checks; certified participation, branch isolation, hazards, missing evidence and receipt withdrawal");
     }
-    static void differential(Context engine)throws Exception{differential(engine,false);}
-    static void coldDifferential(Context engine)throws Exception{differential(engine,true);}
-    private static void differential(Context engine,boolean cold)throws Exception{
+    static void differential(Context engine)throws Exception{differential(engine,"false");}
+    static void coldDifferential(Context engine)throws Exception{differential(engine,"true");}
+    static void setterDifferential(Context engine)throws Exception{differential(engine,"'setter'");}
+    private static void differential(Context engine,String mode)throws Exception{
+        boolean cold=mode.equals("true"),setter=mode.equals("'setter'");
         String source=Files.readString(Path.of("verification/weather_entry_oracle.cjs"));
-        var rows=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle,"+cold+"));})()").asString()).getAsJsonArray();
-        check(rows.size()==(cold?432:1976),"Native weather entry inventory changed: "+rows.size());
-        System.out.println((cold?"Cold weather entry native inventory captured: ":"Weather entry native inventory captured: ")+rows.size()+" queued cases");
+        var rows=JsonParser.parseString(engine.eval("js","(()=>{const exports={};"+source+";return JSON.stringify(exports.run(require('./sim/battle').Battle,"+mode+"));})()").asString()).getAsJsonArray();
+        check(rows.size()==(setter?2784:cold?432:1976),"Native weather entry inventory changed: "+rows.size());
+        System.out.println((setter?"Weather setter native inventory captured: ":cold?"Cold weather entry native inventory captured: ":"Weather entry native inventory captured: ")+rows.size()+" queued cases");
         int bounded=0,unknown=0,probes=0,damageRolls=0;var hidden=new HashMap<String,ShadowMechanicsEvaluation.Ranking>();
         for(var value:rows){var row=value.getAsJsonObject();var nativeCase=new Case(row.getAsJsonObject("config"));
             // Both native positions are DECLARED own-entry counterfactuals.
@@ -87,6 +89,14 @@ final class WeatherEntryRegression {
                 var probe=row.getAsJsonObject("probe");var current=f.execution().conditionalParticipants("reserve0",false);
                 var a=observed("reserve0",f.mechanics().transitions().context().switchTargets().get("reserve0").facts(),probe,"self");
                 var t=observed("opponent",root(f).opponent().facts(),probe,"foe");
+                if(setter){
+                    var change=current.entryWeather(f.profiles().get("reserve0"),a,t);
+                    check(change.known(),"Certified native setter entry lost weather proof: "+c.data());
+                    current=current.conditionalWeather(change.value().orElse(null));
+                    check(current.rawWeather().value().equals(probe.get("weather").getAsString()),"Native raw weather entry differs");
+                    if(!c.s("direction").equals("depart")&&!c.s("weather").equals(probe.get("weather").getAsString()))
+                        check(current.projectedWeatherDuration().known()&&current.projectedWeatherDuration().value()==probe.get("duration").getAsInt(),"Native weather rock/duration differs: "+c.data());
+                }
                 check(current.effectiveWeather(a,t).known()&&current.effectiveWeather(a,t).value().equals(probe.get("effective").getAsString()),"Native entry effective weather differs");
                 var speed=current.speed(f.profiles().get("opponent"),t,a);int nativeSpeed=probe.get("speed").getAsInt();
                 check(speed.known()&&speed.value().low()<=nativeSpeed&&speed.value().high()>=nativeSpeed,"Native entry speed excluded: "+c.data()+" / "+speed);
@@ -106,7 +116,9 @@ final class WeatherEntryRegression {
                 boolean recoil=!switching&&c.s("id").equals("recoil")&&c.n("hp")==100&&c.n("ownBench")>0;
                 boolean stopped=!switching&&c.b("protect");
                 boolean supported=!unsupported&&(stopped||recoil||entered&&(switching||c.n("ownBench")==1&&c.n("targetHp")>80));
-                if(end&&(c.s("weatherMode").equals("upkeep")||expected.get("foeHp").getAsDouble()==0
+                boolean unknownClock=c.s("weatherMode").equals("upkeep");
+                if(setter&&entered&&row.getAsJsonObject("entry").get("weather").getAsString().equals(c.s("weather"))==false)unknownClock=false;
+                if(end&&(unknownClock||expected.get("foeHp").getAsDouble()==0
                         ||!recoil&&expected.get("selfHp").getAsDouble()==0
                         ||entered&&Set.of("tox","slp","frz").contains(expected.get("selfStatus").getAsString())))supported=false;
                 if(supported){bounded++;check(actual.utility().known()&&actual.lines().stream().anyMatch(l->matches(l,expected)),"Native weather entry excluded: "+c.data()+" / end="+end+" / "+expected+" / "+actual);}
@@ -115,7 +127,7 @@ final class WeatherEntryRegression {
             }
             if(nativeCase.b("enemy")&&!switching){var other=rank(fixture(nativeCase,""),false,false);check(!other.utility().known()||nativeCase.b("protect"),"Actual hidden opponent replacement gained weather scope");}
         }
-        System.out.println((cold?"Cold weather entry native differential PASS:":"Weather entry native differential PASS:")+" "+rows.size()+" queued entries/departures across both native roles; "+probes+" declared owner-entry probes, "+damageRolls+" critical/roll outcomes; "+bounded+" bounded / "+unknown+" UNKNOWN at two boundaries; damage, accuracy, speed, residuals, hazards, clocks and party privacy");
+        System.out.println((setter?"Weather setter native differential PASS:":cold?"Cold weather entry native differential PASS:":"Weather entry native differential PASS:")+" "+rows.size()+" queued entries/departures across both native roles; "+probes+" declared owner-entry probes, "+damageRolls+" critical/roll outcomes; "+bounded+" bounded / "+unknown+" UNKNOWN at two boundaries; damage, accuracy, speed, residuals, hazards, clocks and party privacy");
     }
     private static Actor observed(String id,BattleSnapshot.Combatant facts,JsonObject row,String role){
         var stages=new TreeMap<String,Integer>();row.getAsJsonObject(role+"Stages").entrySet().forEach(e->stages.put(e.getKey(),e.getValue().getAsInt()));double hp=row.get(role+"Hp").getAsDouble();

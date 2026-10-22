@@ -171,7 +171,17 @@ public final class PublicFieldEvidence {
             }
             if (event.equals("-weather")) {
                 String value = p.length >= 3 ? key(p[2]) : "";
-                boolean fresh=p.length==3&&(!weather.known()||!weather.value().equals(value));
+                boolean nativeAbilityStart=false;
+                if(p.length==5&&p[3].startsWith("[from] ability: ")&&p[4].startsWith("[of] ")){
+                    String ability=key(p[3].substring("[from] ability: ".length()));
+                    String source=p[4].substring(5),slot=source.split(":",2)[0].trim();
+                    Mutable actor=active.get(slot);
+                    nativeAbilityStart=actor!=null&&actor.name.equals(source)&&Objects.equals(
+                            Map.of("drought","sunnyday","drizzle","raindance","sandstream","sandstorm","snowwarning","snow").get(ability),value);
+                }
+                if(p.length>3&&p[3].startsWith("[from] ability: ")&&!nativeAbilityStart)
+                    unknown.add("WEATHER_ABILITY_ATTRIBUTION_UNRESOLVED");
+                boolean fresh=(p.length==3||nativeAbilityStart)&&(!weather.known()||!weather.value().equals(value));
                 if(!Set.of("sunnyday","raindance","sandstorm","hail","snow").contains(value))weatherStartTurn=-1;
                 else if(fresh)weatherStartTurn=Math.max(1,turn);
                 if (Set.of("none", "sunnyday", "raindance","sandstorm","hail","snow").contains(value)) weather = Known.of(value, SOURCE + ":weather-event");

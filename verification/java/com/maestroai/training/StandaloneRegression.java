@@ -351,6 +351,7 @@ public final class StandaloneRegression {
         DownloadEntryRegression.run();
         WeatherEntryRegression.run();
         ColdWeatherRegression.run();
+        WeatherSetterRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

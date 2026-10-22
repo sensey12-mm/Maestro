@@ -47,7 +47,7 @@ public final class ShadowMechanicsEvaluation {
         public Comparison { rankings = List.copyOf(rankings); }
     }
     private record Progress(State state, double dealtLow, double dealtHigh,
-                             double lostLow, double lostHigh, Set<String> unknown, boolean skipNext,String activeOwn) {}
+                             double lostLow, double lostHigh, Set<String> unknown, boolean skipNext,String activeOwn,ScopedExecution.WeatherProjection weather) {}
 
     public static Comparison compare(BattleSnapshot snapshot, PublicMechanics mechanics,
                                      Map<String, Profile> profiles, List<Plan> plans,
@@ -94,7 +94,7 @@ public final class ShadowMechanicsEvaluation {
             List<Line> lines = new ArrayList<>(); Set<String> unknown = new TreeSet<>();
             for (List<Turn> turns : plan.scenarios()) {
                 if (turns.size() != horizon) throw new IllegalArgumentException("incomparable horizon lengths");
-                List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of(),false,"self"));
+                List<Progress> branches = List.of(new Progress(root, 0, 0, 0, 0, Set.of(),false,"self",null));
                 for (int i = 0; i < turns.size(); i++) {
                     List<Progress> expanded = new ArrayList<>();
                     for (Progress branch : branches) {
@@ -241,7 +241,7 @@ public final class ShadowMechanicsEvaluation {
         if(!p.unknown().isEmpty())return List.of(p);
         execution=participants(p,execution);
         if(p.skipNext())return List.of(new Progress(p.state(),p.dealtLow(),p.dealtHigh(),
-                p.lostLow(),p.lostHigh(),p.unknown(),false,p.activeOwn()));
+                p.lostLow(),p.lostHigh(),p.unknown(),false,p.activeOwn(),p.weather()));
         Actor attacker=own?p.state().self():p.state().opponent();
         Actor target=own?p.state().opponent():p.state().self();
         if(zero(attacker)||zero(target)&&!p.state().forcedReplacement())return List.of(p);
@@ -310,7 +310,7 @@ public final class ShadowMechanicsEvaluation {
         var state=state(primary.state(),own?primary.state().self():modified,
                 own?modified:primary.state().opponent(),primary.state().actionKind(),primary.state().action());
         var proc=new Progress(state,primary.dealtLow(),primary.dealtHigh(),primary.lostLow(),
-                primary.lostHigh(),primary.unknown(),effect.flinch(),primary.activeOwn());
+                primary.lostHigh(),primary.unknown(),effect.flinch(),primary.activeOwn(),primary.weather());
         return effect.chance()==100?List.of(proc):List.of(primary,proc);
     }
     private static boolean statusCanProc(Actor actor,String change,Map<String,Profile> profiles) {
@@ -364,7 +364,7 @@ public final class ShadowMechanicsEvaluation {
                 Actor healed = actor(attacker, new Interval(Math.min(1, hp.low() + recovery), Math.min(1, hp.high() + recovery)), attacker.stages());
                 State changed = state(p.state(), own ? healed : target, own ? target : healed, p.state().actionKind(), p.state().action());
                 return new Progress(changed, p.dealtLow() - (own ? 0 : high), p.dealtHigh() - (own ? 0 : low),
-                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown(),p.skipNext(),p.activeOwn());
+                        p.lostLow() - (own ? high : 0), p.lostHigh() - (own ? low : 0), p.unknown(),p.skipNext(),p.activeOwn(),p.weather());
             }
             Map<String, Integer> stages = new TreeMap<>(attacker.stages());
             for (var e : move.boosts().entrySet()) {
@@ -543,8 +543,8 @@ public final class ShadowMechanicsEvaluation {
         }
         var effectiveWeather=execution.effectiveWeather(p.state().self(),p.state().opponent());
         if(!effectiveWeather.known())return unknown(p,"RESIDUAL_WEATHER_PARTICIPATION_UNKNOWN");
-        if(Set.of("sandstorm","hail","snow").contains(execution.field().weather().value())) {
-            var active=execution.field().weatherAtResidual();
+        if(Set.of("sandstorm","hail","snow").contains(execution.rawWeather().value())) {
+            var active=execution.weatherAtResidual();
             if(!active.known())return unknown(p,"WEATHER_RESIDUAL_DURATION_UNKNOWN");
             // Native weather order 1 runs eachEvent(Weather) for all actives
             // before faintMessages. A first weather KO does not skip the other
@@ -587,7 +587,7 @@ public final class ShadowMechanicsEvaluation {
                 boolean heal=ability.equals("raindish")&&weather.value().equals("raindance");
                 boolean cost=ability.equals("solarpower")&&weather.value().equals("sunnyday");
                 if(!heal&&!cost)continue;
-                if(!execution.field().weatherAtResidual().known())return unknown(p,"WEATHER_ABILITY_RESIDUAL_DURATION_UNKNOWN");
+                if(!execution.weatherAtResidual().known())return unknown(p,"WEATHER_ABILITY_RESIDUAL_DURATION_UNKNOWN");
                 int max=profiles.get(actor.id()).maxHp().value().low();
                 p=residualHp(p,own,max,(heal?1:-1)*Math.max(1,max/(heal?16:8)));
                 if(!p.unknown().isEmpty())return p;
@@ -650,7 +650,7 @@ public final class ShadowMechanicsEvaluation {
         double lostLow=Math.min(low-afterLow,high-afterHigh)/(double)max;
         double lostHigh=Math.max(low-afterLow,high-afterHigh)/(double)max;
         return new Progress(s,p.dealtLow()+(own?0:lostLow),p.dealtHigh()+(own?0:lostHigh),
-                p.lostLow()+(own?lostLow:0),p.lostHigh()+(own?lostHigh:0),p.unknown(),p.skipNext(),p.activeOwn());
+                p.lostLow()+(own?lostLow:0),p.lostHigh()+(own?lostHigh:0),p.unknown(),p.skipNext(),p.activeOwn(),p.weather());
     }
     /** Positive own-reserve evidence only. An empty list never proves party
      * exhaustion; opponent roster size and identity are never consulted.
@@ -736,8 +736,10 @@ public final class ShadowMechanicsEvaluation {
         Actor boosted=stageEffect(swapped.state().self(),boosts.value());
         if(boosted==null)return unknown(swapped,"ENTRY_ABILITY_STAGE_DOMAIN_UNKNOWN");
         swapped=replace(swapped,state(swapped.state(),boosted,swapped.state().opponent(),kind,action));
+        var weather=execution.conditionalParticipants(id,false).entryWeather(reserve,swapped.state().self(),swapped.state().opponent());
+        if(!weather.known())return unknown(swapped,"ENTRY_WEATHER_ACTIVATION_OR_PARTICIPATION_UNKNOWN");
         return new Progress(swapped.state(),swapped.dealtLow(),swapped.dealtHigh(),swapped.lostLow(),swapped.lostHigh(),
-                swapped.unknown(),swapped.skipNext(),id);
+                swapped.unknown(),swapped.skipNext(),id,weather.value().orElse(null));
     }
     private static Actor stageEffect(Actor actor,Map<String,Integer> changes){
         var stages=new TreeMap<>(actor.stages());
@@ -756,7 +758,7 @@ public final class ShadowMechanicsEvaluation {
         State state=state(p.state(),own?after:p.state().self(),own?p.state().opponent():after,
                 p.state().actionKind(),p.state().action());
         return new Progress(state,p.dealtLow()-(own?0:hi),p.dealtHigh()-(own?0:lo),
-                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown(),p.skipNext(),p.activeOwn());
+                p.lostLow()-(own?hi:0),p.lostHigh()-(own?lo:0),p.unknown(),p.skipNext(),p.activeOwn(),p.weather());
     }
     private static Progress hurt(Progress p, boolean self, Interval damage) {
         Actor a = self ? p.state().self() : p.state().opponent(); Interval hp = a.hp().value();
@@ -765,7 +767,7 @@ public final class ShadowMechanicsEvaluation {
         State s = state(p.state(), self ? changed : p.state().self(), self ? p.state().opponent() : changed,
                 p.state().actionKind(), p.state().action());
         return new Progress(s, p.dealtLow() + (self ? 0 : low), p.dealtHigh() + (self ? 0 : high),
-                p.lostLow() + (self ? low : 0), p.lostHigh() + (self ? high : 0), p.unknown(),p.skipNext(),p.activeOwn());
+                p.lostLow() + (self ? low : 0), p.lostHigh() + (self ? high : 0), p.unknown(),p.skipNext(),p.activeOwn(),p.weather());
     }
     private static Actor actor(Actor a, Interval hp, Map<String, Integer> stages) {
         var f = a.facts(); double point = hp.low() == hp.high() ? hp.low() : BattleSnapshot.UNKNOWN_HP_FRACTION;
@@ -780,15 +782,15 @@ public final class ShadowMechanicsEvaluation {
                 kind, action, List.of(), List.of(), false, false, s.forcedReplacement(), false);
     }
     private static Progress replace(Progress p, State s) {
-        return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown(),p.skipNext(),p.activeOwn());
+        return new Progress(s, p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), p.unknown(),p.skipNext(),p.activeOwn(),p.weather());
     }
     private static Progress unknown(Progress p, String reason) {
         Set<String> unknown = new TreeSet<>(p.unknown()); unknown.add(reason);
-        return new Progress(p.state(), p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), Set.copyOf(unknown),p.skipNext(),p.activeOwn());
+        return new Progress(p.state(), p.dealtLow(), p.dealtHigh(), p.lostLow(), p.lostHigh(), Set.copyOf(unknown),p.skipNext(),p.activeOwn(),p.weather());
     }
     private static ScopedExecution participants(Progress p,ScopedExecution execution) {
         return execution==null?null:execution.conditionalParticipants(p.activeOwn(),
-                p.state().forcedReplacement()&&zero(p.state().self()));
+                p.state().forcedReplacement()&&zero(p.state().self())).conditionalWeather(p.weather());
     }
     private static boolean zero(Actor a) { return a.hp().known() && a.hp().value().high() == 0; }
     private static boolean possibleFaint(Actor a) { return a.hp().known() && a.hp().value().low() == 0; }

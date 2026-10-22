@@ -61,7 +61,7 @@ final class UtilityUmbrellaRegression {
             var reserve=fixture(change(number(change(c,"targetItem","none"),"ownBench",1),"ownBenchItem","utilityumbrella"),"");
             check(speed(reserve).value().equals(IntRange.exact(202)),"Inactive reserve umbrella filtered active weather");
             for(String unsupported:List.of("desolateland","primordialsea","deltastream"))check(!rank(fixture(change(c,"weather",unsupported),""),true).utility().known(),"Umbrella certified unsupported weather");
-            for(String item:List.of("heatrock","damprock"))check(!damage(fixture(change(c,"targetItem",item),""),Critical.BOTH).points().known(),"Umbrella certified a duration item");
+            for(String item:List.of("expertbelt","choiceband"))check(!damage(fixture(change(c,"targetItem",item),""),Critical.BOTH).points().known(),"Umbrella certified a duration item");
             var source=fixture(c,"");var cert=coverage(source);source.current().set(false);check(!cert.supported()&&!rank(source,true).utility().known(),"Expired source retained umbrella forecast");
             var expired=fixture(c,"");var receipt=coverage(expired);expired.owner().endChoice();check(!receipt.supported()&&!rank(expired,true).utility().known(),"Expired own request retained umbrella scope");
             var field=fixture(c,"");field.fields().reset();boolean stale=false;try{rank(field,true);}catch(IllegalArgumentException rejected){stale=true;}check(stale,"Expired field retained umbrella weather");

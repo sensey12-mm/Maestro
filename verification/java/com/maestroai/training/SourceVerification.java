@@ -87,6 +87,7 @@ public final class SourceVerification {
             DownloadEntryRegression.differential(engine);
             WeatherEntryRegression.differential(engine);
             ColdWeatherRegression.differential(engine);
+            WeatherSetterRegression.differential(engine);
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);
             ModifierCompositionRegression.differential(engine);

@@ -89,6 +89,18 @@ public final class PublicMechanicsEvidence {
         for (String line : trusted.mechanicsEvents()) {
             String[] p = line.split("\\|", -1); if (p.length < 3) continue;
             String event = p[1], name = p[2].trim();
+            // Exact native public weather attribution reveals this entry's
+            // current ability, never its item, reserves or true species identity.
+            if(event.equals("-weather")&&p.length==5&&p[3].startsWith("[from] ability: ")&&p[4].startsWith("[of] ")){
+                String ability=id(p[3].substring("[from] ability: ".length()));
+                String source=p[4].substring(5),sourceSlot=source.split(":",2)[0].trim();
+                Mutable actor=active.get(sourceSlot);
+                if(actor!=null&&actor.name.equals(source)&&!actor.ambiguous&&!actor.unsupported&&Objects.equals(
+                        Map.of("drought","sunnyday","drizzle","raindance","sandstream","sandstorm","snowwarning","snow").get(ability),id(p[2])))
+                    actor.ability=known(ability,actor,"public-weather-ability-attribution");
+                else if(actor!=null&&actor.name.equals(source))actor.ability=Known.unknown();
+                continue;
+            }
             if (event.equals("turn") || event.equals("move"))
                 active.values().forEach(a -> a.entryAnnouncementOpen = false);
             String slot = name.contains(":") ? name.substring(0, name.indexOf(':')).trim() : "";
