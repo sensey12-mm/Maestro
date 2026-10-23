@@ -33,8 +33,9 @@ module.exports=function(Battle){
       if(move.id!=='soulstealing7starstrike'||move.basePower!==195||move.accuracy!==true||move.stealsBoosts)throw Error('Native signature Z definition changed');
       target.getMoveHitData(move).zBrokeProtect=boundary==='protect';
       b.randomizer=n=>Math.floor(n*roll/100);
-      const damage=boundary==='immune'?0:b.actions.getDamage(user,target,move,true);
-      values.push({crit,roll,damage});
+      const damage=b.actions.getDamage(user,target,move,true);
+      if(damage!==false&&typeof damage!=='number')throw Error('Missing native Z damage outcome');
+      values.push({crit,roll,damage:damage===false?0:damage});
     }
     // Damage-oracle probes emit native -zbroken annotations. Discard only
     // those test-probe emissions before running the independent real action.
@@ -42,12 +43,13 @@ module.exports=function(Battle){
     // Full native execution independently verifies consumption, PP and public
     // event ordering, including Protect and immunity. No hand-written result.
     b.randomChance=(n,d)=>n>=d;b.random=()=>0;
-    const pp=user.moveSlots[0].pp,stages={...target.boosts};
+    const pp=user.moveSlots[0].pp,stages={...target.boosts},targetHp=target.hp;
     const choices=owner===0?['move 1 zmove','move 1']:['move 1','move 1 zmove'];
     b.makeChoices(...choices);
     const events=publicLog(b.log),after=b.getRequests('move')[owner];
     if(!b[side].zMoveUsed||user.moveSlots[0].pp!==pp-2||after.active[0].canZMove)throw Error('Native use/Pressure PP/eligibility boundary changed');
     if(!events.includes('|-zpower|'+side+'a: '+uuid(1)+'\n|move|'+side+'a: '+uuid(1)+'|Soul-Stealing 7-Star Strike|'+other+'a: '+uuid(3)+'|[zeffect]'))throw Error('Native activation ordering changed');
+    if(boundary==='immune'&&target.hp!==targetHp)throw Error('Native Z damaged immune target');
     if(boundary==='protect'&&!events.includes('|-zbroken|'))throw Error('Native Z must pierce Protect');
     if(user.boosts.atk!==0||user.boosts.def!==0||target.boosts.def<stages.def)throw Error('Z incorrectly stole Spectral Thief boosts');
     rows.push({side,level,boundary,status:status||'none',room,request,public:history,after:JSON.parse(JSON.stringify(after)),afterPublic:events,values,
