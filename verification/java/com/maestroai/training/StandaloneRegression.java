@@ -334,6 +334,8 @@ public final class StandaloneRegression {
         check(!MaestroOwnMoveAudit.completelySimulated("uturn"));
     }
     public static void main(String[] args)throws Exception {
+        // Catch production policy host signature drift before the native profiles.
+        LegacyPolicyRegression.run();
         MoveAttestationRegression.inventory();
         BlockedHitRegression.run();
         HealingRecoilRegression.run();

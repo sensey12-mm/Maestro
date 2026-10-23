@@ -104,7 +104,7 @@ public final class LegacyPolicyRegression {
         public void syncPublicMoveHistory(Battle b){}public void syncPublicProtocolObservation(Battle b){}
         public void incrementActionCount(BattleMon b){}public static String normalizePublicSpecies(String s){return s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");}
         public void rememberMatchupVisit(Mon a,Mon b){}public List<Choice> findAllMoves(Moveset m,Mon a,Mon b){scored=true;return choices;}
-        public BattleSnapshot observeTacticalSnapshot(Battle b,Active a,Active f,Mon m,List<Choice> c,boolean s,boolean l,boolean t){return null;}
+        public BattleSnapshot observeTacticalSnapshot(Battle b,Active a,Active f,Mon m,List<Choice> c,boolean s,boolean l,boolean t,Moveset ownMoves){return null;}
         public void clearRememberedMove(BattleMon b){}public void clearSetupHistory(Mon m){}
         public void logSwitchDecision(Battle b,Mon a,Mon f,Switch s,String why){}
         public void rememberSwitchDestination(Battle b,Switch s){}
