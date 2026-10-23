@@ -27,17 +27,18 @@ public final class PublicFieldEvidence {
         private final PublicProtocolEvidence protocol;
         private final List<String> events;
         private final OwnMegaYEvidence ownForm;
+        private final OwnZUseEvidence ownZUse;
         private Capture(PublicFieldEvidence owner, long epoch, int turn, Known<String> weather,
                         Known<String> terrain, Known<Boolean> trickRoom, Known<Boolean> magicRoom,
                         Map<String, Boolean> tailwind, Map<String, Active> actors, Set<String> unknown,
-                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnMegaYEvidence ownForm) {
+                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnMegaYEvidence ownForm,OwnZUseEvidence ownZUse) {
             this.owner = owner; this.epoch = epoch; this.turn = turn; this.weather = weather; this.terrain = terrain;
             this.trickRoom = trickRoom; this.magicRoom = magicRoom; this.tailwind = Map.copyOf(tailwind);
             this.actors = Map.copyOf(actors); this.unknown = Set.copyOf(unknown);
             this.evidence = evidence;
             this.protocol = protocol; this.events = protocol.mechanicsEvents();
             this.weatherStartTurn=weatherStartTurn;
-            this.ownForm=ownForm;
+            this.ownForm=ownForm;this.ownZUse=ownZUse;
             var captured = new HashMap<String, PublicMechanicsEvidence.Observation>();
             actors.keySet().forEach(slot -> { var o = evidence.observation(slot); if (o != null) captured.put(slot, o); });
             this.observations = Map.copyOf(captured);
@@ -77,11 +78,25 @@ public final class PublicFieldEvidence {
             return ownForm!=null&&ownForm.lease==lease&&ownForm.owns(o);
         }
         boolean hasOwnedForm(){return ownForm!=null;}
-        boolean ownedSourceCurrent(){return ownForm==null||ownForm.sourceCurrent();}
+        boolean ordinaryOwnEntry(String actor,String species,UUID uuid,int level){
+            String details=null;
+            for(String line:events){var p=line.split("\\|",-1);
+                if(p.length>3&&Set.of("switch","drag").contains(p[1])&&p[2].equals(actor))details=p[3];
+            }
+            String expected=species+", "+uuid+(level==100?"":", L"+level);
+            return expected.equals(details)||(expected+", shiny").equals(details);
+        }
+        boolean hasOwnedZUse(){return ownZUse!=null;}
+        boolean ownedSourceCurrent(){return (ownForm==null||ownForm.sourceCurrent())&&(ownZUse==null||ownZUse.sourceCurrent());}
         Capture rebind(OwnMegaYEvidence proof){
             requireCurrent(turn);
             if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-form witness");
-            return owner.update(protocol,evidence,proof);
+            return owner.update(protocol,evidence,proof,ownZUse);
+        }
+        Capture rebind(OwnZUseEvidence proof){
+            requireCurrent(turn);
+            if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-Z witness");
+            return owner.update(protocol,evidence,ownForm,proof);
         }
         Capture withoutOwnedForm(){return owner.update(protocol,evidence);}
         public String token() { return SOURCE + ":epoch-" + epoch + ":turn-" + turn; }
@@ -158,9 +173,9 @@ public final class PublicFieldEvidence {
         String slot, name; int entry; boolean covered, transientFlinch; Set<String> volatiles = new HashSet<>();
     }
     public Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence) {
-        return update(protocol,evidence,null);
+        return update(protocol,evidence,null,null);
     }
-    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnMegaYEvidence ownForm) {
+    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnMegaYEvidence ownForm,OwnZUseEvidence ownZUse) {
         epoch++; Set<String> unknown = new TreeSet<>();
         unknown.addAll(protocol.coverageUnknown());
         if (!protocol.framed()) unknown.add("PUBLIC_ENVELOPE_PROVENANCE_UNKNOWN");
@@ -236,7 +251,7 @@ public final class PublicFieldEvidence {
             }
             Mutable a = active.get(slot);
             if (a == null || !a.name.equals(name)) { unknown.add("ACTOR_BINDING_UNKNOWN"); continue; }
-            if(ownForm!=null&&ownForm.admits(index,line))continue;
+            if(ownForm!=null&&ownForm.admits(index,line)||ownZUse!=null&&ownZUse.admits(index,line))continue;
             if (event.equals("replace")) { a.covered = false; unknown.add("REVEAL_EXECUTION_HISTORY_UNRESOLVED"); continue; }
             if (event.equals("cant") && p.length > 3 && key(p[3]).equals("flinch")) {
                 a.transientFlinch = true; continue; // duration1 in the pinned conditions table
@@ -252,7 +267,7 @@ public final class PublicFieldEvidence {
                 // modifier. A previous skipped action does not prove this turn's
                 // execution, and is not an arbitrary unsupported effect either.
             } else if (Set.of("-activate", "-singlemove", "detailschange", "-formechange", "-transform", "-terastallize", "-endability", "-sethp",
-                    "-block", "-prepare", "-mustrecharge", "-zpower", "-mega", "-primal", "-burst", "-dynamax",
+                    "-block", "-prepare", "-mustrecharge", "-zpower", "-zbroken", "-mega", "-primal", "-burst", "-dynamax",
                     "-clearallboost", "-invertboost", "-swapboost", "-setboost", "-copyboost", "-clearnegativeboost", "cant").contains(event)) {
                 a.covered = false;
             } else if (event.equals("move")) {
@@ -265,6 +280,7 @@ public final class PublicFieldEvidence {
                 // Terrain/Tailwind exact nested conditions are also attested;
                 // accepting its past setter does not add a selectable action.
                 boolean observedSetter=p.length>=4 && Set.of("spikes","stealthrock","stickyweb","toxicspikes","psychicterrain","tailwind","sandstorm","hail","snowscape").contains(key(p[3]));
+                if(p.length>=4&&OwnZMoveEvidence.MOVE.equals(key(p[3]))) {a.covered=false;unknown.add("UNPROVED_Z_MOVE_HISTORY");}
                 if (p.length < 4 || CobblemonMechanics.move(key(p[3])) == null && !OBSERVED_ONLY.contains(key(p[3])) && !observedSetter) {
                     a.covered = false; unknown.add("UNSUPPORTED_EXECUTED_MOVE_OR_TRANSFER");
                 }
@@ -276,6 +292,6 @@ public final class PublicFieldEvidence {
         if (!start || !gen9 || !singles || turn == 0) unknown.add("WITNESSED_GEN9_SINGLES_START_OR_TURN_MISSING");
         Map<String, Active> actors = new HashMap<>();
         active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered && !a.transientFlinch)));
-        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn,ownForm); return current;
+        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn,ownForm,ownZUse); return current;
     }
 }

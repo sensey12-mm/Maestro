@@ -27,7 +27,7 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
   for (const key of privateKeys) Object.defineProperty(battle, key, {configurable:true,
     get() { privateReads++; throw Error('private actor state read'); }});
   const badRegistries = [], badSpecies = [];
-  const restored = ['geomancy', 'thunder', 'psystrike', 'fireblast', 'spectralthief',...fieldDependencies];
+  const restored = ['geomancy', 'thunder', 'psystrike', 'fireblast', 'spectralthief','soulstealing7starstrike',...fieldDependencies];
   try {
     // Every calculator move must accept genuine native normalization. Warmed
     // native definitions may have frozen nested fields; use the pinned clone.
@@ -338,6 +338,26 @@ module.exports = function (modules, anchor, probe, battle, selectable) {
       receipt=capture();items.mewtwonitey={...item,megaStone:'Mewtwo-Mega-X'};
       check(!receipt.current()&&JSON.parse(capture().json).components.operationTables!==original.components.operationTables,'Mega stone form omitted from item proof');
       items.mewtwonitey=item;check(capture().current()&&!receipt.current(),'Mega stone restoration revived receipt');
+    }
+
+    // Own Z activation/conversion uses these exact native callback positions.
+    for(const [prototype,slots] of [[modules.BattleActions.prototype,['getZMove','getActiveZMove','canZMove','runMove']],
+        [modules.Pokemon.prototype,['getMoveRequestData']]])for(const slot of slots){
+      const method=prototype[slot],foreign=eval('({'+method.toString()+'})')[slot];
+      receipt=capture();prototype[slot]=foreign;
+      let rejected=false;try{capture();}catch(unverified){rejected=true;}
+      check(rejected&&!receipt.current(),'Foreign Z lifecycle retained proof: '+slot);
+      prototype[slot]=method;check(capture().current()&&!receipt.current(),'Z lifecycle restoration revived receipt: '+slot);
+    }
+    for(const [source,id,changes] of [[table,'soulstealing7starstrike',{accuracy:99,isZ:'ghostiumz',basePower:196,flags:{},stealsBoosts:true}],
+        [battle.dex.dataCache.Items,'marshadiumz',{zMove:'Never-Ending Nightmare',zMoveFrom:'Shadow Sneak',itemUser:['Mew']}]]){
+      const originalDefinition=source[id];
+      for(const [key,value] of Object.entries(changes)){
+        receipt=capture();source[id]={...originalDefinition,[key]:value};
+        const changed=JSON.parse(capture().json);
+        check(!receipt.current()&&changed.components.operationTables!==original.components.operationTables,'Z definition omitted from proof: '+id+'.'+key);
+        source[id]=originalDefinition;check(capture().current()&&!receipt.current(),'Z definition restoration revived receipt: '+id+'.'+key);
+      }
     }
 
     // An unused custom move may coexist, but receives no selected-operation

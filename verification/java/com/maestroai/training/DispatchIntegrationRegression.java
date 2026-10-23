@@ -39,6 +39,9 @@ public final class DispatchIntegrationRegression {
         bind(ROOT+"battles/ShowdownActionRequest",Fixture.Request.class);
         bind(ROOT+"battles/ShowdownMoveset",Fixture.Moves.class);
         bind(ROOT+"battles/ShowdownActionResponse",Fixture.Response.class);
+        bind(ROOT+"battles/MoveActionResponse",Fixture.Move.class);
+        bind(ROOT+"battles/InBattleMove",Fixture.MoveSlot.class);
+        bind(ROOT+"battles/Targetable",Fixture.Active.class);
         bind(ROOT+"battles/SwitchActionResponse",Fixture.Switch.class);
         bind(ROOT+"battles/PassActionResponse",Fixture.Pass.class);
         bind(ROOT+"battles/ForcePassActionResponse",Fixture.ForcePass.class);
@@ -113,6 +116,7 @@ public final class DispatchIntegrationRegression {
         var keep=(java.util.function.Consumer<MethodNode>)(m->{});
         try(var zip=new ZipFile(dependency.toFile())) {
             java.util.function.Function<String,byte[]> nativeBytes=name->{try{return zip.getInputStream(zip.getEntry(ROOT+name+".class")).readAllBytes();}catch(Exception e){throw new RuntimeException(e);}};
+            transplant(hosts,nativeBytes.apply("battles/MoveActionResponse"),F+"$Move",n->n.equals("toShowdownString"),keep);
             transplant(hosts,nativeBytes.apply("api/battles/model/PokemonBattle"),F+"$Battle",n->n.equals("turn"),keep);
             transplant(hosts,nativeBytes.apply("api/battles/model/actor/BattleActor"),F+"$Actor",
                     n->Set.of("turn","setActionResponses","writeShowdownResponse","writeShowdownResponse$lambda$0").contains(n),keep);
@@ -152,6 +156,10 @@ public final class DispatchIntegrationRegression {
         static void check(boolean b,String why){if(!b)throw new AssertionError(why);}
         public void run() {
             for(int mode=0;mode<9;mode++)scenario(mode);
+            var choices=new Moves(false);choices.moves=List.of(new MoveSlot("closecombat"),new MoveSlot("spectralthief"));
+            check(new Move("spectralthief","zmove").toShowdownString(new Active(null),choices).equals("move 2 zmove"),"native Z serialization lost base slot/gimmick");
+            check(new Move("spectralthief",null).toShowdownString(new Active(null),choices).equals("move 2"),"ordinary native serialization changed");
+            System.out.println("Native Marshadow Z response PASS: original pinned MoveActionResponse bytecode, base slot and zmove conversion wire; isolated hosts");
             System.out.println("Native queued dispatch integration PASS: 9 scenarios; native turn, request/error closures, production callbacks, validation and response serialization; controlled hosts, not Minecraft");
         }
         private void scenario(int mode) {
@@ -225,7 +233,7 @@ public final class DispatchIntegrationRegression {
             final OwnRequestTransport ownTransport=new OwnRequestTransport();int decisionTurn=-1,choices;
             static boolean supported=true;private static boolean ownTransportVersionSupported(){return supported;}
             public Response choose(Active a,Battle b,Side s,Moves m,boolean forced){
-                choices++;decisionTurn=b.getTurn();Response response=m.trapped?new Move():new Switch();
+                choices++;decisionTurn=b.getTurn();Response response=m.trapped?new Response():new Switch();
                 recordOwnChoice(b,a,m,forced,response);return response;
             }
             private void recordOwnChoice(Battle b,Active a,Moves m,boolean forced,Response response){throw new AssertionError("unwoven production record");}
@@ -239,14 +247,18 @@ public final class DispatchIntegrationRegression {
             public Actor getActor(){return actor;}public Mon getBattlePokemon(){return mon;}public boolean isAlive(){return true;} }
         public static final class Mon {UUID id=new UUID(0,1);public UUID getUuid(){return id;}public void setWillBeSwitchedIn(boolean v){}public Text getName(){return new Text();}}
         public static final class Side {}
-        public static final class Moves {boolean trapped;Moves(boolean b){trapped=b;}public boolean getTrapped(){return trapped;}}
+        public static final class MoveSlot {private final String id;MoveSlot(String id){this.id=id;}public String getId(){return id;}}
+        public static final class Moves {boolean trapped;List<MoveSlot> moves=List.of();Moves(boolean b){trapped=b;}public boolean getTrapped(){return trapped;}public List<MoveSlot> getMoves(){return moves;}}
         public static final class Request {
             final List<Moves> active;boolean wait,forced;Request(boolean trapped){active=List.of(new Moves(trapped));}
             public List<Moves> getActive(){return active;}public boolean getWait(){return wait;}public List<Boolean> getForceSwitch(){return List.of(forced);}
             public <T> List<T> iterate(List<Active> a,Function3<Active,Moves,Boolean,T> f){return List.of(f.invoke(a.getFirst(),active.getFirst(),forced));}
         }
         public static class Response {public boolean isValid(Active a,Moves m,boolean forced){return true;}public String toShowdownString(Active a,Moves m){return "move 1";}}
-        public static final class Move extends Response {}
+        public static final class Move extends Response {
+            private String moveName,targetPnx,gimmickID;
+            Move(String id,String gimmick){moveName=id;gimmickID=gimmick;}
+        }
         public static final class Switch extends Response {public String toShowdownString(Active a,Moves m){return "switch 2";}}
         public static final class Pass extends Response {public static final Pass INSTANCE=new Pass();}
         public static final class ForcePass extends Response {}

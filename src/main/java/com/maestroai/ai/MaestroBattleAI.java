@@ -497,10 +497,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         bestSwitch
                 );
 
-        // Shadow-only bridge: capture exactly the actions scored by the legacy
-        // evaluator. Never alter battle decisions based on this observation.
+        // Shadow-only bridge: capture ordinary choices and certified own Z options.
+        // Never alter battle decisions based on this observation.
         BattleSnapshot shadowSnapshot = observeTacticalSnapshot(battle, activePokemon, opponent, mine, moves,
-                voluntarySwitchAllowed, continuationLocked, moveset != null && moveset.getTrapped());
+                voluntarySwitchAllowed, continuationLocked, moveset != null && moveset.getTrapped(), moveset);
 
         /*
          * If no normal move exists, switch if possible.
@@ -5779,6 +5779,22 @@ public class MaestroBattleAI extends RCTBattleAI {
      * the only switch exposed here is the one already validated by the
      * existing switch evaluator. The snapshot is diagnostic, not authoritative.
      */
+    // Snapshot only this owner's current native UI; retain a supplier for mutation checks.
+    private static com.maestroai.training.OwnZMoveEvidence.Choice ownZChoice(ShowdownMoveset moveset) {
+        if(moveset==null||moveset.getMoves()==null)return null;
+        var moves=new ArrayList<com.maestroai.training.OwnZMoveEvidence.MoveSlot>();
+        for(var m:moveset.getMoves()){
+            if(m==null||m.getTarget()==null)return null;
+            moves.add(new com.maestroai.training.OwnZMoveEvidence.MoveSlot(m.getId(),m.getPp(),m.getDisabled(),m.getTarget().name()));
+        }
+        var options=new java.util.TreeMap<Integer,com.maestroai.training.OwnZMoveEvidence.ZSlot>();
+        var z=moveset.getCanZMove();int count=z==null?0:z.size();
+        for(int i=0;i<count;i++)if(z.get(i)!=null){
+            var m=z.get(i);if(m.getTarget()==null)return null;
+            options.put(i,new com.maestroai.training.OwnZMoveEvidence.ZSlot(m.getMove(),m.getTarget().name(),m.getDisabled()));
+        }
+        return new com.maestroai.training.OwnZMoveEvidence.Choice(moves,options,count);
+    }
     private BattleSnapshot observeTacticalSnapshot(
             PokemonBattle battle,
             ActiveBattlePokemon activePokemon,
@@ -5787,7 +5803,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             List<MoveChoice> moves,
             boolean voluntarySwitchAllowed,
             boolean continuationLocked,
-            boolean requestTrapped
+            boolean requestTrapped, ShowdownMoveset ownMoveset
     ) {
         mechanicsSnapshot = null;
         mechanicsOpponentSlot = null;
@@ -5848,6 +5864,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             // Rebuild the public capture for this choice before adding an
             // independently owned, source-bound permanent-form witness.
             fieldCapture=publicFieldEvidence.update(publicProtocolEvidence,publicMechanicsEvidence);
+            fieldCapture=ownTransport.rebindOwnZUse(ownChoiceLease,runtimeDomain,publicProtocolEvidence,fieldCapture);
             fieldCapture=ownTransport.rebindOwnMegaY(ownChoiceLease,runtimeDomain,publicProtocolEvidence,
                     publicMechanicsEvidence.observation(activePokemon.getPNX()),fieldCapture);
             var scope = new PublicMechanicsEvidence.Scope(domainScopes.get(com.maestroai.training.ExecutionCoverage.Operation.DAMAGE),
@@ -5892,6 +5909,11 @@ public class MaestroBattleAI extends RCTBattleAI {
                     opponentObservation == null ? PublicTransitionState.Known.unknown() : opponentObservation.ability()));
             var execution = fieldCapture == null ? null : new com.maestroai.training.ScopedExecution(fieldCapture, executionBindings,
                     domainScopes);
+            var ownZ=ownTransport.ownZMove(ownChoiceLease,runtimeDomain,selfObservation,fieldCapture,()->ownZChoice(ownMoveset));
+            if(ownZ!=null){
+                execution=execution.withOwnZMove(ownZ);
+                if(ownZ.activation().isPresent())legalMoves.add(com.maestroai.training.OwnZMoveEvidence.MOVE);
+            }
             List<String> revealedOpponentMoves = publicOpponent.revealedMoves();
             Map<String, Integer> publicStages = fieldCapture == null ? Map.of()
                     : fieldCapture.stages(opponentObservation, runtimeDomain == null
@@ -5969,6 +5991,7 @@ public class MaestroBattleAI extends RCTBattleAI {
                                     : choice.damageMove ? PublicTransitionState.Kind.ATTACK
                                     : PublicTransitionState.Kind.UNKNOWN);
                 }
+                if(ownZ!=null&&ownZ.activation().isPresent())intents.put(com.maestroai.training.OwnZMoveEvidence.MOVE,PublicTransitionState.Kind.ATTACK);
                 Map<String, PublicTransitionState.SwitchTarget> targets = new java.util.TreeMap<>();
                 String ownSide = activePokemon.getPNX() == null || activePokemon.getPNX().length() < 2
                         ? "" : activePokemon.getPNX().substring(0, 2);

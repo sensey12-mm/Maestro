@@ -89,6 +89,7 @@ public final class RuntimeCaptureRegression {
                     +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
             var beforeReload=domain;
             OwnMegaYRegression.runtime(domain);
+            OwnZMoveRegression.runtime(domain);
             // Independently use the pinned Java loader's BufferedReader recipe
             // and original JS API, not production hashes to build expected input.
             var scripts=JsonParser.parseString(Files.readString(Path.of("pack-item-fixtures.json"))).getAsJsonObject();
@@ -116,6 +117,7 @@ public final class RuntimeCaptureRegression {
                     +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
             PublicPipelineRegression.run(domain);
             OwnMegaYRegression.runtime(domain);
+            OwnZMoveRegression.runtime(domain);
             domain=AddonReloadRegression.run(service,engine,id,choice,domain);
             domain=RaidReloadRegression.run(service,engine,id,choice,domain);
             engine.eval("js","globalThis.verificationDamage=BS.BattleStream?verificationStream.battle.actions.getDamage:null;"

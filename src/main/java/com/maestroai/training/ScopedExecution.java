@@ -27,6 +27,7 @@ public final class ScopedExecution {
     private final PublicFieldEvidence.Capture field;
     private final Map<String, Binding> actors;
     private final Scopes scopes;
+    private final OwnZMoveEvidence ownZ;
     private final String activeOwn;
     private final boolean ownFainted;
     /** Conditional entry result, never an observed public field or future request. */
@@ -44,12 +45,12 @@ public final class ScopedExecution {
         this(field, actors, Scopes.all(Objects.requireNonNull(remainingEffects)));
     }
     public ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Scopes scopes) {
-        this(field,actors,scopes,"self",false,null);
+        this(field,actors,scopes,"self",false,null,null);
     }
     private ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Scopes scopes,
-                            String activeOwn,boolean ownFainted,WeatherProjection projectedWeather) {
+                            String activeOwn,boolean ownFainted,WeatherProjection projectedWeather,OwnZMoveEvidence ownZ) {
         this.field = Objects.requireNonNull(field); this.actors = Map.copyOf(actors); this.scopes = Objects.requireNonNull(scopes);
-        this.activeOwn=activeOwn;this.ownFainted=ownFainted;this.projectedWeather=projectedWeather;
+        this.ownZ=ownZ;this.activeOwn=activeOwn;this.ownFainted=ownFainted;this.projectedWeather=projectedWeather;
         if(projectedWeather!=null&&projectedWeather.origin!=field)throw new IllegalArgumentException("foreign weather projection");
         var a = actors.get("self"); var f = actors.get("opponent");
         if (a != null && f != null && a.observation() != null && f.observation() != null
@@ -57,15 +58,21 @@ public final class ScopedExecution {
             throw new IllegalArgumentException("own/opponent execution bindings share a side");
     }
     public PublicFieldEvidence.Capture field() { return field; }
-    ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes,activeOwn,ownFainted,projectedWeather); }
+    public ScopedExecution withOwnZMove(OwnZMoveEvidence proof) {
+        return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,projectedWeather,Objects.requireNonNull(proof));
+    }
+    private boolean zAllowed(String id,String role){
+        return !OwnZMoveEvidence.MOVE.equals(id)||ownZ!=null&&actors.containsKey(role)&&ownZ.permits(role,field,actors.get(role).observation());
+    }
+    ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes,activeOwn,ownFainted,projectedWeather,ownZ); }
     /** Internal action-queue frame. The evaluator supplies a reserve only after
      * certified legal entry and survival, or fainting after proven continuation.
      * Neither an entry arithmetic certificate nor a raw reserve activates it. */
     ScopedExecution conditionalParticipants(String own,boolean fainted) {
         if(!own.equals("self")&&!reserve(own))throw new IllegalArgumentException("unbound own participant");
-        return new ScopedExecution(field,actors,scopes,own,fainted,projectedWeather);
+        return new ScopedExecution(field,actors,scopes,own,fainted,projectedWeather,ownZ);
     }
-    ScopedExecution conditionalWeather(WeatherProjection weather){return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,weather);}
+    ScopedExecution conditionalWeather(WeatherProjection weather){return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,weather,ownZ);}
     Known<String> rawWeather(){return projectedWeather==null?field.weather():projectionCurrent()?projectedWeather.weather:Known.unknown();}
     private boolean projectionCurrent(){return sourceCurrent()&&yes(scopes.get(Operation.ENTRY))&&yes(scopes.get(Operation.DAMAGE));}
     Known<Integer> projectedWeatherDuration(){return projectedWeather!=null&&projectionCurrent()?projectedWeather.duration:Known.unknown();}
@@ -77,7 +84,7 @@ public final class ScopedExecution {
     boolean sourceCurrent() {
         try { field.requireCurrent(field.turn()); }
         catch(IllegalArgumentException stale) { return false; }
-        return scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
+        return (ownZ==null||ownZ.current()) && scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
                 .allMatch(b->b.lease().current());
     }
     /**
@@ -235,12 +242,13 @@ public final class ScopedExecution {
         final List<OwnRequestTransport.Lease> leases = new ArrayList<>();
         Check(Operation op) {
             this.op = op; field.requireCurrent(field.turn());
+            need("OWN_Z_CHOICE_COVERAGE",ownZ==null||ownZ.current());
             need("PUBLIC_PROTOCOL_AND_EFFECT_COVERAGE", field.unknown().stream().allMatch(reason ->
                     reason.equals("UNSUPPORTED_WEATHER") && op != Operation.DAMAGE));
             // Unsupported weather is irrelevant to this limited priority/speed/entry/setup slice.
             field.unknown().stream().filter(reason -> !reason.equals("UNSUPPORTED_WEATHER") || op == Operation.DAMAGE).forEach(missing::add);
             need("SOURCE_DOMAIN_" + op, yes(scopes.get(op)));
-            if(field.hasOwnedForm())need("OWN_FORM_SOURCE_CATALOG_AND_DISPATCH",yes(scopes.get(Operation.DAMAGE)));
+            if(field.hasOwnedForm()||field.hasOwnedZUse())need("OWN_FORM_SOURCE_CATALOG_AND_DISPATCH",yes(scopes.get(Operation.DAMAGE)));
         }
         void need(String name, boolean supported) { required.add(name); if (!supported) missing.add(name); }
         void actor(String role, boolean reserve) {
@@ -270,7 +278,7 @@ public final class ScopedExecution {
             }
             need(role + ":ITEM_SUPPRESSION", b.item().known() && b.item().value().equals("none") || field.magicRoom().known());
         }
-        Certificate finish() { return new Certificate(field, op, required, missing, () -> scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
+        Certificate finish() { return new Certificate(field, op, required, missing, () -> (ownZ==null||ownZ.current()) && scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
     }
     private boolean supported(String role, boolean reserve) {
         // Raw reserves cannot certify Download or active weather suppression.
@@ -285,6 +293,7 @@ public final class ScopedExecution {
     public Certificate damageCoverage(String moveId, Profile attacker, Actor a, Profile target, Actor t) {
         bound(attacker, a); bound(target, t); var c = new Check(Operation.DAMAGE);
         c.actor(a.id(), reserve(a.id())); c.actor(t.id(), reserve(t.id()));
+        c.need("OWN_Z_ACTIVATION",zAllowed(moveId,a.id()));
         Move m = move(moveId); c.need("SUPPORTED_DAMAGE_MOVE", m != null && m.power() > 0);
         var defender=actors.get(t.id());
         if(defender!=null&&defender.ability().known()&&defender.ability().value().equals("shadowshield"))
@@ -295,7 +304,7 @@ public final class ScopedExecution {
         c.need(a.id() + ":CURRENT_TYPES", attacker.types().known()); c.need(t.id() + ":CURRENT_TYPES", target.types().known());
         if (m != null && m.power() > 0) {
             var active = active(t.id());
-            boolean blocked = active != null && active.volatiles().contains("protect")
+            boolean blocked = !OwnZMoveEvidence.MOVE.equals(moveId) && active != null && active.volatiles().contains("protect")
                     || target.types().known() && effectiveness(m.type(), target.types().value()) == Integer.MIN_VALUE;
             if (!blocked) {
                 String atk = m.attackingStat(), def = m.defendingStat();
@@ -323,9 +332,10 @@ public final class ScopedExecution {
     public Certificate accuracyCoverage(String moveId, Profile attacker, Actor a, Profile target, Actor t) {
         bound(attacker,a); bound(target,t); var c=new Check(Operation.DAMAGE);
         c.actor(a.id(),reserve(a.id())); c.actor(t.id(),reserve(t.id()));
+        c.need("OWN_Z_ACTIVATION",zAllowed(moveId,a.id()));
         Move m=move(moveId); c.need("SUPPORTED_ACCURACY_MOVE",m!=null&&m.power()>0);
         var weather=actorWeather(c,t.id(),a,t);c.need("ACCURACY_WEATHER",weather.known());
-        boolean always=moveId.equals("swift") || moveId.equals("thunder")
+        boolean always=OwnZMoveEvidence.MOVE.equals(moveId) || moveId.equals("swift") || moveId.equals("thunder")
                 &&weather.known()&&weather.value().equals("raindance");
         if(!always){
             c.need(a.id()+":ACCURACY_STAGE",a.stages().containsKey("accuracy"));
@@ -339,7 +349,7 @@ public final class ScopedExecution {
         var coverage=accuracyCoverage(moveId,attacker,a,target,t);
         if(!coverage.supported())return Known.unknown();
         var weather=effectiveActorWeather(t.id(),a,t);if(!weather.known())return Known.unknown();
-        if(moveId.equals("swift") || moveId.equals("thunder")&&weather.value().equals("raindance"))
+        if(OwnZMoveEvidence.MOVE.equals(moveId) || moveId.equals("swift") || moveId.equals("thunder")&&weather.value().equals("raindance"))
             return Known.of(100,coverage.source());
         int base=moveId.equals("thunder")&&weather.value().equals("sunnyday")?50:move(moveId).accuracy();
         // Native ModifyAccuracy runs before stage truncation. Weather evasion acts
@@ -537,7 +547,8 @@ public final class ScopedExecution {
         var attackWeather=effectiveActorWeather(a.id(),a,t);if(!attackWeather.known())return Damage.unknown("ATTACKER_WEATHER_PARTICIPATION_UNKNOWN");
         Move m = move(moveId); if (m == null || m.power() == 0) return Damage.unknown("UNSUPPORTED_DAMAGE_MOVE");
         var targetActive = active(t.id());
-        if (targetActive != null && targetActive.volatiles().contains("protect")) return zero("public Protect");
+        boolean protect=targetActive != null && targetActive.volatiles().contains("protect");
+        if (protect && !OwnZMoveEvidence.MOVE.equals(moveId)) return zero("public Protect");
         // Native TryHit tests the move's priority, not its fractional queue
         // ordering, and tests the TARGET's grounding independently of boost.
         if(field.terrain().value().equals("psychicterrain")&&movePriority(moveId,a.id())>.1&&grounded(target))
@@ -549,9 +560,14 @@ public final class ScopedExecution {
         }
         // Technician modifies base power before the level/stat formula. Never
         // multiply a final damage interval; the engine rounds at each stage.
-        return CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
+        var damage=CobblemonMechanics.damage(moveId,certified(attacker),a,certified(target),t,critical,
                 n,d,sourcePowerModifier(m,attacker,t.id(),weather.value()),4096,finalDamageModifier(a.id(),t.id(),t),4096,
                 sourceDefenseModifier(m,target,weather.value()),4096,sourceAttackModifier(m,a.id(),attackWeather.value()),4096);
+        if(!protect||!damage.points().known())return damage; // Immunity remains zero; missing arithmetic stays UNKNOWN.
+        int low=Math.max(1,(damage.points().value().low()+1)/4),high=Math.max(1,(damage.points().value().high()+1)/4);
+        return new Damage(Known.of(new IntRange(low,high),damage.source()),
+                Known.of(new Interval((double)low/target.maxHp().value().high(),(double)high/target.maxHp().value().low()),damage.source()),
+                damage.unknown(),damage.source());
     }
     private int sourceAttackModifier(Move move,String attacker,String weather) {
         // Native ModifySpA follows critical-adjusted stages, independently of
@@ -568,6 +584,7 @@ public final class ScopedExecution {
     }
     public Certificate priorityCoverage(String moveId, String role) {
         var c = new Check(Operation.PRIORITY); c.actor(role, reserve(role));
+        c.need("OWN_Z_ACTIVATION",zAllowed(moveId,role));
         c.need("SUPPORTED_PRIORITY_MOVE", move(moveId) != null); return c.finish();
     }
     public Known<Double> priority(String moveId, String role) {

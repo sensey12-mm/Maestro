@@ -12,11 +12,15 @@ public final class OwnRequestTransport {
     public static final String SOURCE = "cobblemon-7553235:own-dispatch-v1";
     public enum Mode { MOVE, FORCED, WAIT }
     public record Pokemon(OwnRequestEvidence.Sample dto, int level, Map<String, Integer> baseStats,
-                          String item, List<String> baseTypes, String tera, boolean special) {
+                          String item, List<String> baseTypes, String tera, boolean special, String species) {
         public Pokemon { baseStats = Map.copyOf(baseStats); baseTypes = List.copyOf(baseTypes); }
+        public Pokemon(OwnRequestEvidence.Sample dto,int level,Map<String,Integer> stats,String item,List<String> types,String tera,boolean special) {
+            this(dto,level,stats,item,types,tera,special,"");
+        }
     }
-    public record Request(String side, Mode mode, List<Pokemon> pokemon) {
+    public record Request(String side, Mode mode, List<Pokemon> pokemon, OwnZMoveEvidence.Choice selection) {
         public Request { pokemon = List.copyOf(pokemon); }
+        public Request(String side,Mode mode,List<Pokemon> pokemon){this(side,mode,pokemon,null);}
     }
     public record Evidence(Profile profile, Known<String> item, Known<String> ability, Known<String> status,
                            Known<Boolean> fresh, Set<String> unknown, Known<PublicStateSearchAdapter.Interval> hp) {
@@ -122,6 +126,23 @@ public final class OwnRequestTransport {
     private static String nickname(String ident) {
         int colon = ident == null ? -1 : ident.indexOf(':');
         return colon < 0 ? "" : ident.substring(colon + 1).trim();
+    }
+    /** Current own dispatch and native UI must independently agree. No crystal-only eligibility. */
+    public OwnZMoveEvidence ownZMove(Lease lease,RuntimeDomain domain,PublicMechanicsEvidence.Observation own,
+            PublicFieldEvidence.Capture field,Supplier<OwnZMoveEvidence.Choice> installedChoice) {
+        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE)
+            return null;
+        return OwnZMoveEvidence.inspect(lease,domain,own,field,receipt,installedChoice);
+    }
+    public PublicFieldEvidence.Capture rebindOwnZUse(Lease lease,RuntimeDomain domain,
+            PublicProtocolEvidence protocol,PublicFieldEvidence.Capture field){
+        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE)return field;
+        try{
+            var proof=OwnZUseEvidence.inspect(field,lease,domain,protocol,receipt,receiptTurn);
+            if(proof==null)return field;
+            var rebound=field.rebind(proof);
+            return proof.sourceCurrent()?rebound:rebound.withoutOwnedForm();
+        }catch(IllegalArgumentException unavailable){return field;}
     }
     /** Only a fresh MOVE request can rebind this owner's exact native Mega-Y
      * history. The spectator observations and every opponent guard stay intact. */

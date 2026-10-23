@@ -90,6 +90,7 @@ public final class CobblemonMechanics {
             Map.entry("thunder", new Move("thunder", "electric", 110, false, 0, Map.of(), false, 70)),
             Map.entry("psystrike", new Move("psystrike", "psychic", 100, false, 0, Map.of(), true)),
             Map.entry("fireblast", new Move("fireblast", "fire", 110, false, 0, Map.of(), false, 85)),
+            Map.entry("soulstealing7starstrike", new Move("soulstealing7starstrike", "ghost", 195, true, 0, Map.of(), true)),
             Map.entry("spectralthief", new Move("spectralthief", "ghost", 90, true, 0, Map.of(), false)),
             Map.entry("closecombat", new Move("closecombat", "fighting", 120, true, 0, Map.of(), false)),
             Map.entry("rocktomb", new Move("rocktomb", "rock", 60, true, 0, Map.of(), false, 95)),
@@ -113,6 +114,7 @@ public final class CobblemonMechanics {
      */
     public static Damage damage(String moveId, Profile attacker, Actor attackerState,
                                 Profile target, Actor targetState, Critical critical) {
+        if (OwnZMoveEvidence.MOVE.equals(moveId)) return Damage.unknown("OWN_Z_ACTIVATION_RECEIPT_REQUIRED");
         return damage(moveId, attacker, attackerState, target, targetState, critical, 1, 1);
     }
     /** Weather acts before crit/random/STAB, so scaling the final interval is wrong. */

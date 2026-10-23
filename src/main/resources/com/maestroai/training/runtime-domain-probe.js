@@ -136,7 +136,7 @@
     move: new Set(['tackle','swift','scratch','quickattack','extremespeed','shadowclaw','shadowsneak',
                    'psychocut','dragonclaw','flamethrower','swordsdance','nastyplot','bulkup','recover',
       'uturn','ironhead','icebeam','moonblast','focusblast','astralbarrage','psyshock','drainingkiss',
-      'energyball','closecombat','rocktomb','geomancy','thunder','psystrike','fireblast','spectralthief',
+      'energyball','closecombat','rocktomb','geomancy','thunder','psystrike','fireblast','spectralthief','soulstealing7starstrike',
       'shadowball','hypervoice','aurasphere','psychicterrain','tailwind','sandstorm','hail','snowscape','spikes','stealthrock','stickyweb','toxicspikes'])
   };
   const registryAudit = {};

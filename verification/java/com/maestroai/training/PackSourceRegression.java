@@ -118,6 +118,7 @@ final class PackSourceRegression {
             if (!layoutOnly) ColdWeatherRegression.differential(engine);
             if (!layoutOnly) WeatherSetterRegression.differential(engine);
             if (!layoutOnly) OwnMegaYRegression.differential(engine);
+            if (!layoutOnly) OwnZMoveRegression.differential(engine);
             if (!layoutOnly) StatusSpeedRegression.differential(engine);
             if (!layoutOnly) PsychicTerrainRegression.differential(engine);
             if (!layoutOnly) ModifierCompositionRegression.differential(engine);
@@ -152,6 +153,7 @@ final class PackSourceRegression {
             long comparisonStart=System.nanoTime();
             PublicPipelineRegression.run(domain);
             OwnMegaYRegression.runtime(domain);
+            OwnZMoveRegression.runtime(domain);
             NaturalAcceptanceRegression.run(domain);
             ModifierTacticalRegression.run(domain,damageOracle);
             ModifierTacticalRegression.policyComparisons(domain,policyOracle);

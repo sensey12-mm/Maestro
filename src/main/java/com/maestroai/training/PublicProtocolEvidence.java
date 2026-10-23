@@ -40,7 +40,7 @@ public final class PublicProtocolEvidence {
             "-status", "-curestatus", "-damage", "-heal", "faint", "turn", "start", "gen", "gametype",
             "-weather", "-fieldstart", "-fieldend", "-sidestart", "-sideend", "-swapsideconditions",
             "-singleturn", "-singlemove", "move", "cant", "-sethp", "-boost", "-unboost", "-clearboost",
-            "-block", "-prepare", "-mustrecharge", "-zpower", "-mega", "-primal", "-burst", "-dynamax",
+            "-block", "-prepare", "-mustrecharge", "-zpower", "-zbroken", "-mega", "-primal", "-burst", "-dynamax",
             "-clearallboost", "-invertboost", "-swapboost", "-setboost", "-copyboost", "-clearnegativeboost");
 
     private static final class HpAppearance {

@@ -49,11 +49,13 @@ final class AddonReloadRegression {
                 dex.getMember("conditions").invokeMember("getByID",(parts[0].equals("ability")?"ability:":"item:")+parts[1]);
         }
         OwnMegaYRegression.differential(engine);
+            OwnZMoveRegression.differential(engine);
         var domain=SimulatorDomainBridge.capture(service,id,choice::get);
         check(domain!=null&&domain.effectiveState().known(),"source-bound addon capture rejected: "
                 +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
         PublicPipelineRegression.run(domain);
         OwnMegaYRegression.runtime(domain);
+            OwnZMoveRegression.runtime(domain);
         for(int turn=0;turn<3;turn++){
             engine.eval("js","verificationStream.battle.makeChoices('move 1','move 2');");
             var next=SimulatorDomainBridge.capture(service,id,choice::get);
