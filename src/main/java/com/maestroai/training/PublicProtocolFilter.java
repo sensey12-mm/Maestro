@@ -14,7 +14,8 @@ import java.util.Set;
  */
 public final class PublicProtocolFilter {
     private static final Set<String> ALLOWED = Set.of(
-            "turn", "move", "switch", "drag", "replace", "faint",
+            "turn", "move", "switch", "drag", "replace", "detailschange",
+            "-formechange", "-mega", "faint",
             "-boost", "-unboost", "-setboost", "-clearboost",
             "-clearallboost", "-copyboost", "-swapboost", "-invertboost",
             "-item", "-enditem", "-ability", "-endability",

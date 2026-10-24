@@ -1,0 +1,209 @@
+package com.maestroai.training;
+
+import com.cobblemon.mod.relocations.graalvm.polyglot.Context;
+import com.google.gson.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.zip.ZipFile;
+
+/** Source-pinned engine holdouts. Artificial public actors; no Minecraft claim. */
+final class PackSourceRegression {
+    private static void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); }
+    private static Map<String,String> pins(Path file) throws Exception {
+        var pins=new TreeMap<String,String>();
+        for(String line:Files.readAllLines(file)) {var p=line.split("\t");pins.put(p[0],p[1]);}
+        return pins;
+    }
+    private static boolean sameOperations(JsonObject a,JsonObject b) {
+        return List.of("core","format","operationTables","speciesHooks","catalog").stream().allMatch(k->
+                a.getAsJsonObject("components").get(k).equals(b.getAsJsonObject("components").get(k)));
+    }
+    static void run(Path simulator, Path dependency, boolean layoutOnly) throws Exception {
+        if(!layoutOnly) {
+            check(simulator.getFileName().toString().equals("showdown"),"installer fixture root differs");
+            var child=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
+                    "-cp",System.getProperty("java.class.path"),BootProfileRegression.class.getName(),dependency.toString())
+                    .directory(simulator.getParent().toFile()).inheritIO().start();
+            check(child.waitFor()==0,"production boot profile child failed");
+            var runtime=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
+                    "-Dmaestroai.verificationRoot="+Path.of("").toAbsolutePath(),
+                    "-cp",dependency+java.io.File.pathSeparator+System.getProperty("java.class.path"),
+                    RuntimeCaptureRegression.class.getName())
+                    .directory(simulator.getParent().toFile()).inheritIO().start();
+            check(runtime.waitFor()==0,"native runtime capture child failed");
+        }
+        Path resources=Path.of("src/main/resources/com/maestroai/training");
+        var files=new TreeMap<String,Set<String>>();
+        pins(resources.resolve("runtime-domain-files.tsv")).forEach((k,v)->files.put(k,Set.of(v)));
+        for(String line:Files.readAllLines(resources.resolve("runtime-pack-files.tsv"))) {
+            var p=line.split("\t");files.put(p[0],Set.of(p[1],p[2]));
+        }
+        var optional=new TreeMap<String,Set<String>>();
+        for(String line:Files.readAllLines(resources.resolve("runtime-pack-optional.tsv"))) {
+            var p=line.split("\t");optional.put(p[0],Set.of(p[1],p[2]));
+        }
+        var metadata=pins(resources.resolve("runtime-pack-metadata.tsv"));
+        metadata.forEach((k,v)->optional.put(k,Set.of(v)));
+        try(var jar=new ZipFile(dependency.toFile())) {
+            java.util.function.Function<String,byte[]> classBytes=name->{
+                try(var in=jar.getInputStream(jar.getEntry(name))){return in.readAllBytes();}
+                catch(Exception unavailable){return null;}
+            };
+            var classes=pins(resources.resolve("runtime-domain-classes.tsv"));
+            var report=RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,
+                    classes,classBytes);
+            check(report.verified(),"pack source inventory rejected: "+report);
+            var oldOptional=new TreeMap<>(optional); metadata.keySet().forEach(oldOptional::remove);
+            check(RuntimeSourceAudit.inspectAlternatives(simulator,files,oldOptional,classes,classBytes).reason()
+                    ==RuntimeSourceAudit.Reason.UNEXPECTED_SOURCE_FILE,"old profile did not reproduce installer-marker rejection");
+            Path marker=simulator.resolve("MSDPatch.json");byte[] saved=Files.readAllBytes(marker);
+            try {
+                for(String changed:List.of("{\"version\":\"1.0.1\"}","{\"version\":\"1.0.0\",\"private\":\"NEVER_LOG_ME\"}",
+                        "{\"version\":\"1.0.0\"}\n")) {
+                    Files.writeString(marker,changed);
+                    var rejected=RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes);
+                    check(rejected.reason()==RuntimeSourceAudit.Reason.FILE_HASH_MISMATCH
+                            && rejected.reference().equals("MSDPatch.json")&&!rejected.toString().contains("NEVER_LOG_ME"),
+                            "modified installer metadata accepted/leaked");
+                }
+                Files.delete(marker);
+                check(RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes).verified(),
+                        "optional absent metadata blocked exact source");
+                Files.createSymbolicLink(marker,simulator.resolve("index.js"));
+                check(RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes).reason()
+                        ==RuntimeSourceAudit.Reason.SOURCE_LINK_UNSUPPORTED,"linked metadata accepted");
+            } finally { Files.deleteIfExists(marker);Files.write(marker,saved); }
+            Path unknown=simulator.resolve("PRIVATE_PLAYER_SETTINGS.json");
+            try {
+                Files.writeString(unknown,"NEVER_LOG_ME");
+                var rejected=RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes);
+                check(rejected.reason()==RuntimeSourceAudit.Reason.UNEXPECTED_SOURCE_FILE&&rejected.reference().isEmpty(),
+                        "arbitrary JSON accepted or named");
+            } finally {Files.deleteIfExists(unknown);}
+            check(RuntimeSourceAudit.inspectAlternatives(simulator,files,optional,classes,classBytes).verified(),
+                    "exact installer source not restored");
+            System.out.println("Installer metadata provenance PASS: old-profile rejection, exact/absent marker, altered/private/linked/unknown negatives");
+        }
+        try(var engine=Context.newBuilder("js").allowIO(true).allowExperimentalOptions(true)
+                .option("engine.WarnInterpreterOnly","false").option("js.commonjs-require","true")
+                .option("js.commonjs-require-cwd",simulator.toString())
+                .option("js.commonjs-core-modules-replacements","buffer:buffer/,crypto:crypto-browserify,path:path-browserify").build()) {
+            engine.eval("js","var process={cwd:()=>''};");
+            engine.eval("js",Files.readString(simulator.resolve("index.js")));
+            String moduleExpression="{Battle:require('./sim/battle').Battle,BattleActions:require('./sim/battle-actions').BattleActions,"
+                    +"BattleQueue:require('./sim/battle-queue').BattleQueue,Field:require('./sim/field').Field,Pokemon:require('./sim/pokemon').Pokemon,Side:require('./sim/side').Side,"
+                    +"Ability:require('./sim/dex-abilities').Ability,Item:require('./sim/dex-items').Item,DataMove:require('./sim/dex-moves').DataMove,"
+                    +"BasicEffect:require('./sim/dex-data').BasicEffect,Utils:require('./lib').Utils,"
+                    +"Registries:Object.fromEntries(Object.entries(require('./sim/cobblemon/registries'))),Cobblemon:Cobblemon}";
+            var modules=engine.eval("js","("+moduleExpression+")");
+            var anchor=engine.eval("js",Files.readString(resources.resolve("runtime-source-anchor.js"))).execute(modules);
+            var damageOracle=layoutOnly?null:ModifierTacticalRegression.oracle(engine);
+            var policyOracle=layoutOnly?null:ModifierTacticalRegression.policyOracle(engine);
+            if (!layoutOnly) SourceVerification.verifyNativeRecovery(engine);
+            if (!layoutOnly) BlockedHitRegression.differential(engine);
+            if (!layoutOnly) HealingRecoilRegression.differential(engine);
+            if (!layoutOnly) RecoilContinuationRegression.differential(engine);
+            if (!layoutOnly) PivotOutcomeRegression.differential(engine);
+            if (!layoutOnly) AccuracyMissRegression.differential(engine);
+            if (!layoutOnly) ResidualRecoveryRegression.differential(engine);
+            if (!layoutOnly) SandstormRegression.differential(engine);
+            if (!layoutOnly) WeatherSuppressionRegression.differential(engine);
+            if (!layoutOnly) WeatherSpeedRegression.differential(engine);
+            if (!layoutOnly) UtilityUmbrellaRegression.differential(engine);
+            if (!layoutOnly) WeatherAbilityRegression.differential(engine);
+            if (!layoutOnly) ToxicEntryRegression.differential(engine);
+            if (!layoutOnly) RosterAbilityRegression.differential(engine);
+            if (!layoutOnly) DownloadEntryRegression.differential(engine);
+            if (!layoutOnly) WeatherEntryRegression.differential(engine);
+            if (!layoutOnly) ColdWeatherRegression.differential(engine);
+            if (!layoutOnly) WeatherSetterRegression.differential(engine);
+            if (!layoutOnly) OwnMegaYRegression.differential(engine);
+            if (!layoutOnly) OwnZMoveRegression.differential(engine);
+            if (!layoutOnly) OwnReentryRegression.differential(engine);
+            if (!layoutOnly) StatusSpeedRegression.differential(engine);
+            if (!layoutOnly) PsychicTerrainRegression.differential(engine);
+            if (!layoutOnly) ModifierCompositionRegression.differential(engine);
+            engine.eval("js","var verificationStream=new BS.BattleStream();"
+                    +"verificationStream.write('>start '+JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,"
+                    +"ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'}}));");
+            var battle=engine.eval("js","verificationStream.battle");
+            var probe=engine.eval("js",Files.readString(resources.resolve("runtime-domain-probe.js")));
+            var capture=(java.util.function.Supplier<JsonObject>)()->JsonParser.parseString(probe.execute(battle,modules,false,null,anchor).asString()).getAsJsonObject();
+            var clean=capture.get();
+            var observed=new TreeMap<String,String>();
+            clean.getAsJsonObject("components").entrySet().forEach(e->observed.put(e.getKey(),SourceVerification.hash(e.getValue().getAsString())));
+            var expected=pins(resources.resolve("runtime-pack-components.tsv"));
+            check(observed.equals(expected),"Pack initialized components differ: "+observed);
+            if(layoutOnly){System.out.println("Pinned LF/CRLF initialized operation fingerprint equivalence PASS");return;}
+            MoveAttestationRegression.run(engine,probe,battle,modules,anchor,expected);
+            engine.eval("js","verificationStream.battle.dex.dataCache.Moves.unsupported={name:'Unsupported',onHit(){return 1;}};Cobblemon.registries.move.register({name:'Unsupported',onHit(){return 1;}},'unsupported');");
+            var scoped=capture.get();
+            check(!scoped.get("registryEquivalent").getAsBoolean() && scoped.get("scopedRegistryEquivalent").getAsBoolean(),"Unused custom move granted globally or blocked supported slice");
+            var components=new TreeMap<>(observed);
+            String receipt=SourceVerification.hash(scoped.get("registryReceipt").getAsString());components.put("registryReceipt",receipt);
+            var guarded=probe.execute(battle,modules,false,null,anchor,true);
+            var configurationLease=guarded.getMember("current");
+            check(configurationLease.execute().asBoolean(),"initial configuration receipt unavailable");
+            long[] timing={0,0};
+            var lease=new RuntimeRegistryLease(receipt,()->true,()->{
+                long start=System.nanoTime();boolean ok=configurationLease.execute().asBoolean();
+                timing[0]++;timing[1]+=System.nanoTime()-start;return ok?receipt:null;
+            });
+            var domain=new RuntimeDomain(new RuntimeDomain.Snapshot(true,false,true,false,true,components),expected,true,lease);
+            check(domain.effectiveState().known(),"narrow pack receipt absent");
+            long comparisonStart=System.nanoTime();
+            PublicPipelineRegression.run(domain);
+            OwnMegaYRegression.runtime(domain);
+            OwnZMoveRegression.runtime(domain);
+            OwnReentryRegression.runtime(domain);
+            NaturalAcceptanceRegression.run(domain);
+            ModifierTacticalRegression.run(domain,damageOracle);
+            ModifierTacticalRegression.policyComparisons(domain,policyOracle);
+            System.out.println("Public configuration rechecks="+timing[0]+" totalMs="+timing[1]/1_000_000
+                    +" providerMatrixMs="+(System.nanoTime()-comparisonStart)/1_000_000);
+            engine.eval("js","['p1','p2','sides','log','inputLog','activePokemon','activeTarget'].forEach(key=>Object.defineProperty(verificationStream.battle,key,{get(){throw Error('private state touched');}}));");
+            check(scoped.equals(capture.get()),"pack probe touched private actor state");
+            ModifierTacticalRegression.invalidation(domain,()->engine.eval("js","verificationStream.battle.dex.dataCache.Aliases.unverified='mewtwo';"));
+            engine.eval("js","delete verificationStream.battle.dex.dataCache.Aliases.unverified;");
+            check(!domain.effectiveState().known(),"restoration revived comparison receipt");
+            engine.eval("js","Cobblemon.registries.bagItem.contents.set('unverified',()=>{});");
+            check(!capture.get().get("scopedRegistryEquivalent").getAsBoolean(),"foreign bag callback could forge a public witness");
+            engine.eval("js","Cobblemon.registries.bagItem.reset();");
+            engine.eval("js","Cobblemon.registries.ability.register({name:'Unverified',onStart(p){this.add('-ability',p,'Pressure');}},'unverified');");
+            check(!capture.get().get("scopedRegistryEquivalent").getAsBoolean(),"foreign ability could forge public identity witness");
+            check(!domain.effectiveState().known(),"foreign entry ability retained receipt");
+            engine.eval("js","Cobblemon.registries.ability.reset();");
+            engine.eval("js","let genuine=verificationStream.battle.dex.dataCache.Abilities.pressure;"
+                    +"Cobblemon.registries.ability.register({...genuine,onStart:eval('({'+genuine.onStart.toString()+'}).onStart')},'pressure');");
+            check(!capture.get().get("scopedRegistryEquivalent").getAsBoolean(),"equal-source foreign registry closure certified");
+            check(!domain.effectiveState().known(),"changed registry retained old scoped receipt");
+            engine.eval("js","Cobblemon.registries.ability.reset();");
+            // Unselected dex abilities/items/aliases also affect public witnesses:
+            // no registry API call is necessary to install a forged entry effect.
+            for(String table:List.of("Abilities","Items","Conditions")) {
+                engine.eval("js","verificationStream.battle.dex.dataCache[\""+table+"\"].unverified={onStart(){this.add('-ability','p2a: Public','Pressure');}};");
+                boolean blocked=false;try{capture.get();}catch(RuntimeException unverified){blocked=true;}
+                check(blocked,"unselected dex public-witness hook accepted: "+table);
+                engine.eval("js","delete verificationStream.battle.dex.dataCache[\""+table+"\"].unverified;");
+            }
+            engine.eval("js","var savedPressure=verificationStream.battle.dex.abilities.abilityCache.get('pressure');"
+                    +"verificationStream.battle.dex.abilities.abilityCache.set('pressure',Object.assign(Object.create(Object.getPrototypeOf(savedPressure)),savedPressure));");
+            check(capture.get().get("scopedRegistryEquivalent").getAsBoolean(),"source-equivalent native cache reconstruction rejected");
+            engine.eval("js","verificationStream.battle.dex.abilities.abilityCache.set('pressure',{...savedPressure,onStart(){this.add('-ability','p2a: Public','Pressure');}});");
+            boolean cacheRejected=false;try{capture.get();}catch(RuntimeException unverified){cacheRejected=true;}
+            check(cacheRejected,"direct cache callback bypassed source provenance");
+            engine.eval("js","verificationStream.battle.dex.abilities.abilityCache.set('pressure',savedPressure);");
+            engine.eval("js","Cobblemon.registries.species.contents.set('unverified',verificationStream.battle.dex.species.speciesCache.get('mewtwo'));");
+            boolean speciesRejected=false;try{capture.get();}catch(RuntimeException unverified){speciesRejected=true;}
+            check(speciesRejected,"foreign species key could spoof the supported public catalog identity");
+            engine.eval("js","Cobblemon.registries.species.contents.delete('unverified');");
+            // A direct pack extension can replace dex callbacks without using
+            // Cobblemon's registry API. Equal text must not defeat the boot anchor.
+            engine.eval("js","let d=verificationStream.battle.dex.dataCache.Abilities;let originalPressure=d.pressure;"
+                    +"d.pressure={...originalPressure,onStart:eval('({'+originalPressure.onStart.toString()+'}).onStart')};");
+            boolean rejected=false;try{capture.get();}catch(RuntimeException expectedFailure){rejected=true;}
+            check(rejected,"unobserved equal-text dex closure bypassed boot source identity");
+            System.out.println("Pack source/operation scopes PASS: exact files, boot callback identities, scoped custom isolation, privacy and permanent lease withdrawal");
+        }
+    }
+}
