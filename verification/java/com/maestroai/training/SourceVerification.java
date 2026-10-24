@@ -93,6 +93,7 @@ public final class SourceVerification {
             OwnZMoveRegression.differential(engine);
             OwnReentryRegression.differential(engine);
             OwnXerneasRegression.differential(engine);
+            GeomancyContinuityRegression.differential(engine);
             OwnXerneasRegression.attestation(engine);
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);

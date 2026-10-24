@@ -10,6 +10,50 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
         super(field,lease,domain,protocol,observation,admitted);
     }
     record History(int entries,int lastEntry,boolean active,int entryIndex) {}
+    private static boolean ownAlive(OwnRequestTransport.Pokemon owned){
+        if(owned==null||owned.special()||!"".equals(owned.tera())||owned.dto().condition()==null
+                ||!owned.dto().condition().matches("[1-9][0-9]{0,4}/[1-9][0-9]{0,4}( (brn|par|psn|tox|slp|frz))?"))return false;
+        var hp=owned.dto().condition().split(" ")[0].split("/");
+        return Integer.parseInt(hp[0])<=Integer.parseInt(hp[1])&&Integer.parseInt(hp[1])<=10000;
+    }
+    /** An observed native U-turn entry is not a predicted replacement. Require
+     * a living owned donor, its exact direct move/damage sequence and the
+     * original annotation; copied/blocked/foreign entries acquire no witness. */
+    static Set<Integer> pivotEntries(OwnRequestTransport.Request request,String actor,List<String> events){
+        var admitted=new HashSet<Integer>();String slot=request.side()+"a: ",opposing=request.side().equals("p1")?"p2a: ":"p1a: ";
+        var members=new HashMap<String,OwnRequestTransport.Pokemon>();
+        for(var p:request.pokemon())members.put(slot+p.dto().uuid(),p);
+        String current=null,donor=null,target=null;boolean hit=false,alive=false;
+        for(int i=0;i<events.size();i++){
+            var p=events.get(i).split("\\|",-1);String event=p[1];
+            if(event.equals("turn")){donor=null;target=null;hit=false;continue;}
+            if(p.length<3)continue;
+            if(Set.of("switch","drag").contains(event)&&p[2].startsWith(slot)){
+                if(p[2].equals(actor)&&p.length!=5){
+                    if(p.length!=6||!p[5].equals("[from] U-turn")||donor==null||!donor.equals(current)||!hit||!alive)return null;
+                    admitted.add(i);
+                }
+                current=p[2];donor=null;target=null;hit=false;continue;
+            }
+            if(event.equals("move")){
+                donor=null;target=null;hit=false;alive=false;
+                if(p.length==5&&p[2].equals(current)&&p[3].equals("U-turn")&&p[4].startsWith(opposing)){
+                    var owned=members.get(current);
+                    if(ownAlive(owned)){
+                        donor=current;target=p[4];alive=true;
+                    }
+                }
+                continue;
+            }
+            if(donor==null)continue;
+            if(event.equals("-damage")&&p.length>=4){
+                if(p[2].equals(target)&&p.length==4)hit=true;
+                if(p[2].equals(donor)&&!positive(p[3]))alive=false;
+            }
+            if(event.equals("faint")&&p[2].equals(donor))alive=false;
+        }
+        return admitted;
+    }
 
     /** Shared with spent-Z history. Current own UUID membership is independent of public appearances.
      * Only actual switches to a different owned UUID certify an exit; faints, reveals,
@@ -19,6 +63,7 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
     }
     static History history(OwnRequestTransport.Request request,OwnRequestTransport.Pokemon own,List<String> events,Set<Integer> admitted) {
         String slot=request.side()+"a",actor=slot+": "+own.dto().uuid();
+        var pivots=pivotEntries(request,actor,events);if(pivots==null)return null;
         var members=new HashSet<String>();
         for(var p:request.pokemon())members.add(slot+": "+p.dto().uuid());
         boolean active=false,exited=false,alive=false;int entries=0,turn=0,lastEntry=-1,entryIndex=-1;
@@ -30,7 +75,7 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
             if(Set.of("switch","drag").contains(p[1])&&p[2].startsWith(slot+": ")){
                 if(!members.contains(p[2]))return null;
                 if(p[2].equals(actor)){
-                    if(active||entries>0&&!exited||p.length!=5
+                    if(active||entries>0&&!exited||p.length!=5&&!pivots.contains(i)
                             ||!details(p[3],own)||!positive(p[4]))return null;
                     active=true;alive=true;exited=false;entries++;lastEntry=turn;entryIndex=i;
                 }else if(active){

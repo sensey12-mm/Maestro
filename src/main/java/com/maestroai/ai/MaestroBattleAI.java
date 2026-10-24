@@ -5864,6 +5864,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             // Rebuild the public capture for this choice before adding an
             // independently owned, source-bound permanent-form witness.
             fieldCapture=publicFieldEvidence.update(publicProtocolEvidence,publicMechanicsEvidence);
+            fieldCapture=ownTransport.rebindOwnGeomancy(ownChoiceLease,runtimeDomain,publicProtocolEvidence,fieldCapture);
             fieldCapture=ownTransport.rebindOwnZUse(ownChoiceLease,runtimeDomain,publicProtocolEvidence,fieldCapture);
             fieldCapture=ownTransport.rebindOwnMegaY(ownChoiceLease,runtimeDomain,publicProtocolEvidence,
                     publicMechanicsEvidence.observation(activePokemon.getPNX()),fieldCapture);

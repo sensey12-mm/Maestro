@@ -28,10 +28,11 @@ public final class PublicFieldEvidence {
         private final List<String> events;
         private final OwnEntryEvidence ownForm;
         private final OwnZUseEvidence ownZUse;
+        private final OwnGeomancyEvidence ownGeomancy;
         private Capture(PublicFieldEvidence owner, long epoch, int turn, Known<String> weather,
                         Known<String> terrain, Known<Boolean> trickRoom, Known<Boolean> magicRoom,
                         Map<String, Boolean> tailwind, Map<String, Active> actors, Set<String> unknown,
-                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnEntryEvidence ownForm,OwnZUseEvidence ownZUse) {
+                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnEntryEvidence ownForm,OwnZUseEvidence ownZUse,OwnGeomancyEvidence ownGeomancy) {
             this.owner = owner; this.epoch = epoch; this.turn = turn; this.weather = weather; this.terrain = terrain;
             this.trickRoom = trickRoom; this.magicRoom = magicRoom; this.tailwind = Map.copyOf(tailwind);
             this.actors = Map.copyOf(actors); this.unknown = Set.copyOf(unknown);
@@ -39,6 +40,7 @@ public final class PublicFieldEvidence {
             this.protocol = protocol; this.events = protocol.mechanicsEvents();
             this.weatherStartTurn=weatherStartTurn;
             this.ownForm=ownForm;this.ownZUse=ownZUse;
+            this.ownGeomancy=ownGeomancy;
             var captured = new HashMap<String, PublicMechanicsEvidence.Observation>();
             actors.keySet().forEach(slot -> { var o = evidence.observation(slot); if (o != null) captured.put(slot, o); });
             this.observations = Map.copyOf(captured);
@@ -88,16 +90,23 @@ public final class PublicFieldEvidence {
             return expected.equals(details)||(expected+", shiny").equals(details);
         }
         boolean hasOwnedZUse(){return ownZUse!=null;}
-        boolean ownedSourceCurrent(){return (ownForm==null||ownForm.sourceCurrent())&&(ownZUse==null||ownZUse.sourceCurrent());}
+        boolean hasOwnedGeomancy(){return ownGeomancy!=null;}
+        boolean ownedSourceCurrent(){return (ownForm==null||ownForm.sourceCurrent())&&(ownZUse==null||ownZUse.sourceCurrent())
+            &&(ownGeomancy==null||ownGeomancy.sourceCurrent());}
         Capture rebind(OwnEntryEvidence proof){
             requireCurrent(turn);
             if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-form witness");
-            return owner.update(protocol,evidence,proof,ownZUse);
+            return owner.update(protocol,evidence,proof,ownZUse,ownGeomancy);
         }
         Capture rebind(OwnZUseEvidence proof){
             requireCurrent(turn);
             if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-Z witness");
-            return owner.update(protocol,evidence,ownForm,proof);
+            return owner.update(protocol,evidence,ownForm,proof,ownGeomancy);
+        }
+        Capture rebind(OwnGeomancyEvidence proof){
+            requireCurrent(turn);
+            if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-Geomancy witness");
+            return owner.update(protocol,evidence,ownForm,ownZUse,proof);
         }
         Capture withoutOwnedForm(){return owner.update(protocol,evidence);}
         public String token() { return SOURCE + ":epoch-" + epoch + ":turn-" + turn; }
@@ -174,9 +183,9 @@ public final class PublicFieldEvidence {
         String slot, name; int entry; boolean covered, transientFlinch; Set<String> volatiles = new HashSet<>();
     }
     public Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence) {
-        return update(protocol,evidence,null,null);
+        return update(protocol,evidence,null,null,null);
     }
-    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnEntryEvidence ownForm,OwnZUseEvidence ownZUse) {
+    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnEntryEvidence ownForm,OwnZUseEvidence ownZUse,OwnGeomancyEvidence ownGeomancy) {
         epoch++; Set<String> unknown = new TreeSet<>();
         unknown.addAll(protocol.coverageUnknown());
         if (!protocol.framed()) unknown.add("PUBLIC_ENVELOPE_PROVENANCE_UNKNOWN");
@@ -252,7 +261,8 @@ public final class PublicFieldEvidence {
             }
             Mutable a = active.get(slot);
             if (a == null || !a.name.equals(name)) { unknown.add("ACTOR_BINDING_UNKNOWN"); continue; }
-            if(ownForm!=null&&ownForm.admits(index,line)||ownZUse!=null&&ownZUse.admits(index,line))continue;
+            if(ownForm!=null&&ownForm.admits(index,line)||ownZUse!=null&&ownZUse.admits(index,line)
+                    ||ownGeomancy!=null&&ownGeomancy.admits(index,line))continue;
             if (event.equals("replace")) { a.covered = false; unknown.add("REVEAL_EXECUTION_HISTORY_UNRESOLVED"); continue; }
             if (event.equals("cant") && p.length > 3 && key(p[3]).equals("flinch")) {
                 a.transientFlinch = true; continue; // duration1 in the pinned conditions table
@@ -293,6 +303,6 @@ public final class PublicFieldEvidence {
         if (!start || !gen9 || !singles || turn == 0) unknown.add("WITNESSED_GEN9_SINGLES_START_OR_TURN_MISSING");
         Map<String, Active> actors = new HashMap<>();
         active.forEach((slot, a) -> actors.put(slot, new Active(slot, a.entry, a.name, a.volatiles, a.covered && !a.transientFlinch)));
-        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn,ownForm,ownZUse); return current;
+        current = new Capture(this, epoch, turn, weather, terrain, trick, magic, wind, actors, unknown, evidence, protocol,weatherStartTurn,ownForm,ownZUse,ownGeomancy); return current;
     }
 }

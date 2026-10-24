@@ -134,6 +134,17 @@ public final class OwnRequestTransport {
             return null;
         return OwnZMoveEvidence.inspect(lease,domain,own,field,receipt,installedChoice);
     }
+    /** Past-only own Geomancy proof composes before actor-specific form/Z witnesses. */
+    public PublicFieldEvidence.Capture rebindOwnGeomancy(Lease lease,RuntimeDomain domain,
+            PublicProtocolEvidence protocol,PublicFieldEvidence.Capture field){
+        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE)return field;
+        try{
+            var proof=OwnGeomancyEvidence.inspect(field,lease,domain,protocol,receipt,receiptTurn);
+            if(proof==null)return field;
+            var rebound=field.rebind(proof);
+            return proof.sourceCurrent()?rebound:rebound.withoutOwnedForm();
+        }catch(IllegalArgumentException|NoSuchElementException unavailable){return field;}
+    }
     public PublicFieldEvidence.Capture rebindOwnZUse(Lease lease,RuntimeDomain domain,
             PublicProtocolEvidence protocol,PublicFieldEvidence.Capture field){
         if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE)return field;
@@ -148,10 +159,11 @@ public final class OwnRequestTransport {
      * history. The spectator observations and every opponent guard stay intact. */
     public PublicFieldEvidence.Capture rebindOwnMegaY(Lease lease,RuntimeDomain domain,
             PublicProtocolEvidence protocol,PublicMechanicsEvidence.Observation active,PublicFieldEvidence.Capture field){
-        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE)return field;
+        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE||protocol==null)return field;
         try{
             var own=receipt.pokemon().stream().filter(p->p.dto().active()).findFirst().orElseThrow();
-            var proof=OwnMegaYEvidence.inspect(field,lease,domain,protocol,active,own,side,receiptTurn);
+            var pivots=OwnReentryEvidence.pivotEntries(receipt,side+"a: "+own.dto().uuid(),protocol.mechanicsEvents());
+            var proof=OwnMegaYEvidence.inspect(field,lease,domain,protocol,active,own,side,receiptTurn,pivots);
             if(proof==null)return field;
             var rebound=field.rebind(proof);
             return proof.sourceCurrent()?rebound:rebound.withoutOwnedForm();

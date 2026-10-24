@@ -17,11 +17,11 @@ final class OwnMegaYEvidence extends OwnEntryEvidence {
     static OwnMegaYEvidence inspect(PublicFieldEvidence.Capture field, OwnRequestTransport.Lease lease,
             RuntimeDomain domain, PublicProtocolEvidence protocol,
             PublicMechanicsEvidence.Observation observation, OwnRequestTransport.Pokemon owned,
-            String side,int receiptTurn) {
+            String side,int receiptTurn,Set<Integer> pivots) {
         if(field==null||lease==null||domain==null||protocol==null||observation==null||owned==null
                 ||!lease.current()||!domain.scopes().get(Operation.DAMAGE).known()
                 ||!protocol.framed()||!protocol.complete()||protocol.corrupted()
-                ||!protocol.coverageUnknown().isEmpty()||!field.unknown().isEmpty()
+                ||pivots==null||!protocol.coverageUnknown().isEmpty()||!field.unknown().isEmpty()
                 ||protocol.publicTurn()!=lease.turn()||!Set.of("p1","p2").contains(side))return null;
         field.requireCurrent(lease.turn());
         var dto=owned.dto();String uuid=dto.uuid().toString(),slot=side+"a",actor=slot+": "+uuid;
@@ -43,7 +43,7 @@ final class OwnMegaYEvidence extends OwnEntryEvidence {
             if(p.length<3)continue;
             if(Set.of("switch","drag").contains(p[1])&&p[2].startsWith(slot+": ")){
                 boolean incoming=p[2].equals(actor);
-                if(incoming&&(active||p.length!=5||!details(p[3],mega?"Mewtwo-Mega-Y":"Mewtwo",uuid,owned.level())))return null;
+                if(incoming&&(active||p.length!=5&&!pivots.contains(i)||!details(p[3],mega?"Mewtwo-Mega-Y":"Mewtwo",uuid,owned.level())))return null;
                 active=incoming;if(incoming){entry=turn;entryIndex=i;}
                 continue;
             }

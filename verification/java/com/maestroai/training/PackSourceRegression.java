@@ -121,6 +121,7 @@ final class PackSourceRegression {
             if (!layoutOnly) OwnZMoveRegression.differential(engine);
             if (!layoutOnly) OwnReentryRegression.differential(engine);
             if (!layoutOnly) OwnXerneasRegression.differential(engine);
+            if (!layoutOnly) GeomancyContinuityRegression.differential(engine);
             if (!layoutOnly) OwnXerneasRegression.attestation(engine);
             if (!layoutOnly) StatusSpeedRegression.differential(engine);
             if (!layoutOnly) PsychicTerrainRegression.differential(engine);

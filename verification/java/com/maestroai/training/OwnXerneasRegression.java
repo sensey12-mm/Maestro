@@ -17,6 +17,7 @@ final class OwnXerneasRegression {
     private static int checks;
     private static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
     static void prepare(Path dependency)throws Exception {definitions=OwnXerneasRegistrationRegression.definitions(dependency);}
+    static JsonObject definitions(boolean shift){if(definitions==null)throw new AssertionError("Original registration not prepared");return definitions.getAsJsonObject(shift?"pack":"native").deepCopy();}
     private static RuntimeDomain domain(AtomicBoolean live,String mode,boolean catalog){
         var pins=Map.of("core","1".repeat(64),"tables","2".repeat(64),"speciesHooks","3".repeat(64),"catalog","4".repeat(64));
         var actual=new TreeMap<>(pins);actual.put("ownXerneas",SourceVerification.hash(mode));
@@ -39,7 +40,7 @@ final class OwnXerneasRegression {
         +"|-boost|p1a: "+OWN+"|spa|2\n|turn|2\n|switch|p1a: "+BENCH+"|Mewtwo, "+BENCH+"|100/100\n|turn|3\n"
         +"|switch|p1a: "+OWN+"|Xerneas, "+OWN+"|75/100\n|-formechange|p1a: "+OWN+"|Xerneas-Active|\n"
         +"|-ability|p1a: "+OWN+"|Fairy Aura\n|turn|4";}
-    private record Fixture(OwnRequestTransport ledger,OwnRequestTransport.Lease lease,RuntimeDomain domain,
+    record Fixture(OwnRequestTransport ledger,OwnRequestTransport.Lease lease,RuntimeDomain domain,
             AtomicBoolean live,PublicProtocolEvidence protocol,PublicMechanicsEvidence provider,PublicFieldEvidence fields,
             PublicFieldEvidence.Capture base,PublicFieldEvidence.Capture field,PublicMechanicsEvidence.Observation own,
             PublicMechanicsEvidence.Observation foe,OwnXerneasEvidence xerneas,UUID uuid){
@@ -49,8 +50,12 @@ final class OwnXerneasRegression {
             "opponent",new ScopedExecution.Binding(foe,foe.item(),foe.ability())),domain.scopes());
             return xerneas==null?x:x.withOwnXerneas(xerneas);}
     }
-    private static Fixture fixture(String history,List<OwnRequestTransport.Request> requests,int turn,String side,UUID uuid,
+    static Fixture fixture(String history,List<OwnRequestTransport.Request> requests,int turn,String side,UUID uuid,
             boolean fresh,String mode,boolean catalog,RuntimeDomain supplied){
+        return fixture(history,requests,turn,side,uuid,fresh,mode,catalog,supplied,true);
+    }
+    static Fixture fixture(String history,List<OwnRequestTransport.Request> requests,int turn,String side,UUID uuid,
+            boolean fresh,String mode,boolean catalog,RuntimeDomain supplied,boolean geomancy){
         var live=new AtomicBoolean(true);var d=supplied==null?domain(live,mode,catalog):supplied;
         var ledger=new OwnRequestTransport();Object battle=new Object(),actor=new Object(),token=new Object();ledger.owner(battle,actor,side);
         ledger.dispatched(battle,actor,side,token,()->requests.getFirst());
@@ -62,11 +67,13 @@ final class OwnXerneasRegression {
         var protocol=new PublicProtocolEvidence();protocol.update(List.of(history));
         var provider=new PublicMechanicsEvidence(id->switch(id){
             case "mewtwo"->new PublicMechanicsEvidence.Species(Map.of("hp",106,"atk",110,"def",90,"spa",154,"spd",90,"spe",130),List.of("psychic"),null);
+            case "blissey"->new PublicMechanicsEvidence.Species(Map.of("hp",255,"atk",10,"def",10,"spa",75,"spd",135,"spe",55),List.of("normal"),null);
             case "xerneas"->new PublicMechanicsEvidence.Species(Map.of("hp",126,"atk",131,"def",95,"spa",131,"spd",98,"spe",99),List.of("fairy"),null);
             default->null;});
         provider.update(protocol);var fields=new PublicFieldEvidence();var base=fields.update(protocol,provider);
         var own=provider.observation(side+"a");var foe=provider.observation(side.equals("p1")?"p2a":"p1a");
-        var field=ledger.rebindOwnZUse(lease,d,protocol,base);
+        var field=geomancy?ledger.rebindOwnGeomancy(lease,d,protocol,base):base;
+        field=ledger.rebindOwnZUse(lease,d,protocol,field);
         field=ledger.rebindOwnMegaY(lease,d,protocol,own,field);field=ledger.rebindOwnReentry(lease,d,protocol,own,field);
         var binding=ledger.bindOwnXerneas(lease,d,protocol,own,field);
         return new Fixture(ledger,lease,d,live,protocol,provider,fields,base,binding.field(),own,foe,binding.evidence(),uuid);
@@ -276,14 +283,17 @@ final class OwnXerneasRegression {
             var f=fixture(h,requests,4,side,OWN,true,"",true,domain);
             check(supported(f)&&f.execution().priority("geomancy","self").known(),"Production registered profile did not reach own Active operations: "+side+" "+f.effective().missing()+" "+f.field.unknown());
         }
+        var continuityWithdrawal=GeomancyContinuityRegression.withdrawal(domain);
         engine.eval("js","Cobblemon.registries.species.contents.get('xerneasactive').baseStats.spa++;");
         var altered=SimulatorDomainBridge.capture(service,id,choice::get);
         check(!domain.current()&&(altered==null||!altered.effectiveState().known())
                 &&(altered==null||!altered.xerneasLifecycle().known()),"Altered Active numbers retained runtime attestation");
+        continuityWithdrawal.run();
         engine.eval("js","Cobblemon.registries.species.contents.get('xerneasactive').baseStats.spa--;");
         check(!domain.current(),"Restored Active numbers revived an old receipt");
         var restored=SimulatorDomainBridge.capture(service,id,choice::get);check(restored!=null&&restored.effectiveState().known(),"Restored source could not issue a fresh receipt");
         System.out.println("Own Xerneas native runtime integration PASS: original Java registration transport, actual source bridge, both owner sides, changed-definition rejection and sticky withdrawal; no installed-Mixin claim");
+        GeomancyContinuityRegression.runtime(restored);
         return restored;
     }
 }

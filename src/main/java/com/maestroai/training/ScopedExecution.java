@@ -90,7 +90,8 @@ public final class ScopedExecution {
     boolean sourceCurrent() {
         try { field.requireCurrent(field.turn()); }
         catch(IllegalArgumentException stale) { return false; }
-        return (ownZ==null||ownZ.current()) && (ownXerneas==null||ownXerneas.current()) && scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
+        return (ownZ==null||ownZ.current()) && (ownXerneas==null||ownXerneas.current())
+                && (!field.hasOwnedGeomancy()||field.ownedSourceCurrent()) && scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
                 .allMatch(b->b.lease().current());
     }
     /**
@@ -254,7 +255,8 @@ public final class ScopedExecution {
             // Unsupported weather is irrelevant to this limited priority/speed/entry/setup slice.
             field.unknown().stream().filter(reason -> !reason.equals("UNSUPPORTED_WEATHER") || op == Operation.DAMAGE).forEach(missing::add);
             need("SOURCE_DOMAIN_" + op, yes(scopes.get(op)));
-            if(field.hasOwnedForm()||field.hasOwnedZUse())need("OWN_FORM_SOURCE_CATALOG_AND_DISPATCH",yes(scopes.get(Operation.DAMAGE)));
+            if(field.hasOwnedForm()||field.hasOwnedZUse()||field.hasOwnedGeomancy())need("OWN_FORM_SOURCE_CATALOG_AND_DISPATCH",yes(scopes.get(Operation.DAMAGE)));
+            if(field.hasOwnedGeomancy())need("OWN_GEOMANCY_SOURCE_RECEIPT",field.ownedSourceCurrent());
         }
         void need(String name, boolean supported) { required.add(name); if (!supported) missing.add(name); }
         void actor(String role, boolean reserve) {
@@ -284,7 +286,8 @@ public final class ScopedExecution {
             }
             need(role + ":ITEM_SUPPRESSION", b.item().known() && b.item().value().equals("none") || field.magicRoom().known());
         }
-        Certificate finish() { return new Certificate(field, op, required, missing, () -> (ownZ==null||ownZ.current()) && (ownXerneas==null||ownXerneas.current()) && scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
+        Certificate finish() { return new Certificate(field, op, required, missing, () -> (ownZ==null||ownZ.current()) && (ownXerneas==null||ownXerneas.current())
+                && (!field.hasOwnedGeomancy()||field.ownedSourceCurrent()) && scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
     }
     private boolean supported(String role, boolean reserve) {
         // Raw reserves cannot certify Download or active weather suppression.

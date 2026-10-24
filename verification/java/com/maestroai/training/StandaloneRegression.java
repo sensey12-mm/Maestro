@@ -358,6 +358,7 @@ public final class StandaloneRegression {
         OwnZMoveRegression.run();
         OwnReentryRegression.run();
         OwnXerneasRegression.run();
+        GeomancyContinuityRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();
