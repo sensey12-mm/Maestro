@@ -20,6 +20,8 @@ module.exports=function(Battle,definitions,shift){
     for(const kind of ['mega','z','mega-z-mega','z-mega-z','pivot-before','pivot-after','pivot-after-mega','pivot-after-mega-return',
       'pivot-after-z','pivot-after-z-return','pivot-pending','lethal','two-turn','two-turn-return','incomplete'])
       configurations.push({owner,level,recipient:4,kind,hazards:false});
+    for(const kind of ['mega','z','mega-z-mega','z-mega-z'])
+      configurations.push({owner,level,recipient:4,kind,hazards:true,webOnly:true});
   }
   try{
     receiveData(JSON.stringify(definitions),'species');afterSpeciesInit();
@@ -52,7 +54,7 @@ module.exports=function(Battle,definitions,shift){
       if(['two-turn','two-turn-return'].includes(kind))choose('move geomancy');
       if(kind!=='incomplete'){
         if(members[0].boosts.spa!==2||members[0].boosts.spd!==2||members[0].boosts.spe!==2)throw Error('Native charge did not complete');
-        if(c.hazards)for(const id of ['stealthrock','spikes','stickyweb','toxicspikes'])own.addSideCondition(id,target);
+        if(c.hazards)for(const id of (c.webOnly?['stickyweb']:['stealthrock','spikes','stickyweb','toxicspikes']))own.addSideCondition(id,target);
         if(kind==='lethal'){own.addSideCondition('stealthrock',target);members[4].hp=1;}
         if(kind==='return'||kind==='two-turn-return'){
           switchTo(c.recipient);switchTo(0);switchTo(c.recipient);
@@ -74,10 +76,8 @@ module.exports=function(Battle,definitions,shift){
         }else switchTo(c.recipient);
       }
       const current=own.active[0],forced=b.requestState!=='move';
-      // First incoming Web activations still need the existing actor-entry
-      // witness. A past charge proof must not manufacture that capability.
-      const unprovedEntry=kind==='switch'&&c.hazards;
-      const unsupported=forced||kind==='incomplete'||unprovedEntry;
+      const firstWebEntry=kind==='switch'&&c.hazards;
+      const unsupported=forced||kind==='incomplete';
       if(kind==='lethal'&&(!current.fainted||!forced))throw Error('Native lethal entry boundary changed');
       if(!unsupported&&current===members[0])throw Error('Continuity checkpoint did not leave Xerneas');
       if(z&&(!own.zMoveUsed||own.activeRequest.active[0].canZMove))throw Error('Native Z history retained eligibility');
@@ -89,7 +89,7 @@ module.exports=function(Battle,definitions,shift){
       }b.random=random;}
       rows.push({config:c,side,turn:b.turn,uuid:current.uuid,requests,public:publicLog(b.log),stats:current.baseStoredStats,
         types:current.types,status:current.status||'none',hp:current.hp,maxHp:current.maxhp,stages:current.boosts,
-        species:current.species.name,ability:current.ability,item:current.item||'none',spent:!!own.zMoveUsed,forced,unsupported,unprovedEntry,
+        species:current.species.name,ability:current.ability,item:current.item||'none',spent:!!own.zMoveUsed,forced,unsupported,firstWebEntry,
         move:id,points:points.length?[Math.min(...points),Math.max(...points)]:[]});
       b.destroy();
     }

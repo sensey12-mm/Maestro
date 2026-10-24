@@ -89,7 +89,7 @@ public final class OwnXerneasEvidence extends OwnEntryEvidence {
         if(!history.active()||entry<0||receiptTurn<entry||lease.turn()<=entry)return registryOnly;
         var activations=OwnReentryEvidence.entryActivations(request.side(),actor,history.entryIndex(),events);
         if(activations==null)return registryOnly;
-        if(!activations.isEmpty()&&(!field.magicRoom().known()||own.item().equals("heavydutyboots")&&!field.magicRoom().value()))return registryOnly;
+        if(!OwnReentryEvidence.webEntryAllowed(own,field,events,activations))return registryOnly;
         admitted.addAll(activations);
         var proof=new OwnXerneasEvidence(field,lease,domain,protocol,request,observation,admitted,true);
         return proof.sourceCurrent()?proof:registryOnly;

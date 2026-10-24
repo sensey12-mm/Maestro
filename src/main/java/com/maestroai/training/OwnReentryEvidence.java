@@ -3,7 +3,7 @@ package com.maestroai.training;
 import java.util.*;
 import static com.maestroai.training.ExecutionCoverage.Operation;
 
-/** Ordinary same-form own return after witnessed unfainted exits. No opponent or future-entry proof. */
+/** Ordinary own returns and exact first-entry Web effects. No opponent or future-entry proof. */
 final class OwnReentryEvidence extends OwnEntryEvidence {
     private OwnReentryEvidence(PublicFieldEvidence.Capture field, OwnRequestTransport.Lease lease,
             RuntimeDomain domain, PublicProtocolEvidence protocol, PublicMechanicsEvidence.Observation observation,Set<Integer> admitted) {
@@ -121,6 +121,33 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
         if(!raw.matches("[1-9][0-9]{0,2}/(?:48|100)(?: (?:brn|par|psn|tox|slp|frz))?"))return false;
         var ratio=raw.split(" ")[0].split("/");return Integer.parseInt(ratio[0])<=Integer.parseInt(ratio[1]);
     }
+    private static boolean magicRoomAt(List<String> events,int index){
+        boolean active=false;var actors=new HashMap<String,String>();
+        for(int i=0;i<index;i++){
+            var p=events.get(i).split("\\|",-1);
+            if(p.length>2&&Set.of("switch","drag").contains(p[1]))actors.put(p[2].split(":",2)[0],p[2]);
+            if(p.length>2&&p[2].equals("move: Magic Room")&&Set.of("-fieldstart","-fieldend").contains(p[1])){
+                if(p.length!=3&&(p.length!=4||!p[3].startsWith("[of] ")||!actors.containsValue(p[3].substring(5))))return false;
+                active=p[1].equals("-fieldstart");
+            }
+        }
+        return active;
+    }
+    private static boolean initialOwnEntry(OwnRequestTransport.Request request,List<String> events,int before){
+        int turn=0;
+        for(int i=0;i<before;i++){
+            var p=events.get(i).split("\\|",-1);
+            if(p[1].equals("turn")){turn=Integer.parseInt(p[2]);continue;}
+            if(p.length==5&&p[1].equals("switch")&&p[2].startsWith(request.side()+"a: ")&&turn==0&&positive(p[4]))
+                return request.pokemon().stream().anyMatch(m->p[2].equals(request.side()+"a: "+m.dto().uuid()));
+        }
+        return false;
+    }
+    static boolean webEntryAllowed(OwnRequestTransport.Pokemon own,PublicFieldEvidence.Capture field,List<String> events,Set<Integer> admitted){
+        return admitted.isEmpty()||own.dto().types().stream().noneMatch(t->t.equalsIgnoreCase("flying"))
+            &&!own.dto().ability().equalsIgnoreCase("levitate")&&field.magicRoom().known()
+            &&(!own.item().equals("heavydutyboots")||admitted.stream().allMatch(i->magicRoomAt(events,i)));
+    }
     static OwnReentryEvidence inspect(PublicFieldEvidence.Capture field,OwnRequestTransport.Lease lease,
             RuntimeDomain domain,PublicProtocolEvidence protocol,PublicMechanicsEvidence.Observation observation,
             OwnRequestTransport.Request request,int receiptTurn){
@@ -145,13 +172,14 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
         var hp=dto.condition().split(" ")[0].split("/");
         if(Integer.parseInt(hp[0])>Integer.parseInt(hp[1])||Integer.parseInt(hp[1])>10000)return null;
         var history=history(request,own,protocol.mechanicsEvents());
-        if(history==null||history.entries()<2||!history.active()||history.lastEntry()<1
+        if(history==null||!history.active()||history.lastEntry()<1
                 ||receiptTurn<history.lastEntry()||lease.turn()<=history.lastEntry())return null;
         var admitted=entryActivations(request.side(),observation.publicName(),history.entryIndex(),protocol.mechanicsEvents());
-        if(admitted==null||observation.unsupportedEffects()&&admitted.isEmpty())return null;
-        if(!admitted.isEmpty()&&(dto.types().stream().anyMatch(t->t.equalsIgnoreCase("flying"))
-                ||dto.ability().equalsIgnoreCase("levitate")||!field.magicRoom().known()
-                ||own.item().equals("heavydutyboots")&&!field.magicRoom().value()))return null;
+        // A first entry needs the exact native Web effect, not a generic
+        // capability to clear unsupported observations or assert a prior exit.
+        if(admitted==null||admitted.isEmpty()&&(history.entries()<2||observation.unsupportedEffects()))return null;
+        if(history.entries()==1&&!initialOwnEntry(request,protocol.mechanicsEvents(),history.entryIndex()))return null;
+        if(!webEntryAllowed(own,field,protocol.mechanicsEvents(),admitted))return null;
         var proof=new OwnReentryEvidence(field,lease,domain,protocol,observation,admitted);
         return proof.sourceCurrent()?proof:null;
     }

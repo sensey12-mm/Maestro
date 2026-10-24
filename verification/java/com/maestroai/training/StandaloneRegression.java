@@ -359,6 +359,7 @@ public final class StandaloneRegression {
         OwnReentryRegression.run();
         OwnXerneasRegression.run();
         GeomancyContinuityRegression.run();
+        OwnFirstWebRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

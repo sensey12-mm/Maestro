@@ -53,6 +53,7 @@ final class AddonReloadRegression {
             OwnReentryRegression.differential(engine);
             OwnXerneasRegression.differential(engine);
             GeomancyContinuityRegression.differential(engine);
+            OwnFirstWebRegression.differential(engine);
         var domain=SimulatorDomainBridge.capture(service,id,choice::get);
         check(domain!=null&&domain.effectiveState().known(),"source-bound addon capture rejected: "
                 +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));

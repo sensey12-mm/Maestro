@@ -94,6 +94,7 @@ public final class SourceVerification {
             OwnReentryRegression.differential(engine);
             OwnXerneasRegression.differential(engine);
             GeomancyContinuityRegression.differential(engine);
+            OwnFirstWebRegression.differential(engine);
             OwnXerneasRegression.attestation(engine);
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);

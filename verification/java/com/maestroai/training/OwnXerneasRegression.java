@@ -284,16 +284,19 @@ final class OwnXerneasRegression {
             check(supported(f)&&f.execution().priority("geomancy","self").known(),"Production registered profile did not reach own Active operations: "+side+" "+f.effective().missing()+" "+f.field.unknown());
         }
         var continuityWithdrawal=GeomancyContinuityRegression.withdrawal(domain);
+        var webWithdrawal=OwnFirstWebRegression.withdrawal(domain);
         engine.eval("js","Cobblemon.registries.species.contents.get('xerneasactive').baseStats.spa++;");
         var altered=SimulatorDomainBridge.capture(service,id,choice::get);
         check(!domain.current()&&(altered==null||!altered.effectiveState().known())
                 &&(altered==null||!altered.xerneasLifecycle().known()),"Altered Active numbers retained runtime attestation");
         continuityWithdrawal.run();
+        webWithdrawal.run();
         engine.eval("js","Cobblemon.registries.species.contents.get('xerneasactive').baseStats.spa--;");
         check(!domain.current(),"Restored Active numbers revived an old receipt");
         var restored=SimulatorDomainBridge.capture(service,id,choice::get);check(restored!=null&&restored.effectiveState().known(),"Restored source could not issue a fresh receipt");
         System.out.println("Own Xerneas native runtime integration PASS: original Java registration transport, actual source bridge, both owner sides, changed-definition rejection and sticky withdrawal; no installed-Mixin claim");
         GeomancyContinuityRegression.runtime(restored);
+        OwnFirstWebRegression.runtime(restored);
         return restored;
     }
 }

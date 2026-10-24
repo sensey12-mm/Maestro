@@ -118,17 +118,18 @@ final class GeomancyContinuityRegression {
         boolean shift=engine.eval("js","!!require('./data/abilities').Abilities.fairyaura.onPreStart").asBoolean();
         String source=Files.readString(Path.of(System.getProperty("maestroai.verificationRoot","."),"verification/geomancy_continuity_oracle.cjs"));
         var rows=JsonParser.parseString(engine.eval("js","(()=>{const module={exports:{}};"+source+";return JSON.stringify(module.exports(require('./sim/battle').Battle,"+OwnXerneasRegression.definitions(shift)+","+shift+"));})()").asString()).getAsJsonArray();
-        check(rows.size()==140,"Native continuity inventory changed");int bounded=0,guarded=0;
+        check(rows.size()==156,"Native continuity inventory changed");int bounded=0,guarded=0;
         for(var value:rows){var row=value.getAsJsonObject();var requests=new ArrayList<OwnRequestTransport.Request>();
             for(var q:row.getAsJsonArray("requests"))requests.add(OwnRequestJson.parse("|request|"+q));
             int turn=row.get("turn").getAsInt();String side=row.get("side").getAsString(),h=row.get("public").getAsString();UUID uuid=UUID.fromString(row.get("uuid").getAsString());
             var f=OwnXerneasRegression.fixture(h,requests,turn,side,uuid,true,shift?"shift-registered":"native-registered",true,null);
             if(row.get("unsupported").getAsBoolean()){
                 check(!supported(f),"Unproved native current entry/execution boundary gained current continuity");
-                check(f.field().hasOwnedGeomancy()==row.get("unprovedEntry").getAsBoolean(),"Past proof granted a current-entry witness or survived a pending/lethal/incomplete boundary");
+                check(!f.field().hasOwnedGeomancy(),"Past proof survived a pending/lethal/incomplete boundary");
                 guarded++;continue;
             }
             check(supported(f)&&f.field().hasOwnedGeomancy(),"Native own handoff failed: "+row.get("config")+" "+f.effective().missing()+" "+f.field().unknown());bounded++;
+            if(row.get("firstWebEntry").getAsBoolean())check(f.field().hasOwnedForm()&&f.own().unsupportedEffects(),"Past Geomancy replaced independent first-entry Web evidence or rewrote public caveats");
             var effective=f.effective();var e=effective.evidence();
             for(String stat:List.of("atk","def","spa","spd","spe"))check(e.profile().stat(stat).value().low()==row.getAsJsonObject("stats").get(stat).getAsInt(),"Recipient stat reused the former actor: "+stat);
             check(e.hp().value().low()==row.get("hp").getAsDouble()/row.get("maxHp").getAsDouble(),"Recipient HP/hazard survival differs from native");
