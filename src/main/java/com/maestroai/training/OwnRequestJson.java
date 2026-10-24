@@ -63,8 +63,28 @@ public final class OwnRequestJson {
             String item = string(p, "item"); if (!item.matches("[a-z0-9]{0,64}")) throw new IllegalArgumentException();
             var sample = new OwnRequestEvidence.Sample(uuid, string(p, "ident"), string(p, "condition"), bool(p, "active"), string(p, "ability"), types(p, "types"));
             pokemon.add(new OwnRequestTransport.Pokemon(sample, level, stats, item.isEmpty() ? "none" : item,
-                    types(p, "baseTypes"), string(p, "terastallized"), bool(p, "commanding") || bool(p, "reviving")));
+                    types(p, "baseTypes"), string(p, "terastallized"), bool(p, "commanding") || bool(p, "reviving"),details[0]));
         }
-        return new OwnRequestTransport.Request(string(side, "id"), mode, pokemon);
+        OwnZMoveEvidence.Choice selection=null;
+        if(mode==OwnRequestTransport.Mode.MOVE)try{selection=selection(r.getAsJsonArray("active").get(0).getAsJsonObject());}
+        catch(RuntimeException unsupported){/* Preserve ordinary stats; Z coverage remains UNKNOWN. */}
+        return new OwnRequestTransport.Request(string(side, "id"), mode, pokemon,selection);
+    }
+    private static OwnZMoveEvidence.Choice selection(JsonObject active) {
+        var moves=new ArrayList<OwnZMoveEvidence.MoveSlot>();
+        for(var value:active.getAsJsonArray("moves")){
+            var m=value.getAsJsonObject();String pp=m.get("pp").toString();
+            if(!pp.matches("[0-9]{1,3}"))throw new IllegalArgumentException();
+            moves.add(new OwnZMoveEvidence.MoveSlot(string(m,"id"),Integer.parseInt(pp),bool(m,"disabled"),string(m,"target")));
+        }
+        var options=new TreeMap<Integer,OwnZMoveEvidence.ZSlot>();int count=0;
+        if(active.has("canZMove")){
+            var z=active.getAsJsonArray("canZMove");count=z.size();
+            for(int i=0;i<z.size();i++)if(!z.get(i).isJsonNull()){
+                var m=z.get(i).getAsJsonObject();
+                options.put(i,new OwnZMoveEvidence.ZSlot(string(m,"move"),string(m,"target"),m.has("disabled")&&bool(m,"disabled")));
+            }
+        }
+        return new OwnZMoveEvidence.Choice(moves,options,count);
     }
 }

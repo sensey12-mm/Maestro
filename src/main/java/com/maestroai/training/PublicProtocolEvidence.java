@@ -33,13 +33,14 @@ public final class PublicProtocolEvidence {
     // Non-state annotations emitted by the pinned simulator. Everything else
     // outside the modeled event set blocks a certificate, without retaining its payload.
     private static final Set<String> ANNOTATIONS = Set.of("", "player", "teamsize", "tier", "rule", "seed", "upkeep",
+            "-nothing", "-anim", "-mostlyineffective", "-extremelyeffective",
             "-crit", "-supereffective", "-resisted", "-immune", "-miss", "-fail", "-notarget");
     private static final Set<String> MECHANICS_EVENTS = Set.of("switch", "drag", "replace", "detailschange", "-formechange",
             "-transform", "-terastallize", "-start", "-end", "-activate", "-item", "-enditem", "-ability", "-endability",
             "-status", "-curestatus", "-damage", "-heal", "faint", "turn", "start", "gen", "gametype",
             "-weather", "-fieldstart", "-fieldend", "-sidestart", "-sideend", "-swapsideconditions",
             "-singleturn", "-singlemove", "move", "cant", "-sethp", "-boost", "-unboost", "-clearboost",
-            "-block", "-prepare", "-mustrecharge", "-zpower", "-mega", "-primal", "-burst", "-dynamax",
+            "-block", "-prepare", "-mustrecharge", "-zpower", "-zbroken", "-mega", "-primal", "-burst", "-dynamax",
             "-clearallboost", "-invertboost", "-swapboost", "-setboost", "-copyboost", "-clearnegativeboost");
 
     private static final class HpAppearance {
@@ -178,6 +179,10 @@ public final class PublicProtocolEvidence {
     public boolean complete() { return complete; }
     public boolean framed() { return complete && framed; }
     public boolean corrupted() { return corrupt; }
+    /** Public turn is unknown until a fully framed, source-modeled spectator envelope exists. */
+    public int publicTurn() {
+        return framed() && !corrupt && coverageUnknown.isEmpty() && lastTurn > 0 ? lastTurn : -1;
+    }
 
     private boolean apply(String line) {
         String[] fields = line.split("\\|", -1);

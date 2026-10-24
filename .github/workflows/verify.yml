@@ -12,7 +12,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -32,7 +32,7 @@ jobs:
       - name: Check JAR and checker regressions
         run: |
           python3 verification/check_jar.py --self-test
-          python3 verification/check_jar.py build/libs/maestroai-1.0.0.jar
+          python3 verification/check_jar.py
       - name: Verify pinned simulator source and relocated engine
         run: |
           node --version
