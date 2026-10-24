@@ -46,7 +46,8 @@ public final class OwnZMoveEvidence {
                         ||!pokemon.dto().types().equals(pokemon.baseTypes())
                         ||!pokemon.dto().types().stream().map(t->t.toLowerCase(Locale.ROOT)).toList().equals(List.of("fighting","ghost"))
                         ||!field.ordinaryOwnEntry(own.publicName(),"Marshadow",pokemon.dto().uuid(),pokemon.level())
-                        ||own.ambiguous()||own.unsupportedEffects()||!field.allActorsCovered()||!field.unknown().isEmpty())throw new IllegalArgumentException();
+                        ||(own.ambiguous()||own.unsupportedEffects())&&!field.ownedForm(own,lease)
+                        ||!field.allActorsCovered()||!field.unknown().isEmpty())throw new IllegalArgumentException();
                 var option=choice.options().entrySet().iterator().next();int slot=option.getKey();
                 if(slot<0||slot>=choice.moves().size()||!option.getValue().equals(new ZSlot(NAME,"normal",false)))throw new IllegalArgumentException();
                 var base=choice.moves().get(slot);

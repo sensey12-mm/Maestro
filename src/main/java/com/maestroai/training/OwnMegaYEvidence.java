@@ -7,33 +7,12 @@ import static com.maestroai.training.ExecutionCoverage.Operation;
  * Public observations remain unchanged. This supplies no opponent identity,
  * transformation choice, future request or permission without current scopes.
  */
-final class OwnMegaYEvidence {
-    final PublicFieldEvidence.Capture origin;
-    final OwnRequestTransport.Lease lease;
-    private final RuntimeDomain domain;
-    private final PublicProtocolEvidence protocol;
-    private final PublicMechanicsEvidence.Observation observation;
-    private final List<String> events;
-    private final Set<Integer> admitted;
-
+final class OwnMegaYEvidence extends OwnEntryEvidence {
     private OwnMegaYEvidence(PublicFieldEvidence.Capture origin, OwnRequestTransport.Lease lease,
             RuntimeDomain domain, PublicProtocolEvidence protocol,
             PublicMechanicsEvidence.Observation observation, Set<Integer> admitted) {
-        this.origin=origin;this.lease=lease;this.domain=domain;this.protocol=protocol;
-        this.observation=observation;this.events=protocol.mechanicsEvents();this.admitted=Set.copyOf(admitted);
+        super(origin,lease,domain,protocol,observation,admitted);
     }
-    // Structural field coverage is conditional on the source operation scopes.
-    // Recheck those scopes at issuance, own-profile binding and every operation;
-    // pure comparison frames still perform the original closing source check.
-    boolean current() {
-        return lease.current() && protocol.complete() && !protocol.corrupted()
-                && protocol.mechanicsEvents()==events && protocol.publicTurn()==lease.turn();
-    }
-    boolean sourceCurrent() {
-        return current() && domain.scopes().get(Operation.DAMAGE).known();
-    }
-    boolean owns(PublicMechanicsEvidence.Observation candidate) { return candidate==observation && current(); }
-    boolean admits(int index,String line) { return admitted.contains(index) && events.get(index).equals(line); }
 
     static OwnMegaYEvidence inspect(PublicFieldEvidence.Capture field, OwnRequestTransport.Lease lease,
             RuntimeDomain domain, PublicProtocolEvidence protocol,
@@ -56,7 +35,7 @@ final class OwnMegaYEvidence {
                 ||dto.condition()==null||!dto.condition().matches("[1-9][0-9]{0,4}/[1-9][0-9]{0,4}( (brn|par|psn|tox|slp|frz))?"))return null;
         String[] hp=dto.condition().split(" ")[0].split("/");
         if(Integer.parseInt(hp[0])>Integer.parseInt(hp[1])||Integer.parseInt(hp[1])>10000)return null;
-        boolean active=false,mega=false;int turn=0,changed=-1,entry=-1;
+        boolean active=false,mega=false;int turn=0,changed=-1,entry=-1,entryIndex=-1;
         Set<Integer> admitted=new HashSet<>();var events=protocol.mechanicsEvents();
         for(int i=0;i<events.size();i++) {
             String[] p=events.get(i).split("\\|",-1);
@@ -65,7 +44,7 @@ final class OwnMegaYEvidence {
             if(Set.of("switch","drag").contains(p[1])&&p[2].startsWith(slot+": ")){
                 boolean incoming=p[2].equals(actor);
                 if(incoming&&(active||p.length!=5||!details(p[3],mega?"Mewtwo-Mega-Y":"Mewtwo",uuid,owned.level())))return null;
-                active=incoming;if(incoming)entry=turn;
+                active=incoming;if(incoming){entry=turn;entryIndex=i;}
                 continue;
             }
             if(!p[2].equals(actor))continue;
@@ -87,6 +66,9 @@ final class OwnMegaYEvidence {
         }
         if(!active||!mega||turn!=lease.turn()||receiptTurn<Math.max(changed,entry)
                 ||lease.turn()<=Math.max(changed,entry))return null;
+        var activations=OwnReentryEvidence.entryActivations(side,actor,entryIndex,events);
+        if(activations==null)return null;
+        admitted.addAll(activations);
         var result=new OwnMegaYEvidence(field,lease,domain,protocol,observation,admitted);
         return result.sourceCurrent()?result:null;
     }

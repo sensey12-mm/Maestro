@@ -90,6 +90,7 @@ public final class SourceVerification {
             WeatherSetterRegression.differential(engine);
             OwnMegaYRegression.differential(engine);
             OwnZMoveRegression.differential(engine);
+            OwnReentryRegression.differential(engine);
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);
             ModifierCompositionRegression.differential(engine);
@@ -144,6 +145,7 @@ public final class SourceVerification {
             PublicPipelineRegression.run(overlayDomain);
             OwnMegaYRegression.runtime(overlayDomain);
             OwnZMoveRegression.runtime(overlayDomain);
+            OwnReentryRegression.runtime(overlayDomain);
             NaturalAcceptanceRegression.run(overlayDomain);
             engine.eval("js", "['p1','p2','sides','log','inputLog','activePokemon','activeTarget'].forEach(key=>"
                     + "Object.defineProperty(verificationStream.battle,key,{get(){throw Error('private state touched');}}));");

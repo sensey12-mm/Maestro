@@ -69,12 +69,14 @@ final class RaidReloadRegression {
         for(String condition:fixtures.keySet())engine.eval("js","verificationStream.battle.dex.conditions.getByID('"+condition+"')");
         OwnMegaYRegression.differential(engine);
             OwnZMoveRegression.differential(engine);
+            OwnReentryRegression.differential(engine);
         var domain=SimulatorDomainBridge.capture(service,id,choice::get);
         check(domain!=null&&domain.effectiveState().known(),"source-verified raid definitions rejected: "
                 +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
         PublicPipelineRegression.run(domain);
         OwnMegaYRegression.runtime(domain);
             OwnZMoveRegression.runtime(domain);
+            OwnReentryRegression.runtime(domain);
         var beforeMutation=domain;
         String original;
         try(var reader=new BufferedReader(new StringReader(fixtures.get("shield").getAsString()))){

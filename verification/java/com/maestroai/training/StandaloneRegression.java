@@ -356,6 +356,7 @@ public final class StandaloneRegression {
         WeatherSetterRegression.run();
         OwnMegaYRegression.run();
         OwnZMoveRegression.run();
+        OwnReentryRegression.run();
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();

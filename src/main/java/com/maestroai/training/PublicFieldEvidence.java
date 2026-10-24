@@ -26,12 +26,12 @@ public final class PublicFieldEvidence {
         private final Map<String, PublicMechanicsEvidence.Observation> observations;
         private final PublicProtocolEvidence protocol;
         private final List<String> events;
-        private final OwnMegaYEvidence ownForm;
+        private final OwnEntryEvidence ownForm;
         private final OwnZUseEvidence ownZUse;
         private Capture(PublicFieldEvidence owner, long epoch, int turn, Known<String> weather,
                         Known<String> terrain, Known<Boolean> trickRoom, Known<Boolean> magicRoom,
                         Map<String, Boolean> tailwind, Map<String, Active> actors, Set<String> unknown,
-                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnMegaYEvidence ownForm,OwnZUseEvidence ownZUse) {
+                        PublicMechanicsEvidence evidence, PublicProtocolEvidence protocol, int weatherStartTurn, OwnEntryEvidence ownForm,OwnZUseEvidence ownZUse) {
             this.owner = owner; this.epoch = epoch; this.turn = turn; this.weather = weather; this.terrain = terrain;
             this.trickRoom = trickRoom; this.magicRoom = magicRoom; this.tailwind = Map.copyOf(tailwind);
             this.actors = Map.copyOf(actors); this.unknown = Set.copyOf(unknown);
@@ -88,7 +88,7 @@ public final class PublicFieldEvidence {
         }
         boolean hasOwnedZUse(){return ownZUse!=null;}
         boolean ownedSourceCurrent(){return (ownForm==null||ownForm.sourceCurrent())&&(ownZUse==null||ownZUse.sourceCurrent());}
-        Capture rebind(OwnMegaYEvidence proof){
+        Capture rebind(OwnEntryEvidence proof){
             requireCurrent(turn);
             if(proof.origin!=this||!proof.current())throw new IllegalArgumentException("foreign own-form witness");
             return owner.update(protocol,evidence,proof,ownZUse);
@@ -175,7 +175,7 @@ public final class PublicFieldEvidence {
     public Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence) {
         return update(protocol,evidence,null,null);
     }
-    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnMegaYEvidence ownForm,OwnZUseEvidence ownZUse) {
+    private Capture update(PublicProtocolEvidence protocol, PublicMechanicsEvidence evidence,OwnEntryEvidence ownForm,OwnZUseEvidence ownZUse) {
         epoch++; Set<String> unknown = new TreeSet<>();
         unknown.addAll(protocol.coverageUnknown());
         if (!protocol.framed()) unknown.add("PUBLIC_ENVELOPE_PROVENANCE_UNKNOWN");

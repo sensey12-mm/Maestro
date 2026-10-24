@@ -157,6 +157,18 @@ public final class OwnRequestTransport {
             return proof.sourceCurrent()?rebound:rebound.withoutOwnedForm();
         }catch(IllegalArgumentException|NoSuchElementException unavailable){return field;}
     }
+    /** Ordinary own returns supplement identity coverage without changing spectator facts. */
+    public PublicFieldEvidence.Capture rebindOwnReentry(Lease lease,RuntimeDomain domain,
+            PublicProtocolEvidence protocol,PublicMechanicsEvidence.Observation active,PublicFieldEvidence.Capture field){
+        if(lease==null||!lease.belongsTo(this)||!lease.current()||receipt==null||receipt.mode()!=Mode.MOVE
+                ||field==null||field.hasOwnedForm())return field;
+        try{
+            var proof=OwnReentryEvidence.inspect(field,lease,domain,protocol,active,receipt,receiptTurn);
+            if(proof==null)return field;
+            var rebound=field.rebind(proof);
+            return proof.sourceCurrent()?rebound:rebound.withoutOwnedForm();
+        }catch(IllegalArgumentException|NoSuchElementException unavailable){return field;}
+    }
     /** Runtime entry/lifecycle proof. No caller-supplied 'ordinary' boolean.
      * A reserve needs witnessed initial construction or its actual public exit;
      * a pending switch is never treated as if it has already cleared volatiles.

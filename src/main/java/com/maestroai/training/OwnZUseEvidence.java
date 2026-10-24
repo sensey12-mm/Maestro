@@ -29,7 +29,7 @@ final class OwnZUseEvidence {
         field.requireCurrent(lease.turn());
         String side=request.side(),slot=side+"a",opposing=side.equals("p1")?"p2a":"p1a";
         var events=protocol.mechanicsEvents();var admitted=new HashSet<Integer>();
-        String actor=null,target=null;OwnRequestTransport.Pokemon owned=null;boolean used=false;
+        String actor=null,target=null;OwnRequestTransport.Pokemon owned=null;boolean used=false,reentered=false;
         int turn=0,usedTurn=-1;String current=null;
         for(int i=0;i<events.size();i++){
             var p=events.get(i).split("\\|",-1);
@@ -37,7 +37,7 @@ final class OwnZUseEvidence {
             if(p.length<3)continue;
             if(Set.of("switch","drag").contains(p[1])&&p[2].startsWith(slot+": ")){
                 current=p[2];
-                if(actor!=null&&actor.equals(current))return null; // Re-entry identity remains outside this bounded witness.
+                if(actor!=null&&actor.equals(current))reentered=true;
             }
             if(p[1].equals("-zpower")&&p[2].startsWith(slot+": ")){
                 if(used||p.length!=3||turn<1||!p[2].equals(current)||i+1>=events.size())return null;
@@ -60,6 +60,10 @@ final class OwnZUseEvidence {
             if(p[2].equals(actor)&&Set.of("replace","detailschange","-transform","-formechange","-mega","-primal","-burst","-terastallize","-dynamax").contains(p[1]))return null;
         }
         if(!used||usedTurn>receiptTurn||usedTurn>=lease.turn())return null;
+        if(reentered){
+            var returned=OwnReentryEvidence.history(request,owned,events);
+            if(returned==null||returned.entries()<2||returned.lastEntry()>receiptTurn)return null;
+        }
         var result=new OwnZUseEvidence(field,lease,domain,protocol,admitted);
         return result.sourceCurrent()?result:null;
     }
