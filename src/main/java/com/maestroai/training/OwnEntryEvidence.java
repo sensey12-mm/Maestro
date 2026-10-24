@@ -4,7 +4,7 @@ import java.util.*;
 import static com.maestroai.training.ExecutionCoverage.Operation;
 
 /** Private issuance only: an owned entry can supplement, never rewrite, a public observation. */
-abstract sealed class OwnEntryEvidence permits OwnMegaYEvidence, OwnReentryEvidence {
+abstract sealed class OwnEntryEvidence permits OwnMegaYEvidence, OwnReentryEvidence, OwnXerneasEvidence {
     final PublicFieldEvidence.Capture origin;
     final OwnRequestTransport.Lease lease;
     private final RuntimeDomain domain;

@@ -28,6 +28,7 @@ public final class ScopedExecution {
     private final Map<String, Binding> actors;
     private final Scopes scopes;
     private final OwnZMoveEvidence ownZ;
+    private final OwnXerneasEvidence ownXerneas;
     private final String activeOwn;
     private final boolean ownFainted;
     /** Conditional entry result, never an observed public field or future request. */
@@ -45,12 +46,14 @@ public final class ScopedExecution {
         this(field, actors, Scopes.all(Objects.requireNonNull(remainingEffects)));
     }
     public ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Scopes scopes) {
-        this(field,actors,scopes,"self",false,null,null);
+        this(field,actors,scopes,"self",false,null,null,null);
     }
     private ScopedExecution(PublicFieldEvidence.Capture field, Map<String, Binding> actors, Scopes scopes,
-                            String activeOwn,boolean ownFainted,WeatherProjection projectedWeather,OwnZMoveEvidence ownZ) {
+                            String activeOwn,boolean ownFainted,WeatherProjection projectedWeather,OwnZMoveEvidence ownZ,OwnXerneasEvidence ownXerneas) {
         this.field = Objects.requireNonNull(field); this.actors = Map.copyOf(actors); this.scopes = Objects.requireNonNull(scopes);
         this.ownZ=ownZ;this.activeOwn=activeOwn;this.ownFainted=ownFainted;this.projectedWeather=projectedWeather;
+        this.ownXerneas=ownXerneas;
+        if(ownXerneas!=null&&!ownXerneas.binds(field))throw new IllegalArgumentException("foreign own-Xerneas source receipt");
         if(projectedWeather!=null&&projectedWeather.origin!=field)throw new IllegalArgumentException("foreign weather projection");
         var a = actors.get("self"); var f = actors.get("opponent");
         if (a != null && f != null && a.observation() != null && f.observation() != null
@@ -59,20 +62,23 @@ public final class ScopedExecution {
     }
     public PublicFieldEvidence.Capture field() { return field; }
     public ScopedExecution withOwnZMove(OwnZMoveEvidence proof) {
-        return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,projectedWeather,Objects.requireNonNull(proof));
+        return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,projectedWeather,Objects.requireNonNull(proof),ownXerneas);
+    }
+    public ScopedExecution withOwnXerneas(OwnXerneasEvidence proof) {
+        return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,projectedWeather,ownZ,Objects.requireNonNull(proof));
     }
     private boolean zAllowed(String id,String role){
         return !OwnZMoveEvidence.MOVE.equals(id)||ownZ!=null&&actors.containsKey(role)&&ownZ.permits(role,field,actors.get(role).observation());
     }
-    ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes,activeOwn,ownFainted,projectedWeather,ownZ); }
+    ScopedExecution withScopes(Scopes scopes) { return new ScopedExecution(field, actors, scopes,activeOwn,ownFainted,projectedWeather,ownZ,ownXerneas); }
     /** Internal action-queue frame. The evaluator supplies a reserve only after
      * certified legal entry and survival, or fainting after proven continuation.
      * Neither an entry arithmetic certificate nor a raw reserve activates it. */
     ScopedExecution conditionalParticipants(String own,boolean fainted) {
         if(!own.equals("self")&&!reserve(own))throw new IllegalArgumentException("unbound own participant");
-        return new ScopedExecution(field,actors,scopes,own,fainted,projectedWeather,ownZ);
+        return new ScopedExecution(field,actors,scopes,own,fainted,projectedWeather,ownZ,ownXerneas);
     }
-    ScopedExecution conditionalWeather(WeatherProjection weather){return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,weather,ownZ);}
+    ScopedExecution conditionalWeather(WeatherProjection weather){return new ScopedExecution(field,actors,scopes,activeOwn,ownFainted,weather,ownZ,ownXerneas);}
     Known<String> rawWeather(){return projectedWeather==null?field.weather():projectionCurrent()?projectedWeather.weather:Known.unknown();}
     private boolean projectionCurrent(){return sourceCurrent()&&yes(scopes.get(Operation.ENTRY))&&yes(scopes.get(Operation.DAMAGE));}
     Known<Integer> projectedWeatherDuration(){return projectedWeather!=null&&projectionCurrent()?projectedWeather.duration:Known.unknown();}
@@ -84,7 +90,7 @@ public final class ScopedExecution {
     boolean sourceCurrent() {
         try { field.requireCurrent(field.turn()); }
         catch(IllegalArgumentException stale) { return false; }
-        return (ownZ==null||ownZ.current()) && scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
+        return (ownZ==null||ownZ.current()) && (ownXerneas==null||ownXerneas.current()) && scopes.current() && actors.values().stream().filter(b->b.lease()!=null)
                 .allMatch(b->b.lease().current());
     }
     /**
@@ -278,7 +284,7 @@ public final class ScopedExecution {
             }
             need(role + ":ITEM_SUPPRESSION", b.item().known() && b.item().value().equals("none") || field.magicRoom().known());
         }
-        Certificate finish() { return new Certificate(field, op, required, missing, () -> (ownZ==null||ownZ.current()) && scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
+        Certificate finish() { return new Certificate(field, op, required, missing, () -> (ownZ==null||ownZ.current()) && (ownXerneas==null||ownXerneas.current()) && scopes.current() && leases.stream().allMatch(OwnRequestTransport.Lease::current)); }
     }
     private boolean supported(String role, boolean reserve) {
         // Raw reserves cannot certify Download or active weather suppression.
@@ -423,6 +429,11 @@ public final class ScopedExecution {
     public Certificate entryCoverage(Hazards hazards, Known<Integer> maxHp, Profile reserve) {
         if (Set.of("self", "opponent").contains(reserve.actor())) throw new IllegalArgumentException("entry requires an own reserve binding");
         var c = new Check(Operation.ENTRY); c.actor(reserve.actor(), true);
+        if(ownXerneas!=null)c.need("OWN_ENTRY_FORM_DEFINITION",yes(ownXerneas.permitsEntry(reserve.actor())));
+        else {
+            var binding=actors.get(reserve.actor());
+            c.need("OWN_FAIRY_AURA_ENTRY_SOURCE",binding==null||binding.lease()==null||!"fairyaura".equals(ability(reserve.actor())));
+        }
         c.need("OWN_MAX_HP", maxHp.known()); c.need("RESERVE_TYPES", reserve.types().known());
         c.need("OWN_MAX_HP_PROFILE_BINDING", maxHpMatches(maxHp, reserve));
         c.need("COMPLETE_HAZARD_LAYERS", hazards.complete());

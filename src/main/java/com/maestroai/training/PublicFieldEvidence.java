@@ -78,6 +78,7 @@ public final class PublicFieldEvidence {
             return ownForm!=null&&ownForm.lease==lease&&ownForm.owns(o);
         }
         boolean hasOwnedForm(){return ownForm!=null;}
+        boolean ownedBy(OwnEntryEvidence proof){return ownForm==proof&&proof.current();}
         boolean ordinaryOwnEntry(String actor,String species,UUID uuid,int level){
             String details=null;
             for(String line:events){var p=line.split("\\|",-1);

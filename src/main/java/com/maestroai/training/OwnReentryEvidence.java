@@ -15,6 +15,9 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
      * Only actual switches to a different owned UUID certify an exit; faints, reveals,
      * copied-state moves, form changes and non-native entry annotations cannot do so. */
     static History history(OwnRequestTransport.Request request,OwnRequestTransport.Pokemon own,List<String> events) {
+        return history(request,own,events,Set.of());
+    }
+    static History history(OwnRequestTransport.Request request,OwnRequestTransport.Pokemon own,List<String> events,Set<Integer> admitted) {
         String slot=request.side()+"a",actor=slot+": "+own.dto().uuid();
         var members=new HashSet<String>();
         for(var p:request.pokemon())members.add(slot+": "+p.dto().uuid());
@@ -39,6 +42,7 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
             if(p[1].equals("move")&&p[2].startsWith(slot+": ")&&p.length>3
                     &&Set.of("Baton Pass","Shed Tail").contains(p[3]))return null;
             if(!p[2].equals(actor))continue;
+            if(admitted.contains(i))continue;
             if(Set.of("replace","detailschange","-transform","-formechange","-mega","-primal","-burst","-terastallize","-dynamax","faint").contains(p[1]))return null;
             if(Set.of("-damage","-heal","-sethp").contains(p[1])){
                 if(!active||p.length<4)return null;
@@ -81,6 +85,13 @@ final class OwnReentryEvidence extends OwnEntryEvidence {
                 ||protocol.publicTurn()!=lease.turn())return null;
         field.requireCurrent(lease.turn());
         var own=request.pokemon().stream().filter(p->p.dto().active()).findFirst().orElseThrow();var dto=own.dto();
+        // The source-bound addon PreStart lifecycle requires its own ordered
+        // Active event; ordinary same-form return evidence cannot substitute.
+        if(own.species().equals("Xerneas")){
+            var mode=domain.xerneasLifecycle();
+            if(mode.known()&&Set.of(RuntimeDomain.XerneasLifecycle.SHIFT_REGISTERED,
+                    RuntimeDomain.XerneasLifecycle.SHIFT_UNPROVED).contains(mode.value()))return null;
+        }
         if(!observation.slot().equals(request.side()+"a")||!observation.publicName().equals(observation.slot()+": "+dto.uuid())
                 ||own.special()||!own.tera().isEmpty()||!dto.types().equals(own.baseTypes())
                 ||own.level()<1||own.level()>100||!own.baseStats().keySet().equals(Set.of("atk","def","spa","spd","spe"))

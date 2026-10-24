@@ -5869,6 +5869,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     publicMechanicsEvidence.observation(activePokemon.getPNX()),fieldCapture);
             fieldCapture=ownTransport.rebindOwnReentry(ownChoiceLease,runtimeDomain,publicProtocolEvidence,
                     publicMechanicsEvidence.observation(activePokemon.getPNX()),fieldCapture);
+            var ownXerneas=ownTransport.bindOwnXerneas(ownChoiceLease,runtimeDomain,publicProtocolEvidence,
+                    publicMechanicsEvidence.observation(activePokemon.getPNX()),fieldCapture);
+            fieldCapture=ownXerneas.field();
             var scope = new PublicMechanicsEvidence.Scope(domainScopes.get(com.maestroai.training.ExecutionCoverage.Operation.DAMAGE),
                     fieldCapture == null ? PublicTransitionState.Known.unknown() : fieldCapture.trickRoom());
             ownedProfiles.put("self", ownMechanicsProfile("self", activePokemon.getBattlePokemon(), false));
@@ -5911,6 +5914,7 @@ public class MaestroBattleAI extends RCTBattleAI {
                     opponentObservation == null ? PublicTransitionState.Known.unknown() : opponentObservation.ability()));
             var execution = fieldCapture == null ? null : new com.maestroai.training.ScopedExecution(fieldCapture, executionBindings,
                     domainScopes);
+            if(ownXerneas.evidence()!=null)execution=execution.withOwnXerneas(ownXerneas.evidence());
             var ownZ=ownTransport.ownZMove(ownChoiceLease,runtimeDomain,selfObservation,fieldCapture,()->ownZChoice(ownMoveset));
             if(ownZ!=null){
                 execution=execution.withOwnZMove(ownZ);

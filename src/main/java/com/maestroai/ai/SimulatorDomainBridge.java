@@ -332,6 +332,7 @@ public final class SimulatorDomainBridge {
             var components = new TreeMap<String,String>();
             for (var entry : raw.getAsJsonObject("components").entrySet())
                 components.put(entry.getKey(), hash(entry.getValue().getAsString().getBytes(StandardCharsets.UTF_8)));
+            if(raw.has("xerneasLifecycle"))components.put("ownXerneas",hash(raw.get("xerneasLifecycle").getAsString().getBytes(StandardCharsets.UTF_8)));
             // SHA-bound snapshot of the actual public registry contents,
             // including serialized callbacks. Exact callback identity is
             // checked inside the live initialized JS probe BEFORE serialization.

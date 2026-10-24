@@ -31,6 +31,20 @@ public final class RuntimeDomain {
         this.sourceFiles = sourceFiles; this.current = Objects.requireNonNull(current);
     }
     public boolean current() { try { return current.getAsBoolean(); } catch (RuntimeException missing) { return false; } }
+    public enum XerneasLifecycle { NATIVE, NATIVE_REGISTERED, SHIFT_UNPROVED, SHIFT_REGISTERED }
+    /** Source-probed public definitions only. No request/species name can manufacture this receipt. */
+    public Known<XerneasLifecycle> xerneasLifecycle() {
+        if(!scopes().get(Operation.DAMAGE).known())return Known.unknown();
+        for(var mode:XerneasLifecycle.values()){
+            String value=switch(mode){case NATIVE->"native-unregistered";case NATIVE_REGISTERED->"native-registered";
+                case SHIFT_UNPROVED->"shift-unregistered";case SHIFT_REGISTERED->"shift-registered";};
+            try{
+                String digest=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                if(digest.equals(snapshot.components().get("ownXerneas")))return Known.of(mode,SOURCE+":own-xerneas-definitions");
+            }catch(java.security.NoSuchAlgorithmException impossible){return Known.unknown();}
+        }
+        return Known.unknown();
+    }
     private boolean matches(String component) {
         String pin = expected.get(component);
         return pin != null && pin.matches("[0-9a-f]{64}") && pin.equals(snapshot.components().get(component));

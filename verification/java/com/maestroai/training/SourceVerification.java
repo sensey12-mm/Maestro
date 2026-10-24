@@ -55,6 +55,7 @@ public final class SourceVerification {
 
     public static void main(String[] args) throws Exception {
         Path simulator = Path.of(args[0]).toAbsolutePath();
+        OwnXerneasRegression.prepare(Path.of(args[1]));
         if (args.length > 2) { PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3); return; }
         DispatchIntegrationRegression.run(Path.of(args[1]));
         Path resources = Path.of("src/main/resources/com/maestroai/training");
@@ -91,6 +92,8 @@ public final class SourceVerification {
             OwnMegaYRegression.differential(engine);
             OwnZMoveRegression.differential(engine);
             OwnReentryRegression.differential(engine);
+            OwnXerneasRegression.differential(engine);
+            OwnXerneasRegression.attestation(engine);
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);
             ModifierCompositionRegression.differential(engine);

@@ -70,6 +70,7 @@ final class RaidReloadRegression {
         OwnMegaYRegression.differential(engine);
             OwnZMoveRegression.differential(engine);
             OwnReentryRegression.differential(engine);
+            OwnXerneasRegression.differential(engine);
         var domain=SimulatorDomainBridge.capture(service,id,choice::get);
         check(domain!=null&&domain.effectiveState().known(),"source-verified raid definitions rejected: "
                 +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));

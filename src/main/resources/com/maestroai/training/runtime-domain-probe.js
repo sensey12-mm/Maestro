@@ -95,6 +95,33 @@
   speciesHooks.$ownMegaY = ownDefinition ? {stats:ownDefinition.baseStats,types:ownDefinition.types,
     baseSpecies:ownDefinition.baseSpecies,forme:ownDefinition.forme,abilities:ownDefinition.abilities,
     requiredItem:ownDefinition.requiredItem,gender:ownDefinition.gender} : null;
+  // The original native registry constructor and the published addon callback
+  // produce equivalent Xerneas numbers/types, with different default-ability
+  // metadata. Current ability still comes from a fresh owning request. Track
+  // complete rows before reducing these source-verified semantic fields.
+  const idOf = value => typeof value === 'string' ? value.toLowerCase().replace(/[^a-z0-9]/g,'') : '';
+  const xerneasDefinition = (value,id) => {
+    if(!value)return null;
+    const d=canonical(value), abilities=Object.entries(d.abilities || {}).map(([k,v])=>k+':'+idOf(v)).sort().join(',');
+    const identity=d.name===({xerneas:'Xerneas',xerneasactive:'Xerneas-Active',xerneasneutral:'Xerneas-Neutral'})[id]
+      && (d.baseSpecies || d.name)==='Xerneas' && !d.battleOnly && !d.isMega && !d.isPrimal && !d.canGigantamax && !d.forceTeraType
+      && (id==='xerneasactive'?d.forme==='Active':id==='xerneasneutral'?d.forme==='Neutral':!d.forme);
+    return {identity,num:d.num,stats:d.baseStats,types:d.types?.map(idOf),gender:d.gender,
+      height:d.heightm,weight:d.weightkg,maxHP:d.maxHP || null,
+      abilities:['0:fairyaura','0:noability,1:noability,H:noability,S:noability'].includes(abilities)?'original-xerneas-defaults':abilities,
+      requiredItem:d.requiredItem || null,requiredMove:d.requiredMove || null,requiredItems:d.requiredItems || []};
+  };
+  const xerneasBase=registries.species.contents.get('xerneas') || data.Pokedex.xerneas;
+  const xerneasActive=registries.species.contents.get('xerneasactive');
+  const xerneasNeutral=registries.species.contents.get('xerneasneutral') || data.Pokedex.xerneasneutral;
+  const baseX=xerneasDefinition(xerneasBase,'xerneas');
+  // A missing Active row can preserve other operations, but grants no Active
+  // lifecycle capability. The separate marker distinguishes absence from an
+  // actually registered, equivalent native definition.
+  speciesHooks.$ownXerneas={base:baseX,active:xerneasActive?xerneasDefinition(xerneasActive,'xerneasactive'):baseX,
+    neutral:xerneasDefinition(xerneasNeutral,'xerneasneutral')};
+  const xerneasLifecycle=(typeof data.Abilities.fairyaura.onPreStart==='function'?'shift':'native')
+    +(xerneasActive?'-registered':'-unregistered');
   const catalog = {};
   for (const id of ['zoroark','gholdengo','ditto','mew','pikachu','blissey','shedinja','shuckle',
                     'genesect','calyrexshadow','arceus','xerneas','marshadow','mewtwo']) {
@@ -290,7 +317,7 @@
     speciesHooks: canonical(speciesHooks), registry: registryAudit,
     format: canonical(battle.format), rules: Array.from(battle.ruleTable.keys()).sort(),
     extraEvents: battle.events !== null, mod: dex.currentMod, gen: battle.gen, gameType: battle.gameType,
-    scopedRegistryEquivalent
+    scopedRegistryEquivalent, xerneasLifecycle
   };
   const json = JSON.stringify({
     mod: dex.currentMod, gen: battle.gen, gameType: battle.gameType,
@@ -298,7 +325,7 @@
     // onEvent is a format-level extension API. Only its presence is inspected.
     extraEvents: battle.events !== null,
     overrides: registryCount !== 0,
-    registryEquivalent, scopedRegistryEquivalent, registryCount,
+    registryEquivalent, scopedRegistryEquivalent, registryCount, xerneasLifecycle,
     registryReceipt,
     components: {format: JSON.stringify(canonical([battle.format, Array.from(battle.ruleTable.keys()).sort()])),
                  core: JSON.stringify(canonical(core)), ...(registryOnly === 'operations' ? {} : {tables: JSON.stringify(canonical(tables, false, false))}),

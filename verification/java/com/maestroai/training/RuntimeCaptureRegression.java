@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class RuntimeCaptureRegression {
     private static void check(boolean ok,String why){if(!ok)throw new AssertionError(why);}
     public static void main(String[] args) throws Exception {
+        OwnXerneasRegression.prepare(Path.of(GraalShowdownService.class.getProtectionDomain().getCodeSource().getLocation().toURI()));
         var service=new GraalShowdownService();
         // Execute the exact upstream constructor and restrictive module file
         // system; a generic Context builder is not the native runtime path.
@@ -87,6 +88,9 @@ public final class RuntimeCaptureRegression {
             }
             check(domain!=null&&domain.effectiveState().known(),"native boot/transport/actor-start capture rejected: "
                     +(domain==null?SimulatorDomainBridge.unavailable(service):domain.missing()));
+            if(args.length>0&&args[0].equals("xerneas-only")){
+                OwnXerneasRegression.runtime(service,engine,id,choice,domain);return;
+            }
             var beforeReload=domain;
             OwnMegaYRegression.runtime(domain);
             OwnZMoveRegression.runtime(domain);
@@ -122,6 +126,7 @@ public final class RuntimeCaptureRegression {
             OwnReentryRegression.runtime(domain);
             domain=AddonReloadRegression.run(service,engine,id,choice,domain);
             domain=RaidReloadRegression.run(service,engine,id,choice,domain);
+            domain=OwnXerneasRegression.runtime(service,engine,id,choice,domain);
             engine.eval("js","globalThis.verificationDamage=BS.BattleStream?verificationStream.battle.actions.getDamage:null;"
                     +"const ap=Object.getPrototypeOf(verificationStream.battle.actions);ap.getDamage=eval('({'+ap.getDamage.toString()+'}).getDamage');");
             String priorProperty=System.getProperty("maestroai.envelopeCapture");

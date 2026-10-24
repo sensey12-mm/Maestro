@@ -219,6 +219,10 @@ def main():
     if sys.argv[1:]: raise ValueError('Unknown oracle argument')
     home = Path(os.environ.get('GRADLE_USER_HOME', str(Path.home() / '.gradle')))
     dependency = checked_bytes(cache_dependency(home).read_bytes(), DEPENDENCY_SHA256)
+    # Registration verification executes the original published abilities patch
+    # before either source profile; cache only the checksum-verified public JAR.
+    from pack_loader_oracle import installer_jar
+    installer_jar(home)
     from runtime_hook_oracle import verify_pinned_hooks
     verify_pinned_hooks(dependency)
     verify_public_inputs(dependency, Path("src/main/resources/com/maestroai/training"))
