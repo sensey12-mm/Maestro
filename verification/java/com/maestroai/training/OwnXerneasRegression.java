@@ -219,6 +219,19 @@ final class OwnXerneasRegression {
                 aura[key]=eval('({'+callback.toString()+'}).'+key);rejected=false;
                 try{capture(b);}catch(expected){rejected=true;}check(rejected&&!good.current(),'equal-text foreign Fairy Aura callback was attested');
                 aura[key]=callback;check(capture(b).current(),'genuine callback restoration unavailable');
+                // afterSpeciesInit replaced the dex after anchor construction.
+                // Negative cache tests must obtain genuine lazy entries first.
+                const pressure=b.dex.abilities.getByID('pressure');
+                check(pressure&&typeof pressure.onStart==='function','fresh native ability lookup missing');
+                b.dex.abilities.abilityCache.set('pressure',Object.assign(Object.create(Object.getPrototypeOf(pressure)),pressure));
+                check(JSON.parse(capture(b).json).scopedRegistryEquivalent,'source-equivalent lazy cache reconstruction rejected');
+                b.dex.abilities.abilityCache.set('pressure',{...pressure,onStart(){reads++;throw Error('PRIVATE_CALLBACK');}});
+                rejected=false;try{capture(b);}catch(expected){rejected=true;}
+                check(rejected&&reads===0,'foreign cache callback accepted or executed');
+                b.dex.abilities.abilityCache.set('pressure',pressure);
+                registry.contents.set('unverified',b.dex.species.getByID('mewtwo'));
+                rejected=false;try{capture(b);}catch(expected){rejected=true;}
+                check(rejected,'foreign species alias accepted after lazy lookup');registry.contents.delete('unverified');
                 for(const name of ['p1','p2','sides','log','inputLog','activePokemon','activeTarget'])
                   Object.defineProperty(b,name,{get(){reads++;throw Error('PRIVATE_ACTOR');}});
                 check(capture(b).current()&&reads===0,'Xerneas source probe touched private actors');

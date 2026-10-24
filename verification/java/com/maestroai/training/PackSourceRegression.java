@@ -188,14 +188,17 @@ final class PackSourceRegression {
                 check(blocked,"unselected dex public-witness hook accepted: "+table);
                 engine.eval("js","delete verificationStream.battle.dex.dataCache[\""+table+"\"].unverified;");
             }
-            engine.eval("js","var savedPressure=verificationStream.battle.dex.abilities.abilityCache.get('pressure');"
+            // Species initialization legitimately creates a fresh, lazy dex.
+            // Obtain the original public definition through its native lookup;
+            // the boot anchor's earlier cache population is not a fixture lease.
+            engine.eval("js","var savedPressure=verificationStream.battle.dex.abilities.getByID('pressure');"
                     +"verificationStream.battle.dex.abilities.abilityCache.set('pressure',Object.assign(Object.create(Object.getPrototypeOf(savedPressure)),savedPressure));");
             check(capture.get().get("scopedRegistryEquivalent").getAsBoolean(),"source-equivalent native cache reconstruction rejected");
             engine.eval("js","verificationStream.battle.dex.abilities.abilityCache.set('pressure',{...savedPressure,onStart(){this.add('-ability','p2a: Public','Pressure');}});");
             boolean cacheRejected=false;try{capture.get();}catch(RuntimeException unverified){cacheRejected=true;}
             check(cacheRejected,"direct cache callback bypassed source provenance");
             engine.eval("js","verificationStream.battle.dex.abilities.abilityCache.set('pressure',savedPressure);");
-            engine.eval("js","Cobblemon.registries.species.contents.set('unverified',verificationStream.battle.dex.species.speciesCache.get('mewtwo'));");
+            engine.eval("js","Cobblemon.registries.species.contents.set('unverified',verificationStream.battle.dex.species.getByID('mewtwo'));");
             boolean speciesRejected=false;try{capture.get();}catch(RuntimeException unverified){speciesRejected=true;}
             check(speciesRejected,"foreign species key could spoof the supported public catalog identity");
             engine.eval("js","Cobblemon.registries.species.contents.delete('unverified');");
