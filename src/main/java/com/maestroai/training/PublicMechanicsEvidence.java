@@ -57,9 +57,11 @@ public final class PublicMechanicsEvidence {
     private static final Pattern SLOT = Pattern.compile("p[1-4][a-c]");
     private static final Pattern UUID = Pattern.compile("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}");
     private final Map<String, Observation> observations = new HashMap<>();
+    private record IdentityWitness(String species, int level) {}
+    private final Map<Observation, IdentityWitness> entryIdentity = new IdentityHashMap<>();
     private final Catalog catalog;
     public PublicMechanicsEvidence(Catalog catalog) { this.catalog = Objects.requireNonNull(catalog); }
-    public void reset() { observations.clear(); }
+    public void reset() { observations.clear(); entryIdentity.clear(); }
     public Observation observation(String slot) { return observations.get(slot); }
     private static String id(String s) { return s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", ""); }
     private static <T> Known<T> known(T value, Mutable a, String detail) {
@@ -67,6 +69,9 @@ public final class PublicMechanicsEvidence {
     }
     private static final class Mutable {
         String slot, name;
+        String displayedSpecies;
+        boolean entryAnnouncementOpen = true;
+        IdentityWitness identity;
         int entry;
         Known<Integer> displayed = Known.unknown(), level = Known.unknown();
         Known<String> species = Known.unknown(), status = Known.unknown(), item = Known.unknown(), ability = Known.unknown();
@@ -78,12 +83,14 @@ public final class PublicMechanicsEvidence {
      * Observation handles, even when the public appearance has the same nickname/species.
      */
     public void update(PublicProtocolEvidence trusted) {
-        observations.clear();
+        observations.clear(); entryIdentity.clear();
         if (!trusted.complete() || trusted.corrupted()) return;
         Map<String, Mutable> active = new HashMap<>(); Map<String, Integer> entries = new HashMap<>();
         for (String line : trusted.mechanicsEvents()) {
             String[] p = line.split("\\|", -1); if (p.length < 3) continue;
             String event = p[1], name = p[2].trim();
+            if (event.equals("turn") || event.equals("move"))
+                active.values().forEach(a -> a.entryAnnouncementOpen = false);
             String slot = name.contains(":") ? name.substring(0, name.indexOf(':')).trim() : "";
             if (!SLOT.matcher(slot).matches()) continue;
             if (Set.of("switch", "drag").contains(event)) {
@@ -103,7 +110,11 @@ public final class PublicMechanicsEvidence {
                     if (p.length > 3) details(a, p[3], true);
                     else a.ambiguous = true;
                 }
-                case "detailschange", "-formechange", "-transform" -> { invalidate(a); a.unsupported = true; }
+                case "detailschange", "-formechange", "-mega", "-transform" -> {
+                    // Even an isolated public Mega announcement invalidates the prior
+                    // appearance; it does not grant supported form/ability mechanics.
+                    invalidate(a); a.unsupported = true;
+                }
                 case "-terastallize" -> {
                     a.types = p.length > 3 ? types(p[3], a) : Known.unknown(); a.unsupported = true; a.tera = true;
                 }
@@ -129,6 +140,13 @@ public final class PublicMechanicsEvidence {
                     if (p.length < 4 || id(p[3]).isBlank()) { invalidate(a); break; }
                     if (event.equals("-item")) a.item = known(id(p[3]), a, "current-item");
                     else a.ability = known(id(p[3]), a, "current-ability");
+                    // Under an independently certified standard source, the
+                    // actual Pressure onStart announcement is positive evidence
+                    // excluding Illusion at entry. Never use silence/species to
+                    // infer an ability or accept a later Role Play announcement.
+                    if (event.equals("-ability") && a.entryAnnouncementOpen && id(p[3]).equals("pressure")
+                            && a.displayed.known() && a.displayedSpecies != null)
+                        a.identity = new IdentityWitness(a.displayedSpecies, a.displayed.value());
                 }
                 case "-enditem" -> {
                     // An observed removal is evidence of no current held item for this entry,
@@ -146,12 +164,17 @@ public final class PublicMechanicsEvidence {
                 default -> { }
             }
         }
-        for (Mutable a : active.values()) observations.put(a.slot, new Observation(a.slot, a.entry, a.name, a.displayed,
+        for (Mutable a : active.values()) {
+            var observation = new Observation(a.slot, a.entry, a.name, a.displayed,
                 a.level, a.species, a.types, a.ambiguous || trusted.reentryAmbiguous(a.slot) ? Known.unknown() : trusted.hp(a.slot).known() ? trusted.hp(a.slot)
                         : a.species.known() && !a.unsupported ? a.hp : Known.unknown(), a.status, a.item, a.ability,
-                a.ambiguous || trusted.reentryAmbiguous(a.slot), a.unsupported));
+                a.ambiguous || trusted.reentryAmbiguous(a.slot), a.unsupported);
+            observations.put(a.slot, observation);
+            if (a.identity != null) entryIdentity.put(observation, a.identity);
+        }
     }
     private static void invalidate(Mutable a) {
+        a.identity = null; a.entryAnnouncementOpen = false;
         a.level = Known.unknown(); a.species = Known.unknown(); a.types = Known.unknown();
         a.status = Known.unknown(); a.item = Known.unknown(); a.ability = Known.unknown();
         a.hp = Known.unknown();
@@ -169,8 +192,10 @@ public final class PublicMechanicsEvidence {
         }
         if (!valid) { a.ambiguous = true; return; }
         a.displayed = known(level, a, "displayed-level");
-        // Illusion Level Mod can mask both species and level on switch. Only the
-        // source-verified Illusion |replace| announcement establishes the true details.
+        a.displayedSpecies = id(parts[0]);
+        // A switch alone may mask species/level. Replacement is explicit;
+        // a positive entry witness is considered separately in bind(), only
+        // under an independently justified source scope.
         if (reveal) { a.level = known(level, a, "replace-level"); a.species = known(id(parts[0]), a, "replace-species"); }
     }
     private static Known<List<String>> types(String raw, Mutable a) {
@@ -193,13 +218,20 @@ public final class PublicMechanicsEvidence {
         if (captured == null) return new Bound("UNKNOWN", Profile.unknown(role), null, Set.of("PUBLIC_ACTOR_UNKNOWN"));
         if (observations.get(captured.slot()) != captured) throw new IllegalArgumentException("stale/foreign public actor observation");
         String token = captured.slot() + ":entry-" + captured.entry();
-        Set<String> unknown = new TreeSet<>(); Species s = captured.confirmedSpecies().known() && !captured.ambiguous()
-                && !captured.unsupportedEffects() ? catalog.lookup(captured.confirmedSpecies().value()) : null;
+        Known<Integer> level = captured.level();
+        Known<String> confirmed = captured.confirmedSpecies();
+        IdentityWitness witness = entryIdentity.get(captured);
+        if (!captured.ambiguous() && !captured.unsupportedEffects() && witness != null && yes(scope.otherEffectsResolved())) {
+            level = Known.of(witness.level(), token + ":source-verified-Pressure-entry");
+            confirmed = Known.of(witness.species(), token + ":source-verified-Pressure-entry");
+        }
+        Set<String> unknown = new TreeSet<>(); Species s = confirmed.known() && !captured.ambiguous()
+                && !captured.unsupportedEffects() ? catalog.lookup(confirmed.value()) : null;
         Map<String, Known<IntRange>> stats = new TreeMap<>(); Known<IntRange> hp = Known.unknown();
-        if (s != null && captured.level().known()) {
-            int level = captured.level().value();
+        if (s != null && level.known()) {
+            int number = level.value();
             for (var e : s.baseStats().entrySet()) {
-                var range = statBounds(e.getKey(), e.getValue(), level, s.fixedHp());
+                var range = statBounds(e.getKey(), e.getValue(), number, s.fixedHp());
                 if (e.getKey().equals("hp")) hp = Known.of(range, token + ":public-dex-standard-spread-domain");
                 else stats.put(e.getKey(), Known.of(range, token + ":public-dex-standard-spread-domain"));
             }
@@ -211,12 +243,12 @@ public final class PublicMechanicsEvidence {
         Known<List<String>> currentTypes = captured.types();
         if (!currentTypes.known() && s != null && ordinary.known()) currentTypes = Known.of(s.nativeTypes(), token + ":verified-native-type-scope");
         if (!currentTypes.known()) unknown.add("CURRENT_TYPES_UNKNOWN");
-        Profile profile = new Profile(role, captured.level(), hp, stats, currentTypes, ordinary);
+        Profile profile = new Profile(role, level, hp, stats, currentTypes, ordinary);
         return new Bound(token, profile, captured, unknown);
     }
     public static boolean neutralModifiers(Known<String> item, Known<String> ability) {
         return item.known() && Set.of("none", "heavydutyboots").contains(item.value())
-                && ability.known() && Set.of("runaway", "magicguard").contains(ability.value());
+                && ability.known() && Set.of("runaway", "magicguard", "pressure").contains(ability.value());
     }
     public static IntRange statBounds(String stat, int base, int level, Integer fixedHp) {
         if (!Set.of("hp", "atk", "def", "spa", "spd", "spe").contains(stat) || level < 1 || level > 100

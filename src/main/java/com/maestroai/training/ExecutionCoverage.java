@@ -28,6 +28,15 @@ public final class ExecutionCoverage {
             return new Scopes(map);
         }
         public static Scopes unknown() { return all(Known.unknown()); }
+        // Used only inside a synchronous pure-Java comparison. The caller
+        // rechecks the original receipt before returning any calculated value.
+        Scopes calculationFrame() {
+            boolean live=current();
+            var values=new EnumMap<Operation,Known<Boolean>>(Operation.class);
+            for(var op:Operation.values()) values.put(op,!live?Known.unknown():receipt==null
+                    ?supported.getOrDefault(op,Known.unknown()):receipt.apply(op));
+            return new Scopes(values);
+        }
         public Known<Boolean> get(Operation op) { return !current() ? Known.unknown() : receipt == null ? supported.getOrDefault(op, Known.unknown()) : receipt.apply(op); }
         public boolean current() { return current.getAsBoolean(); }
     }
