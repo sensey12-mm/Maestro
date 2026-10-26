@@ -1,0 +1,14 @@
+# Phase 6.1 — Offline Shadow tactical foundation
+
+**Starting point:** Maestro457 `362204bfcd3510e1a40f05586365f484ad60c6c8`.
+**Scope:** Offline synthetic contract only. Not a running battle adapter, calibration pipeline, optimizer, or authorization to control battles.
+
+`OfflineShadowTacticalAdapter.inspect` accepts only the pinned Phase 5.19 offline purpose and Phase 5.21 historical handoff schema, the current Phase 4 source-scope label, immutable offline scenario inputs, and source-conditional Phase 4 evaluation plans. It rejects attempted current-battle/tactical/identity binding, unbound opponent reserve or held-item/ability information, illegal/duplicate/forced/trapped actions, unobserved response choices, and mismatched pins. Numeric output comes exclusively from `ShadowMechanicsEvaluation.compare`, where known: it is a conditional HP-resource *interval*, not a score, probability or win-rate. Unknown Phase 4 outcomes remain unknown.
+
+A Phase 5 report is optional, and cannot become the authoritative basis for current actor identity or legal actions. Phase 5.21 signed public events and graded candidate possibilities are historical, appearance-local and uncalibrated. This class does not map their signals or candidate ordinals onto the simulated opponent or search response branches. No candidate grade supplies a `ShadowSearchEngine.Outcome` probability. Even an authenticated historical handoff adds an explicit abstention, never permission. Missing report also abstains. Both cases retain unverified runtime mechanics, turn/actor evidence and calibrated responses.
+
+The `Review` result has deliberately no preferred action. Its explicit runtime/legal/identity/search/recommendation/promotion flags are always false. Its printable summary omits input names, candidate IDs, replay text and signatures; its action diagnostics only contain caller-supplied *own* legal action IDs and source-conditional numeric bounds. Do not post actual replay-derived report contents publicly without authorized privacy review.
+
+**Next prerequisite:** independently reviewed fresh public-turn/actor/appearance evidence and installed legal-action/Phase 4 receipt, permitted Phase 5 custody and replay rights, calibrated opponent-response scenarios, FrAIL compatibility review, and separate owner authorization before any tactical connection. The prior Phase 5.20/5.21 snapshots remain historical pins and were not rewritten to pretend Phase 6 integration is complete.
+
+**Verification:** `OfflineShadowTacticalAdapterRegression` runs through `StandaloneRegression` with deterministic and adversarial fixtures. It tests source integration, pinned version and purpose, invalid action choices, forced/trapped behavior, ambiguous Illusion/Transform, private opponent metadata, appearance reuse, hidden moves, uncertainty, immutability, and privilege escalation. This is synthetic/source-level verification only. No live battle or Minecraft acceptance is claimed.
