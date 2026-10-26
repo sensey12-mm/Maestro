@@ -44,6 +44,20 @@ public final class ReadOnlyShadowObservationBridge {
     private final AtomicLong logicalTick=new AtomicLong();
     private long revision,probedRevision;
     private int publicTurn,publicEventCount;
+    private int witnessedOwnSwitchCount;
+    private boolean witnessedForcedReplacement;
+    /** Phase 6.11: read-only native-own party counter, never a legal-set grant. */
+    public synchronized boolean observeOwnSwitchEvidence(
+            Object battle,NativeOwnSwitchEvidence.Review evidence) {
+        if(withdrawn || owner==null || owner!=battle || evidence==null
+                || !evidence.currentlyObserved()) return false;
+        witnessedOwnSwitchCount=evidence.observedSwitchCount();
+        witnessedForcedReplacement=evidence.forcedReplacementWitnessed();
+        return true;
+    }
+    public synchronized int witnessedOwnSwitchCount(){return witnessedOwnSwitchCount;}
+    public synchronized boolean witnessedForcedReplacement(){return witnessedForcedReplacement;}
+
     private int witnessedOwnMoveCount;
     /**
      * Redacted sidecar readout from the owning native request/choice receipt.
@@ -82,6 +96,8 @@ public final class ReadOnlyShadowObservationBridge {
         withdrawn=true;
         reason=State.WITHDRAWN;
         witnessedOwnMoveCount=0;
+        witnessedOwnSwitchCount=0;
+        witnessedForcedReplacement=false;
         eligibleFrames=List.of();
         chunkDigests=List.of();
         if(producer!=null)producer.withdraw();

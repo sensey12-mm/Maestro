@@ -123,6 +123,26 @@ public final class OwnRequestTransport {
                     && receiptTurn+1==capturedTurn;
         }
 
+        /**
+         * Phase 6.11 read-only provenance, for ordinary MOVE or forced-switch
+         * receipts. Must match the exact admitted DTO, current owner, actual
+         * installed request object and source-verifiable choice-turn epoch.
+         */
+        public boolean matchesOwnSwitchRequest(Object observedBattle,
+                Object observedActor,Object installedToken,String observedSide,
+                UUID activeUuid,Request parsed,boolean forced) {
+            return current() && OwnRequestTransport.this.battle==observedBattle
+                    && OwnRequestTransport.this.actor==observedActor
+                    && OwnRequestTransport.this.token==installedToken
+                    && Objects.equals(OwnRequestTransport.this.side,observedSide)
+                    && receipt!=null && receipt.equals(parsed)
+                    && receipt.mode()==(forced?Mode.FORCED:Mode.MOVE)
+                    && parsed.pokemon().stream().filter(p->p.dto().active()
+                            && Objects.equals(p.dto().uuid(),activeUuid)).count()==1
+                    && (forced?receiptTurn==capturedTurn
+                              :receiptTurn+1==capturedTurn);
+        }
+
         private boolean belongsTo(OwnRequestTransport ledger) { return OwnRequestTransport.this == ledger; }
         public boolean current() {
             try { return generation == epoch && choiceOpen && receipt != null && Boolean.TRUE.equals(installed.get()); }
