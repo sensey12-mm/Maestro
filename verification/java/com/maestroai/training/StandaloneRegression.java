@@ -460,6 +460,7 @@ public final class StandaloneRegression {
         ExpandedPublicEventGuardRegression.run();
         PublicBatchEnvelopeGuardRegression.run();
         PublicSplitRoutingGateRegression.run();
+        NativeSplitRecipientCustodyRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();

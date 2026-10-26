@@ -17,6 +17,7 @@ import com.maestroai.training.NativeOwnSwitchEvidence;
 import com.maestroai.training.NativeOwnActionFusion;
 import com.maestroai.training.CrossStreamEvidenceReadiness;
 import com.maestroai.training.PublicSplitRoutingGate;
+import com.maestroai.training.NativeSplitRecipientCustody;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -4606,6 +4607,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase69Bridge = new ReadOnlyShadowObservationBridge();
         phase616Split.withdraw();
         phase616Split = new PublicSplitRoutingGate.Session();
+        phase617Recipients.withdraw();
+        phase617Recipients = new NativeSplitRecipientCustody.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4644,10 +4647,14 @@ public class MaestroBattleAI extends RCTBattleAI {
     private ReadOnlyShadowObservationBridge phase69Bridge =
             new ReadOnlyShadowObservationBridge();
     // Phase 6.16: separate REDACTED split-custody audit, opt-in only.
+    private static final boolean PHASE617_AUDIT =
+            Boolean.getBoolean("maestroai.phase617Audit");
     private static final boolean PHASE616_AUDIT =
-            Boolean.getBoolean("maestroai.phase616Audit");
+            PHASE617_AUDIT || Boolean.getBoolean("maestroai.phase616Audit");
     private PublicSplitRoutingGate.Session phase616Split =
             new PublicSplitRoutingGate.Session();
+    private NativeSplitRecipientCustody.Session phase617Recipients =
+            new NativeSplitRecipientCustody.Session();
 
     /**
      * Process only allowlisted public events from Cobblemon's Showdown
@@ -4705,6 +4712,13 @@ public class MaestroBattleAI extends RCTBattleAI {
                 var routing=phase616Split.inspect(
                         battle, history, ownTransportVersionSupported());
                 System.out.println("[MaestroAI] Phase 6.16 " + routing);
+                if (PHASE617_AUDIT) {
+                    // A historical split is NOT a native per-recipient send
+                    // acknowledgment. Only a redacted UNOBSERVED report is
+                    // possible from this existing read-only call site.
+                    var recipient=phase617Recipients.inspect(battle,routing);
+                    System.out.println("[MaestroAI] Phase 6.17 " + recipient);
+                }
             }
             // Read the already-observed public Showdown history; never obtain
             // private requests, invent own legal actions, or influence a move.

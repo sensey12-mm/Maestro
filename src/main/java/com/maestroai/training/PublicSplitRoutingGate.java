@@ -47,11 +47,18 @@ public final class PublicSplitRoutingGate {
         private final Verdict verdict;
         private final long revision;
         private final int splitPairs,directEvents,chunkCount;
+        private final List<String> splitTargets;
         private Report(Session session,Verdict verdict,long revision,
-                       int pairs,int direct,int chunks) {
+                       int pairs,int direct,int chunks,List<String> targets) {
             this.session=session;this.verdict=verdict;
             this.revision=revision;splitPairs=pairs;
             directEvents=direct;chunkCount=chunks;
+            splitTargets=List.copyOf(targets);
+        }
+        /** Internal routing targets only; no private/public original text. */
+        String targetAt(int zeroBased){return splitTargets.get(zeroBased);}
+        boolean sameBattle(Object battle){
+            return current() && session.boundBattle==battle && battle!=null;
         }
         public String schema(){return SCHEMA;}
         public String source(){return SOURCE;}
@@ -138,11 +145,13 @@ public final class PublicSplitRoutingGate {
     }
 
     private record Parsed(int pairs,int direct,List<String> publicEvents,
-                          List<PublicEnvelopeProvenance.Route> routes) {}
+                          List<PublicEnvelopeProvenance.Route> routes,
+                          List<String> splitTargets) {}
 
     private static Parsed parse(List<String> source){
         List<String> publicEvents=new ArrayList<>();
         List<PublicEnvelopeProvenance.Route> routes=new ArrayList<>();
+        List<String> splitTargets=new ArrayList<>();
         int splits=0,direct=0;
         for(String chunk:source){
             if(chunk==null || chunk.length()>16384 || !chunk.startsWith("update\n")
@@ -162,6 +171,7 @@ public final class PublicSplitRoutingGate {
                     // never retained by the Session or its Report.
                     publicEvents.add(publicLine);
                     routes.add(PublicEnvelopeProvenance.Route.SPLIT_PUBLIC);
+                    splitTargets.add(line.substring(7));
                     splits++;
                 } else {
                     if(!DIRECT_TYPES.contains(type))throw invalid();
@@ -174,7 +184,7 @@ public final class PublicSplitRoutingGate {
             }
         }
         if(splits+direct==0)throw invalid();
-        return new Parsed(splits,direct,publicEvents,routes);
+        return new Parsed(splits,direct,publicEvents,routes,splitTargets);
     }
 
     public static final class Session {
@@ -204,7 +214,7 @@ public final class PublicSplitRoutingGate {
         }
         private Report fail(Verdict reason){
             withdraw();
-            return new Report(this,reason,revision,0,0,0);
+            return new Report(this,reason,revision,0,0,0,List.of());
         }
         /**
          * Probe only: a compatible producer predicate does not certify the
@@ -212,7 +222,7 @@ public final class PublicSplitRoutingGate {
          */
         public synchronized Report inspect(Object battle,List<String> history,
                                            boolean versionPinned){
-            if(withdrawn)return new Report(this,Verdict.WITHDRAWN,revision,0,0,0);
+            if(withdrawn)return new Report(this,Verdict.WITHDRAWN,revision,0,0,0,List.of());
             if(!versionPinned)return fail(Verdict.BAD_SOURCE_PIN);
             if(battle==null || boundBattle!=null && battle!=boundBattle)
                 return fail(Verdict.CROSS_BATTLE);
@@ -248,7 +258,7 @@ public final class PublicSplitRoutingGate {
                 boundBattle=battle;
                 return new Report(this,parsed.pairs==0?Verdict.DIRECT_ONLY
                         :Verdict.STRUCTURAL_PUBLIC_PRIVATE_SEPARATION,
-                        revision,parsed.pairs,parsed.direct,copy.size());
+                        revision,parsed.pairs,parsed.direct,copy.size(),parsed.splitTargets());
             }catch(RuntimeException unsafe){
                 return fail(Verdict.MISSING_OR_MALFORMED);
             }
