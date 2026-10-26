@@ -11,6 +11,7 @@ import com.maestroai.training.PublicTransitionState;
 import com.maestroai.training.PublicProtocolFilter;
 import com.maestroai.training.PublicProtocolEvidence;
 import com.maestroai.training.PublicBattleCapture;
+import com.maestroai.training.ReadOnlyShadowObservationBridge;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -4423,6 +4424,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         observedShowdownHistoryFingerprint = 0;
         shadowSwitchTelemetry.reset();
         shadowObservedBattle = null;
+        phase69Bridge.withdraw();
+        phase69Bridge = new ReadOnlyShadowObservationBridge();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4455,6 +4458,11 @@ public class MaestroBattleAI extends RCTBattleAI {
      */
     private final LegacyChoiceCapture legacyChoiceCapture = LegacyChoiceCapture.installed();
     private final PublicBattleCapture shadowReplayCapture = new PublicBattleCapture();
+    // Phase 6.9: opt-in read-only public-event bridge. No chooser reads its state.
+    private static final boolean PHASE69_OBSERVE =
+            Boolean.getBoolean("maestroai.phase69Observe");
+    private ReadOnlyShadowObservationBridge phase69Bridge =
+            new ReadOnlyShadowObservationBridge();
 
     /**
      * Process only allowlisted public events from Cobblemon's Showdown
@@ -4504,6 +4512,13 @@ public class MaestroBattleAI extends RCTBattleAI {
                 // No raw split payload, request body, UUID, nickname or winner.
                 for (String metadata : capture.envelopes())
                     System.out.println(metadata);
+            }
+            // Read the already-observed public Showdown history; never obtain
+            // private requests, invent own legal actions, or influence a move.
+            if (PHASE69_OBSERVE) {
+                var observation = phase69Bridge.observe(
+                        battle, history, ownTransportVersionSupported());
+                System.out.println("[MaestroAI] Phase 6.9 " + observation);
             }
             publicProtocolObserver.reset();
             for (String line : publicEvents) publicProtocolObserver.accept(line);
