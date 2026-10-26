@@ -23,7 +23,7 @@ public final class ReadOnlyShadowObservationBridge {
 
     public enum State {
         SYNTHETIC_FRAME_ELIGIBLE, NO_SOURCE_VERSION_PIN, NO_SAFE_PUBLIC_FRAMES,
-        REPLAY_OR_REWRITE, WRONG_BATTLE, WITHDRAWN
+        REPLAY_OR_REWRITE, WRONG_BATTLE, APPEARANCE_AMBIGUOUS, WITHDRAWN
     }
     /** Redacted diagnostics only: no battle IDs, actors, frames or actions. */
     public record Observation(State state,long revision,int publicTurn,int publicEventCount) {
@@ -41,6 +41,7 @@ public final class ReadOnlyShadowObservationBridge {
     private List<String> chunkDigests=List.of();
     // Contains ONLY narrow public update frames, never a sideupdate/private split.
     private List<String> eligibleFrames=List.of();
+    private boolean originalNarrowOnly;
     private final AtomicLong logicalTick=new AtomicLong();
     private long revision,probedRevision;
     private int publicTurn,publicEventCount;
@@ -161,6 +162,7 @@ public final class ReadOnlyShadowObservationBridge {
         witnessedOwnSwitchCount=0;
         witnessedForcedReplacement=false;
         eligibleFrames=List.of();
+        originalNarrowOnly=false;
         chunkDigests=List.of();
         if(producer!=null)producer.withdraw();
         if(registry!=null)registry.withdraw();
@@ -209,46 +211,30 @@ public final class ReadOnlyShadowObservationBridge {
             withdraw();
             return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
         }
-        List<String> safe=new ArrayList<>();
-        int turn=0, count=0;
-        for(String chunk:raw){
-            // Phase 6.2 accepts only this narrow, unsplit original framing.
-            String[] lines=chunk.split("\\R",-1);
-            if(lines.length!=2 || !"update".equals(lines[0])
-                    || !lines[1].startsWith("|")){
-                withdraw();
-                return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
-            }
-            String[] event=lines[1].split("\\|",-1);
-            if(event.length<3 || !event[0].isEmpty() || !NARROW.contains(event[1])){
-                withdraw();
-                return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
-            }
-            safe.add(chunk);
-            count++;
-            if("turn".equals(event[1])){
-                try{
-                    int t=Integer.parseInt(event[2]);
-                    if(event.length!=3 || t!=turn+1 || t>10000)throw invalid();
-                    turn=t;
-                }catch(RuntimeException invalidTurn){
-                    withdraw();
-                    return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
-                }
-            }
-        }
-        if(!safe.stream().map(s->s.substring("update\n".length())).toList().equals(visible)
-                || turn<publicTurn || turn==0){
+        final ExpandedPublicEventGuard.Result expanded;
+        try {
+            expanded=ExpandedPublicEventGuard.validate(raw);
+        } catch (RuntimeException invalidSource) {
             withdraw();
             return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
         }
-        eligibleFrames=List.copyOf(safe);
+        // Fail closed when the source's independent public-event extractor
+        // differs from the strict original direct event framing.
+        List<String> direct=raw.stream().map(line->line.substring("update\n".length())).toList();
+        if(!direct.equals(visible) || expanded.turn()<publicTurn
+                || expanded.events()!=visible.size()){
+            withdraw();
+            return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
+        }
+        eligibleFrames=List.copyOf(raw);
+        originalNarrowOnly=expanded.narrowOnly();
         chunkDigests=List.copyOf(digests);
-        publicTurn=turn;
-        publicEventCount=count;
+        publicTurn=expanded.turn();
+        publicEventCount=expanded.events();
         revision++;
         logicalTick.incrementAndGet();
-        reason=State.SYNTHETIC_FRAME_ELIGIBLE;
+        reason=expanded.appearanceAmbiguous()
+                ? State.APPEARANCE_AMBIGUOUS : State.SYNTHETIC_FRAME_ELIGIBLE;
         return status();
     }
 
@@ -259,7 +245,7 @@ public final class ReadOnlyShadowObservationBridge {
      */
     public synchronized OfflineRuntimeEvidenceContract.Review probeSynthetic(
             Object battle,OfflineRuntimeEvidenceContract.Envelope envelope){
-        if(withdrawn || battle!=owner || envelope==null || revision==0
+        if(withdrawn || !originalNarrowOnly || battle!=owner || envelope==null || revision==0
                 || revision==probedRevision || reason!=State.SYNTHETIC_FRAME_ELIGIBLE)
             throw invalid();
         try{

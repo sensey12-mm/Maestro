@@ -118,9 +118,11 @@ final class ReadOnlyShadowObservationBridgeRegression {
                 && spl.withdrawn(),"split private/public branch rejected by narrow Phase 6.2 bridge");
         var unsafe=new ArrayList<>(frames);
         unsafe.add("update\n|-damage|p1a: Own|20/100");
-        check(new ReadOnlyShadowObservationBridge().observe(battle,unsafe,true).state()
-                ==ReadOnlyShadowObservationBridge.State.NO_SAFE_PUBLIC_FRAMES,
-                "unmodeled mechanics do not become legal-action evidence");
+        var expanded=new ReadOnlyShadowObservationBridge();
+        check(expanded.observe(battle,unsafe,true).state()
+                ==ReadOnlyShadowObservationBridge.State.SYNTHETIC_FRAME_ELIGIBLE
+                && expanded.publicLease(battle)!=null,
+                "direct public damage is observed but never legal-action evidence");
 
         var external=new ReadOnlyShadowObservationBridge();
         external.observe(battle,frames,true);
