@@ -175,6 +175,11 @@ public final class OfflineShadowProvenanceGate {
 
         int ownAppearances = 0, opponentAppearances = 0, countTurns = 0;
         String lastDisplayedOpponent = null;
+        // A slot alone is NOT an actor identity. Original spectator move
+        // events must name the actor most recently switched into that slot.
+        // The limited protocol contract never accepts Transform/Illusion
+        // aliases, and this remains only a synthetic fixture consistency check.
+        Map<String,String> activeActorBySlot = new HashMap<>();
         for (String line : filtered) {
             String[] p = line.split("\\|", -1);
             String kind = p[1];
@@ -190,15 +195,28 @@ public final class OfflineShadowProvenanceGate {
             if ("switch".equals(kind) || "drag".equals(kind)) {
                 if (p.length < 5 || p[3].isBlank() || p[4].isBlank()
                         || countTurns > input.expectedTurn()) throw invalid();
+                activeActorBySlot.put(slot, p[2].trim());
                 if (slot.equals(input.ownSlot())) ownAppearances++;
                 else {
                     opponentAppearances++;
                     lastDisplayedOpponent = id(p[3].split(",", 2)[0]);
                 }
             } else if ("move".equals(kind)) {
-                if (countTurns == 0 || p[3].isBlank()
-                        || ownAppearances < 1 || opponentAppearances < 1)
+                if (countTurns == 0 || p[3].isBlank() || p.length > 5
+                        || ownAppearances < 1 || opponentAppearances < 1
+                        || !p[2].trim().equals(activeActorBySlot.get(slot)))
                     throw invalid();
+                // A claimed targeted single-battle move must address the
+                // current active actor, not a forged nickname on a valid slot.
+                // Untargeted public moves may omit the fifth field entirely.
+                if (p.length == 5 && !p[4].isBlank()) {
+                    String target = p[4].trim();
+                    if (target.length() < 4 || !target.matches("p[12]a: [^|\\r\\n]{1,80}"))
+                        throw invalid();
+                    String targetSlot = target.substring(0, 3);
+                    if (!target.equals(activeActorBySlot.get(targetSlot)))
+                        throw invalid();
+                }
             }
         }
         if (countTurns != input.expectedTurn() || ownAppearances < 1

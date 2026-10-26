@@ -147,52 +147,43 @@ public final class OfflineShadowCoverageAudit {
                 OfflineShadowResponseScenarios.Abstention.OWN_ACTION_BUDGET_EXCEEDED))
             reasons.add(Abstention.CASE_BUDGET_EXCEEDED);
 
-        // Each witnessed reply is evaluated independently. The Phase 4
-        // comparator can produce multiple lines for hit/miss/priority/speed
-        // ties, so flattened line counts NEVER identify the origin of a line.
-        // Re-evaluation with a single pinned reply makes that association
-        // structural, without trusting a caller-provided branch index or
-        // reusing an untrusted Comparison as evidence.
+        Map<String,ShadowMechanicsEvaluation.Ranking> rankings=Map.of();
+        if(!scenarios.conditionalPlans().isEmpty()) {
+            // Only conditional line intervals are consumed; the Phase 4
+            // preferredConditional, baseline and policy values are discarded.
+            var comparison=ShadowMechanicsEvaluation.compare(request.snapshot(),
+                    request.mechanics(),input.profiles(),
+                    scenarios.conditionalPlans(),input.trickRoom(),input.critical(),null);
+            var values=new TreeMap<String,ShadowMechanicsEvaluation.Ranking>();
+            for(var ranking:comparison.rankings())
+                if(values.put(ranking.action(),ranking)!=null)throw invalid();
+            rankings=Map.copyOf(values);
+        }
         List<OwnAction> byAction=new ArrayList<>();
         int resolved=0;
         for(String action:legal) {
             int count=(int)scenarios.conditionalCases().stream()
                     .filter(c->action.equals(c.ownAction())).count();
+            var rank=rankings.get(action);
             int known=0;
             Double low=null,high=null;
             Set<String> unknown=new TreeSet<>();
-            for(var plan:scenarios.conditionalPlans()) {
-                if(!plan.action().equals(action))continue;
-                for(var witness:plan.scenarios()) {
-                    if(witness.size()!=1 || witness.getFirst().request()!=null
-                            || !witness.getFirst().action().equals(action))
-                        throw invalid();
-                    var isolated=new ShadowMechanicsEvaluation.Plan(
-                            action,List.of(witness),plan.source());
-                    var comparison=ShadowMechanicsEvaluation.compare(
-                            request.snapshot(),request.mechanics(),input.profiles(),
-                            List.of(isolated),input.trickRoom(),input.critical(),null);
-                    if(comparison.rankings().size()!=1
-                            || !action.equals(comparison.rankings().getFirst().action()))
-                        throw invalid();
-                    var lines=comparison.rankings().getFirst().lines();
-                    if(lines.isEmpty()) {
-                        unknown.add("NO_PHASE4_CONDITIONAL_OUTCOME");
-                        continue;
-                    }
-                    // One reply is resolved ONLY if all of its branches are
-                    // known; a known hit cannot mask an unresolved miss/order.
-                    boolean allKnown=lines.stream().allMatch(line->
-                            line.utility().known() && line.unknown().isEmpty());
-                    if(!allKnown) {
-                        unknown.add("PHASE4_CONDITIONAL_BRANCH_UNRESOLVED");
-                        continue;
-                    }
-                    known++;
-                    for(var line:lines) {
-                        var utility=line.utility().value();
-                        low=low==null?utility.low():Math.min(low,utility.low());
-                        high=high==null?utility.high():Math.max(high,utility.high());
+            if(rank!=null) {
+                // A comparison may branch on hit/miss/order. Without an
+                // individually signed branch-to-witness mapping, group counting
+                // is unsafe. Require exactly one line per declared reply.
+                if(rank.lines().size()!=count)
+                    unknown.add("BRANCH_TO_WITNESSED_REPLY_NOT_CERTIFIED");
+                else {
+                    for(var line:rank.lines()) {
+                        if(!line.utility().known() || !line.unknown().isEmpty())
+                            unknown.addAll(line.unknown());
+                        else {
+                            known++;
+                            var utility=line.utility().value();
+                            low=low==null?utility.low():Math.min(low,utility.low());
+                            high=high==null?utility.high():Math.max(high,utility.high());
+                        }
                     }
                 }
             }

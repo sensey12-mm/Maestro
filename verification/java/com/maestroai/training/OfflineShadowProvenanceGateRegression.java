@@ -45,7 +45,7 @@ final class OfflineShadowProvenanceGateRegression {
                 OfflineShadowProvenanceGate.fixtureSha256(history,turn,"p1a","p2a",appearance,actions),
                 turn,"p1a","p2a",appearance,actions);
     }
-    private static OfflineShadowTacticalAdapter.Request request(BattleSnapshot state) {
+    static OfflineShadowTacticalAdapter.Request request(BattleSnapshot state) {
         var status=Known.of("none","synthetic status");
         var hp=Known.of(new PublicStateSearchAdapter.Interval(1,1),"synthetic public HP");
         var hazards=new Hazards(Map.of(),true,"synthetic field");

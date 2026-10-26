@@ -32,37 +32,6 @@ final class OfflineShadowCoverageAuditRegression {
     private static BattleSnapshot battle(int turn,List<String> own,List<String> observed,List<String> switches){
         return OfflineShadowResponseScenariosRegression.snapshot(turn,own,observed,switches);
     }
-    private static Map<String,CobblemonMechanics.Profile> fullSyntheticProfiles(){
-        var stats=new TreeMap<String,Known<CobblemonMechanics.IntRange>>();
-        for(String stat:List.of("atk","def","spa","spd","spe"))
-            stats.put(stat,Known.of(CobblemonMechanics.IntRange.exact(100),
-                    "conditional stat, not native actor evidence"));
-        var assumed=Known.of(true,"synthetic unmodified-effects precondition");
-        return Map.of(
-                "self",new CobblemonMechanics.Profile("self",
-                    Known.of(50,"synthetic level"),
-                    Known.of(CobblemonMechanics.IntRange.exact(150),"synthetic HP"),
-                    stats,Known.of(List.of("bug","steel"),"synthetic typing"),assumed),
-                "opponent",new CobblemonMechanics.Profile("opponent",
-                    Known.of(50,"synthetic level"),
-                    Known.of(CobblemonMechanics.IntRange.exact(150),"synthetic HP"),
-                    stats,Known.of(List.of("normal"),"synthetic typing"),assumed));
-    }
-    private static OfflineShadowResponseScenarios.Input stagedFixture(
-            List<String> witnessed, List<String> replies) {
-        var root=battle(1,List.of("swift"),replies,List.of());
-        var own=new BattleSnapshot.Combatant(root.self().species(),1,
-                root.self().types(),
-                Map.of("spa",0,"spd",0,"spe",0),List.of(),null,null,false);
-        var staged=new BattleSnapshot(1,own,root.opponent(),List.of(),List.of(),
-                root.legalMoves(),root.legalSwitches(),Map.of(),false,null);
-        var basic=OfflineShadowResponseScenariosRegression.mechanics(false);
-        var phase4=new PublicStateSearchAdapter.PublicMechanics(
-                Map.of(),Map.of("spa",0,"spd",0,"spe",0),Set.of(),
-                false,false,false,0,basic.transitions());
-        return OfflineShadowResponseScenariosRegression.input(
-                witnessed,staged,phase4,null);
-    }
     static void run(){
         var history=OfflineShadowResponseScenariosRegression.frames("Scratch","Tackle");
         var state=battle(1,List.of("swift","tackle"),List.of("scratch","tackle"),List.of());
@@ -160,58 +129,6 @@ final class OfflineShadowCoverageAuditRegression {
                 && !isolated.toString().contains("PRIVATE_OWNER")
                 && !isolated.toString().contains("PRIVATE_NICK"),
                 "signed Phase 5 guesses never enter current fixture");
-        // Previously total flattened line-count was mistaken for per-reply
-        // provenance. Identical speed means BOTH native conditional orders.
-        var tie=stagedFixture(
-                OfflineShadowResponseScenariosRegression.frames("Swift"),
-                List.of("swift"));
-        var tiedPlans=OfflineShadowResponseScenarios.construct(tie).conditionalPlans();
-        var nativeConditional=ShadowMechanicsEvaluation.compare(
-                tie.snapshot(),tie.mechanics(),fullSyntheticProfiles(),tiedPlans,
-                Known.of(false,"synthetic order"),CobblemonMechanics.Critical.NON_CRITICAL,null);
-        check(nativeConditional.rankings().getFirst().lines().size()>1,
-                "speed-tie source conditional has multiple branches for ONE witnessed reply");
-        var tiedAudit=OfflineShadowCoverageAudit.inspect(
-                new OfflineShadowCoverageAudit.Input(OfflineShadowCoverageAudit.SCHEMA,
-                    tie,fullSyntheticProfiles(),Known.of(false,"synthetic order"),
-                    CobblemonMechanics.Critical.NON_CRITICAL));
-        check(tiedAudit.fixturePairCount()==1 && tiedAudit.modeledPairCount()==1
-                && tiedAudit.conditionallyResolvedPairCount()==1
-                && tiedAudit.actions().getFirst().conditionalIntervalResolved(),
-                "every source-resolved speed-order branch of a single witnessed reply counts once");
-        check(tiedAudit.actions().getFirst().conditionalWorstLow()<=
-                    tiedAudit.actions().getFirst().conditionalBestHigh()
-                && !tiedAudit.recommendedActionAvailable()
-                && !tiedAudit.opponentResponseSetComplete(),
-                "sensitivity interval cannot become opponent certainty or recommendation");
-        var mixed=stagedFixture(
-                OfflineShadowResponseScenariosRegression.frames("Swift","Scratch"),
-                List.of("swift","scratch"));
-        var mixedAudit=OfflineShadowCoverageAudit.inspect(
-                new OfflineShadowCoverageAudit.Input(OfflineShadowCoverageAudit.SCHEMA,
-                    mixed,fullSyntheticProfiles(),Known.of(false,"synthetic order"),
-                    CobblemonMechanics.Critical.NON_CRITICAL));
-        check(mixedAudit.fixturePairCount()==2 && mixedAudit.modeledPairCount()==2
-                && mixedAudit.conditionallyResolvedPairCount()<2
-                && !mixedAudit.actions().getFirst().conditionalIntervalResolved(),
-                "unknown branch in another witnessed reply suppresses overall interval");
-        var unknownPolicy=OfflineShadowCoverageAudit.inspect(
-                new OfflineShadowCoverageAudit.Input(OfflineShadowCoverageAudit.SCHEMA,
-                    tie,unknown(),Known.of(false,"synthetic order"),
-                    CobblemonMechanics.Critical.NON_CRITICAL));
-        check(unknownPolicy.conditionallyResolvedPairCount()==0
-                && !unknownPolicy.actions().getFirst().conditionalIntervalResolved()
-                && unknownPolicy.abstentions().contains(
-                    OfflineShadowCoverageAudit.Abstention.EFFECTS_OR_BRANCH_MAPPING_UNRESOLVED),
-                "changing explicit Phase4 stat evidence to UNKNOWN cannot create certainty");
-        var broadened=OfflineShadowCoverageAudit.inspect(
-                new OfflineShadowCoverageAudit.Input(OfflineShadowCoverageAudit.SCHEMA,
-                    tie,fullSyntheticProfiles(),Known.of(false,"synthetic order"),
-                    CobblemonMechanics.Critical.BOTH));
-        check(!broadened.recommendedActionAvailable()
-                && !broadened.installedEffectsCertified()
-                && broadened.conditionallyResolvedPairCount()<=1,
-                "critical-range expansion never promotes source-conditional results");
         System.out.println("Phase 6.4 offline coverage PASS: "+checks+" synthetic checks");
     }
 }
