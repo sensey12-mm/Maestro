@@ -118,3 +118,15 @@ Own Xerneas now has a separate source-bound entry capability. Verification execu
 Completed own Geomancy history also remains source-bound after Xerneas leaves. Its past-execution witness admits only the original completed charge sequence; each recipient still needs independent fresh own state and any existing entry, Mega-Y or spent-Z witness. Native U-turn annotations require an owned surviving donor and observed direct-hit ordering. Verification covers both owner sides, all five other configured roster members, ordinary switches, pivots, re-entry, combined Mega-Y/Z histories and receipt withdrawal. Incomplete charges, unproved entries or survival, unsupported suppression and stale source/owner evidence remain UNKNOWN; the witness grants no transferred boosts, opponent identity or additional Z use.
 
 An exact Sticky Web activation and paired Speed drop can now certify a first own entry through the existing lifecycle witness. This requires the witnessed initial own actor, exact incoming UUID and details, fresh surviving owner state and current source receipts. Flying, Levitate, unsupported effects and unproved entries remain guarded. Heavy-Duty Boots suppression is checked at the Web event, so later Magic Room starts cannot explain an earlier effect and actual expiration does not erase a proven entry. Public identity/effect caveats remain unchanged. Native checks cover both owner sides, six roster members, grounding controls, Boots, Magic Room expiration, stacked hazards, pivots and lethal entries; combined Geomancy, Mega-Y and spent-Z histories retain their independent evidence gates. These source/profile checks do not establish installed Cobbleverse acceptance or change Legacy live control and Shadow-only analysis.
+
+## Phase 4/5/7 integration — experimental branch `Maestro457`
+
+The independent Phase 4 native-scoped mechanics, Phase 5 offline competitive evidence,
+and Phase 7 verification/capture infrastructure are reconciled on `Maestro457`.
+The merge retains every source's independent provenance; a green combined build is
+not installed Minecraft acceptance or permission to activate Shadow tactics.
+Phase 5.21 remains signed, public-replay-only and explicitly denies current battle
+binding, calibrated probabilities, legal actions, and tactical/live promotion.
+Phase 7's Legacy-choice capture is opt-in and never changes the selected action.
+See `verification/PHASE457_INTEGRATION_STATUS.md` for exact upstream commits,
+cross-phase acceptance tests, and remaining Phase 6 prerequisites.

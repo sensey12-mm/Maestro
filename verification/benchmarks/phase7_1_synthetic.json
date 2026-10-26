@@ -1,0 +1,49 @@
+{
+  "schema": "phase7.1.v1",
+  "seed": 1729,
+  "scenarios": [
+    {
+      "id": "synthetic-offense",
+      "version": 1,
+      "turn": 2,
+      "moves": ["attack", "guard"],
+      "switches": ["reserve"],
+      "criteria": {
+        "move:attack": {"utility": 0.8, "uncertainty": 0.15},
+        "move:guard": {"utility": 0.3, "uncertainty": 0.1},
+        "switch:reserve": {"utility": 0.45, "uncertainty": 0.2}
+      },
+      "publicOnly": true,
+      "fresh": true,
+      "mechanicsSupported": true
+    },
+    {
+      "id": "synthetic-defensive",
+      "version": 1,
+      "turn": 4,
+      "moves": ["attack", "protect"],
+      "switches": [],
+      "criteria": {
+        "move:attack": {"utility": 0.2, "uncertainty": 0.3},
+        "move:protect": {"utility": 0.55, "uncertainty": 0.1}
+      },
+      "publicOnly": true,
+      "fresh": true,
+      "mechanicsSupported": true
+    },
+    {
+      "id": "synthetic-stale",
+      "version": 1,
+      "turn": 8,
+      "moves": ["attack"],
+      "switches": ["reserve"],
+      "criteria": {
+        "move:attack": {"utility": 0.9, "uncertainty": 0.1},
+        "switch:reserve": {"utility": 0.1, "uncertainty": 0.1}
+      },
+      "publicOnly": true,
+      "fresh": false,
+      "mechanicsSupported": true
+    }
+  ]
+}

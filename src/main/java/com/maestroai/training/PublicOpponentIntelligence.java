@@ -617,4 +617,12 @@ public final class PublicOpponentIntelligence {
     private static String canonical(String s) {
         return s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
+    /** Public native-use counts, in appearance order, never linked by nickname.
+     * Historical values are observations, not future-move probabilities. */
+    public List<Map<String,Integer>> observedNativeMoveUseCounts() {
+        List<Map<String,Integer>> result = new ArrayList<>();
+        for (Mutable m : history.values())
+            result.add(Collections.unmodifiableMap(new TreeMap<>(m.moveUses)));
+        return List.copyOf(result);
+    }
 }

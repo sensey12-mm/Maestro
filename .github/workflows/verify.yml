@@ -1,7 +1,7 @@
 name: Verify MaestroAI
 on:
   push:
-    branches: [main]
+    branches: [main, Maestro457]
   pull_request:
     branches: [main]
 permissions:
@@ -28,7 +28,7 @@ jobs:
           python3 verification/check_repository.py --self-test
           python3 verification/check_repository.py
       - name: Build and run standalone regressions
-        run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression --stacktrace
+        run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression phase7Benchmark --stacktrace
       - name: Check JAR and checker regressions
         run: |
           python3 verification/check_jar.py --self-test

@@ -12,7 +12,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 APACHE_SHA256 = '0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594'
 HIDDEN = ('.gradle/cache.bin', 'build/libs/mod.jar', 'out/classes/X.class',
-          'run/world/level.dat', 'logs/latest.log', 'local.properties',
+          'run/world/level.dat', 'run/phase7-corpus/phase7_private.json', 'logs/latest.log', 'local.properties',
           '.env', '.env.production', '.idea/workspace.xml', '.vscode/settings.json',
           'verification/__pycache__/check.cpython-311.pyc')
 VISIBLE = ('LICENSE', 'README.md', '.env.example', 'gradlew', 'gradlew.bat',
@@ -89,6 +89,25 @@ class SafeguardRegression(unittest.TestCase):
                     check_workflow(source.replace('  ' + event + ':', replacement, 1))
         with self.assertRaises(ValueError):
             check_workflow(source.replace('branches: [main]', 'branches: [other]'))
+    def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
+        check_benchmark_docs(ROOT)
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            folder = root / 'verification/benchmarks'
+            folder.mkdir(parents=True)
+            (root / 'README.md').write_text('# Public Maestro\\n', encoding='utf-8')
+            (folder / 'README.md').write_text('# Offline benchmark\\n', encoding='utf-8')
+            (folder / 'phase7_1_synthetic.json').write_text('{}', encoding='utf-8')
+            check_benchmark_docs(root)
+            handoff = folder / 'PHASE7_INTEGRATION_HANDOFF.md'
+            handoff.write_text('should not be here', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'handoff reintroduced'):
+                check_benchmark_docs(root)
+            handoff.unlink()
+            (folder / 'README.md').write_text('[broken](PHASE7_INTEGRATION_HANDOFF.md)', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'markdown references'):
+                check_benchmark_docs(root)
+
     def test_wrapper_notice_retained(self): check_wrapper(ROOT)
     def test_missing_wrapper_notice_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -98,12 +117,27 @@ class SafeguardRegression(unittest.TestCase):
             with self.assertRaises(ValueError): check_wrapper(root)
 
 
+def check_benchmark_docs(root):
+    """Keep runnable benchmark inputs public but private coordination off this branch."""
+    folder = root / 'verification/benchmarks'
+    if not (folder / 'phase7_1_synthetic.json').is_file():
+        raise ValueError('Default synthetic Phase 7 benchmark fixture missing')
+    if not (folder / 'README.md').is_file():
+        raise ValueError('Public Phase 7 benchmark instructions missing')
+    if (folder / 'PHASE7_INTEGRATION_HANDOFF.md').exists():
+        raise ValueError('Phase 7 integration handoff reintroduced into public verification')
+    for doc in (root / 'README.md', folder / 'README.md'):
+        if 'PHASE7_INTEGRATION_HANDOFF.md' in doc.read_text(encoding='utf-8'):
+            raise ValueError('Public markdown references removed Phase 7 handoff')
+
+
 def main():
     if sys.argv[1:] == ['--self-test']:
         return not unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(SafeguardRegression)).wasSuccessful()
     check_ignore((ROOT / '.gitignore').read_text())
     check_workflow((ROOT / '.github/workflows/verify.yml').read_text())
     check_wrapper(ROOT)
+    check_benchmark_docs(ROOT)
     print('Repository safeguards and Gradle notices OK')
     return 0
 

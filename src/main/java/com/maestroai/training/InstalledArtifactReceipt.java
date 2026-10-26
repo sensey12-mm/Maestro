@@ -24,13 +24,18 @@ public final class InstalledArtifactReceipt {
             }
         } catch(Exception unavailable) { return "UNKNOWN"; }
     }
-    public static String capture() {
+    /** Installed artifact SHA only; does not certify transforms or the runtime. */
+    public static String installedSha256() {
         String sha="UNKNOWN";
         try {
             var container=FabricLoader.getInstance().getModContainer("maestroai").orElseThrow();
             var origin=container.getOrigin();
             if(origin.getKind()==ModOrigin.Kind.PATH) sha=sha256(origin.getPaths());
         } catch(RuntimeException unavailable) { /* Fixed UNKNOWN, never exception/path contents. */ }
-        return "[MaestroAI] Installed artifact sha256="+sha+" runtimeTransformation=UNATTESTED";
+        return sha;
+    }
+    public static String capture() {
+        return "[MaestroAI] Installed artifact sha256="+installedSha256()
+                +" runtimeTransformation=UNATTESTED";
     }
 }
