@@ -16,6 +16,7 @@ import com.maestroai.training.NativeOwnActionEvidence;
 import com.maestroai.training.NativeOwnSwitchEvidence;
 import com.maestroai.training.NativeOwnActionFusion;
 import com.maestroai.training.CrossStreamEvidenceReadiness;
+import com.maestroai.training.PublicSplitRoutingGate;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -4603,6 +4604,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase612Move=null;phase612Switch=null;
         phase69Bridge.withdraw();
         phase69Bridge = new ReadOnlyShadowObservationBridge();
+        phase616Split.withdraw();
+        phase616Split = new PublicSplitRoutingGate.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4640,6 +4643,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             PHASE613_OBSERVE || Boolean.getBoolean("maestroai.phase69Observe");
     private ReadOnlyShadowObservationBridge phase69Bridge =
             new ReadOnlyShadowObservationBridge();
+    // Phase 6.16: separate REDACTED split-custody audit, opt-in only.
+    private static final boolean PHASE616_AUDIT =
+            Boolean.getBoolean("maestroai.phase616Audit");
+    private PublicSplitRoutingGate.Session phase616Split =
+            new PublicSplitRoutingGate.Session();
 
     /**
      * Process only allowlisted public events from Cobblemon's Showdown
@@ -4689,6 +4697,14 @@ public class MaestroBattleAI extends RCTBattleAI {
                 // No raw split payload, request body, UUID, nickname or winner.
                 for (String metadata : capture.envelopes())
                     System.out.println(metadata);
+            }
+            if (PHASE616_AUDIT) {
+                // Inspect exactly the original native message history. This
+                // produces counts only; private split halves and public
+                // extract strings never reach a tactical consumer or log.
+                var routing=phase616Split.inspect(
+                        battle, history, ownTransportVersionSupported());
+                System.out.println("[MaestroAI] Phase 6.16 " + routing);
             }
             // Read the already-observed public Showdown history; never obtain
             // private requests, invent own legal actions, or influence a move.

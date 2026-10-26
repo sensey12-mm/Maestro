@@ -1,0 +1,29 @@
+# Phase 6.16 — Public Split-Routing Provenance and Privacy Acceptance Gates
+
+**Repository:** `sensey12-mm/Maestro` · **Branch:** `Maestro-6` · **Version:** `1.0.61` · **Mode:** separate, opt-in, read-only structural source audit.
+
+## Source audit and evidence boundary
+
+The Cobblemon 1.7.3 install pin remains `1.7.3+1.21.1`. The existing `PublicProtocolFilter`, `PublicEnvelopeProvenance`, and verified pinned Showdown source inventory were inspected. The Showdown simulator split format is `|split|pN` followed by **SECRET** (side-specific/omniscient) and then **PUBLIC** (opponent/spectator). `ShowdownInterpreter` consumes those two lines in the same order: `privateMessage=messages.next()`, `publicMessage=messages.next()`, and maps the supported split types `-damage`, `-heal`, `-sethp`, `switch` and `drag`. The native interpreter stores the unprocessed original message in battle history, which is the previously existing read-only source.
+
+See upstream protocol reference `https://github.com/smogon/pokemon-showdown/blob/master/sim/SIMULATOR.md` and Cobblemon `ShowdownInterpreter.kt` source (the exact installed 1.7.3 package must still be checked in Minecraft before runtime acceptance). A Showdown split's public branch **may legally be empty**. This narrowly bounded Phase 6.16 contract abstains on that case rather than invent a public observation. A valid-looking public line does NOT prove that a specific client/spectator received that line. Likewise, a same-looking private/public pair is not proof that the emitter assigned correct confidentiality labels. No source signature, transport custody or independent installed runtime attestation was added.
+
+## Implemented contract
+
+`PublicSplitRoutingGate.Session.inspect(battle, originalHistory, installedVersionPinned)` receives the **original Cobblemon battle object's historical update chunks**, never the result of a filter or the private opponent request. Every original chunk is defensively snapshotted and inspected as one bounded `update` envelope. Each `|split|p1/p2` must contain two adjacent, nonempty, correctly ordered, same-kind payloads in **the same chunk**. The split kinds are restricted to those supported by the inspected native split interpreter. For this conservative subset, both branches must have the same active actor field and target side, valid supported HP/appearance framing, and no unrecognized extra tags. Direct events are limited to an independently allowlisted, explicitly public subset.
+
+The gate independently compares the exact resulting public-only event sequence and route order against `PublicProtocolFilter.publicEvents` and `PublicEnvelopeProvenance.reconcile`; any omission, reordering, unknown kind, nested split, altered target, private `sideupdate`, `request`, bad split half, malformed trailing line, unsupported player side or provenance disagreement permanently fails closed. Accepted prior history is protected against truncation or edit by process-random-salted, append-only SHA-256 digests. The salt and digests are *private internal state*; the original private/public payload strings and actor names are not retained by `Session`, are not returned, and are never put into exceptions or diagnostics. Changes/withdrawal invalidate previously returned observations.
+
+**Outcomes** are redacted `DIRECT_ONLY`, `STRUCTURAL_PUBLIC_PRIVATE_SEPARATION` or explicit fail-closed abstentions. The report contains ONLY schema, pinned source, revision, split-pair count, direct-event count and original chunk count. Its names and methods make the limitation explicit: `liveSourceDeliveryAuthenticated=false`, `runtimeActorAuthenticated=false`, `publicReadinessLeaseAuthorized=false`, `privatePayloadExportable=false`, `completeMechanicsKnown=false`, `shadowSearchAuthorized=false`, `tacticalDecisionAuthorized=false`, `livePromotionAuthorized=false`.
+
+### Runtime coupling restrictions
+
+A single opt-in flag `-Dmaestroai.phase616Audit=true` (off by default) invokes this custody audit at the **existing** `MaestroBattleAI.syncPublicProtocolObservation` read site, without adding new mixins or consuming private user requests. The audit emits only its redacted report. **No split output is passed to Phase 6.9 or Phase 6.13.** Their original refusal to issue public source readiness leases on split routes is preserved. Legacy battle selection remains authoritative; no Shadow tactic or score can consume this data. This gate does NOT classify all Showdown protocol events or claim completeness of the entire native event stream.
+
+### Synthetic adversarial regressions
+
+`PublicSplitRoutingGateRegression` is wired into `StandaloneRegression` and covers p1/p2 complete split events, private-first/public-second independent agreement, damage/heal/sethp/switch/drag shapes, same-looking private/public halves preserving non-authority, actor-slot/side changes, changed identities, mismatched kinds, invalid HP/unknown tags, private requests, sideupdate, empty public/private halves, missing/nested/reordered splits, bad suffixes, source drift, foreign battle object, append-only editing of **private** bytes, truncation, duplicate polling, report invalidation and withdrawn-session non-resurrection. Existing Phase 6.1–6.15 regressions remain registered.
+
+**Acceptance boundary:** standalone Java, JAR and full pinned external source-oracle GitHub Actions must all pass on the **exact final commit** before complete CI acceptance. Source-level tests are not Minecraft tests. Minecraft testing of native packet origin, split shape/timing, and real privacy transport is still required before in-game compatibility can be claimed. Independent FrAIL final acceptance occurs at the end of Phase 6, not here.
+
+**Safety:** commit only to `Maestro-6`; no `main` merge, no Legacy changes, no Shadow promotion, no private Headquarters CI use (0 minutes).
