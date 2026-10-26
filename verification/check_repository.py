@@ -47,6 +47,8 @@ def check_workflow(source):
         branches = [name.strip() for name in branch_match.group(1).split(',')] if branch_match else []
         if 'main' not in branches:
             raise ValueError('Missing main branch verification')
+        if event == 'push' and 'Maestro-6' not in branches:
+            raise ValueError('Missing Maestro-6 Phase 6 CI trigger')
         # Required verify must be scheduled for every main PR/push, including
         # README-only changes. Workflow-level path skips leave required checks pending.
         if re.search(r'(?m)^ +(paths|paths-ignore):', block):
@@ -90,7 +92,7 @@ class SafeguardRegression(unittest.TestCase):
                 with self.subTest(event=event), self.assertRaises(ValueError):
                     check_workflow(source.replace('  ' + event + ':', replacement, 1))
         with self.assertRaises(ValueError):
-            check_workflow(source.replace('branches: [main, Maestro457]', 'branches: [other]'))
+            check_workflow(source.replace('branches: [main, Maestro457, Maestro-6]', 'branches: [other]'))
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)
         with tempfile.TemporaryDirectory() as d:
