@@ -451,6 +451,7 @@ public final class StandaloneRegression {
         OfflineShadowCoverageAuditRegression.run();
         Phase66OfflineIntegrationRegression.run();
         OfflineRuntimeEvidenceContractRegression.run();
+        OfflineEvidenceProducerLeaseRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
