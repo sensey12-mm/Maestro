@@ -71,13 +71,13 @@ final class OfflineShadowResponseScenariosRegression {
     private static PublicShadowBuildHandoff.Report signedHistorical() {
         final long now=1_700_000_100L;
         try {
-            String log="|gen|9\\n|gametype|singles\\n|tier|[Gen 9] OU\\n"
-                    +"|player|p1|PRIVATE_OWNER\\n|start\\n"
-                    +"|switch|p1a: Ally|Pikachu, L100|100/100\\n"
-                    +"|switch|p2a: PRIVATE_NICK|Zoroark, L100|100/100\\n"
-                    +"|turn|1\\n|-ability|p2a: PRIVATE_NICK|Illusion\\n"
-                    +"|move|p2a: PRIVATE_NICK|Nasty Plot|p1a: Ally\\n"
-                    +"|win|PRIVATE_OWNER\\n";
+            String log="|gen|9\n|gametype|singles\n|tier|[Gen 9] OU\n"
+                    +"|player|p1|PRIVATE_OWNER\n|start\n"
+                    +"|switch|p1a: Ally|Pikachu, L100|100/100\n"
+                    +"|switch|p2a: PRIVATE_NICK|Zoroark, L100|100/100\n"
+                    +"|turn|1\n|-ability|p2a: PRIVATE_NICK|Illusion\n"
+                    +"|move|p2a: PRIVATE_NICK|Nasty Plot|p1a: Ally\n"
+                    +"|win|PRIVATE_OWNER\n";
             var source=new PublicReplayCorpus.Source("gen9ou-87654321","gen9ou",
                     true,PublicReplayCorpus.RightsBasis.EXPLICIT_REPLAY_USE_PERMISSION);
             var admitted=PublicReplayCorpus.ingest(source,log);
