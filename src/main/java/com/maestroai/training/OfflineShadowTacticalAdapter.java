@@ -132,6 +132,29 @@ public final class OfflineShadowTacticalAdapter {
         }
     }
 
+    /**
+     * Phase 6.2 deliberately rechecks original pinned offline public messages
+     * before considering any Phase 4 conditional scenario. Even a passing
+     * fixture receipt is NOT a current runtime/legality authority.
+     */
+    public record ProvenanceReview(Review conditional, OfflineShadowProvenanceGate.Receipt fixture) {
+        public ProvenanceReview {
+            Objects.requireNonNull(conditional);
+            Objects.requireNonNull(fixture);
+        }
+        @Override public String toString() {
+            return "Phase62ProvenanceReview[offline-only;not-tactical]";
+        }
+    }
+
+    public static ProvenanceReview inspectWithProvenance(
+            Request request, OfflineShadowProvenanceGate.Input originalFixture) {
+        Objects.requireNonNull(request);
+        var receipt = OfflineShadowProvenanceGate.check(
+                originalFixture, request.snapshot(), request.plans());
+        return new ProvenanceReview(inspect(request), receipt);
+    }
+
     public static Review inspect(Request request) {
         Objects.requireNonNull(request, "request");
         // Project first: this verifies forced moves, trapped switches, root
