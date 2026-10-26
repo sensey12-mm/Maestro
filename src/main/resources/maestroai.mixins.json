@@ -2,6 +2,14 @@
   "required": false,
   "package": "com.maestroai.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["OwnRequestDispatchMixin", "OwnTurnDispatchMixin", "SimulatorDomainMixin", "OwnChoiceErrorMixin"],
-  "injectors": {"defaultRequire": 0}
+  "mixins": [
+    "OwnRequestDispatchMixin",
+    "OwnTurnDispatchMixin",
+    "SimulatorDomainMixin",
+    "OwnChoiceErrorMixin",
+    "NativeSplitDispatchObservationMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
 }

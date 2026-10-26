@@ -18,6 +18,7 @@ import com.maestroai.training.NativeOwnActionFusion;
 import com.maestroai.training.CrossStreamEvidenceReadiness;
 import com.maestroai.training.PublicSplitRoutingGate;
 import com.maestroai.training.NativeSplitRecipientCustody;
+import com.maestroai.training.NativeSplitDispatchObservation;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -311,6 +312,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (ownNativeSwitchEvidence != null) ownNativeSwitchEvidence.withdraw();
         phase612Session.withdraw();
         phase613Session.withdraw();
+        phase618Dispatch.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4609,6 +4611,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase616Split = new PublicSplitRoutingGate.Session();
         phase617Recipients.withdraw();
         phase617Recipients = new NativeSplitRecipientCustody.Session();
+        phase618Dispatch.withdraw();
+        phase618Dispatch = new NativeSplitDispatchObservation.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4655,6 +4659,35 @@ public class MaestroBattleAI extends RCTBattleAI {
             new PublicSplitRoutingGate.Session();
     private NativeSplitRecipientCustody.Session phase617Recipients =
             new NativeSplitRecipientCustody.Session();
+    private static final boolean PHASE618_AUDIT =
+            Boolean.getBoolean("maestroai.phase618Audit");
+    private NativeSplitDispatchObservation.Session phase618Dispatch =
+            new NativeSplitDispatchObservation.Session();
+
+    /**
+     * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
+     * RETURN mixin. Does not read packet bytes or public/private split text.
+     * A returned dispatch method is NOT a per-recipient delivery ACK.
+     */
+    public void ownNativeSplitDispatchReturned(PokemonBattle battle,
+            com.cobblemon.mod.common.api.battles.model.actor.BattleActor privateActor,
+            com.cobblemon.mod.common.api.net.NetworkPacket<?> privatePacket,
+            com.cobblemon.mod.common.api.net.NetworkPacket<?> publicPacket) {
+        if (!PHASE618_AUDIT) return;
+        try {
+            var receipt=phase618Dispatch.observeNativeReturn(
+                    battle,java.util.List.copyOf(battle.getActors()),
+                    privateActor,privatePacket,publicPacket,
+                    battle.getTurn(),battle.getShowdownMessages().size(),
+                    battle.getSpectators().size(),ownTransportVersionSupported(),
+                    false);
+            System.out.println("[MaestroAI] Phase 6.18 "+receipt);
+        }catch(RuntimeException unknown) {
+            phase618Dispatch.withdraw();
+            System.out.println("[MaestroAI] Phase 6.18 dispatch=UNKNOWN");
+        }
+    }
+
 
     /**
      * Process only allowlisted public events from Cobblemon's Showdown
