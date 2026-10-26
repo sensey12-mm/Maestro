@@ -33,6 +33,46 @@ public final class OwnRequestTransport {
     private String side;
     private Request receipt;
     private Request previous;
+    // Phase 6.11: process-salted exact *own* dispatch text correlation only.
+    // Never log the digest, salt or original private request.
+    private String readOnlyRawPin;
+    private static final byte[] RAW_SALT=new byte[32];
+    static {new java.security.SecureRandom().nextBytes(RAW_SALT);}
+    private static String ownRawHash(String raw){
+        if(raw==null||!raw.startsWith("|request|{")||raw.length()>131072)
+            return null;
+        try{
+            var d=java.security.MessageDigest.getInstance("SHA-256");
+            d.update(RAW_SALT);
+            d.update(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(d.digest());
+        }catch(java.security.NoSuchAlgorithmException impossible){
+            throw new IllegalStateException("SHA-256 unavailable");
+        }
+    }
+    /**
+     * Called only with the *same* raw string just parsed inside the owning
+     * RequestInstruction dispatch closure. Binds unmodeled fields (including
+     * trapped) without retaining/exporting source private bytes.
+     */
+    public void bindReadOnlyRaw(Object ownBattle,Object ownActor,Object installedToken,
+            String ownSide,String raw,Request parsed){
+        if(battle!=ownBattle||actor!=ownActor||token!=installedToken
+                ||!Objects.equals(side,ownSide)||receipt==null
+                ||!receipt.equals(parsed)||readOnlyRawPin!=null)return;
+        readOnlyRawPin=ownRawHash(raw);
+    }
+    public boolean matchesReadOnlyRaw(Object ownBattle,Object ownActor,
+            Object installedToken,String ownSide,String raw,Request parsed){
+        String candidate=ownRawHash(raw);
+        return battle==ownBattle&&actor==ownActor&&token==installedToken
+                &&Objects.equals(side,ownSide)&&receipt!=null&&receipt.equals(parsed)
+                &&candidate!=null&&readOnlyRawPin!=null
+                &&java.security.MessageDigest.isEqual(
+                    candidate.getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+                    readOnlyRawPin.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+    }
+
     private int turn, receiptTurn = -1;
     private long epoch;
     private boolean choiceOpen, used, turnDispatchOpen;
@@ -47,12 +87,12 @@ public final class OwnRequestTransport {
         turn = 0; turnDispatchOpen = false; turnReceipt = false; previous = null; initialReserves.clear(); invalidate("OWN_DISPATCH_NOT_OBSERVED");
     }
     public void invalidate(String reason) {
-        epoch++; choiceOpen = false; turnDispatchOpen = false; turnReceipt = false; token = null; receipt = null; reasons.clear(); reasons.add(reason);
+        epoch++; choiceOpen = false; turnDispatchOpen = false; turnReceipt = false; token = null; receipt = null; readOnlyRawPin=null; reasons.clear(); reasons.add(reason);
     }
     /** The lazy parser is NEVER invoked for a foreign actor, battle or side. */
     public void dispatched(Object battle, Object actor, String side, Object installedToken, Supplier<Request> parser) {
         if (this.battle != battle || this.actor != actor || !Objects.equals(this.side, side)) return;
-        epoch++; choiceOpen = false; used = false; receipt = null; token = installedToken; reasons.clear();
+        epoch++; choiceOpen = false; used = false; receipt = null; readOnlyRawPin=null; token = installedToken; reasons.clear();
         try {
             Request r = parser.get();
             if (installedToken == null || r == null || !Set.of("p1", "p2").contains(side) || !side.equals(r.side()))
@@ -137,6 +177,7 @@ public final class OwnRequestTransport {
                     && Objects.equals(OwnRequestTransport.this.side,observedSide)
                     && receipt!=null && receipt.equals(parsed)
                     && receipt.mode()==(forced?Mode.FORCED:Mode.MOVE)
+                    && readOnlyRawPin!=null
                     && parsed.pokemon().stream().filter(p->p.dto().active()
                             && Objects.equals(p.dto().uuid(),activeUuid)).count()==1
                     && (forced?receiptTurn==capturedTurn

@@ -262,10 +262,16 @@ public class MaestroBattleAI extends RCTBattleAI {
             // Only the observation abstains; never affect Legacy.
             ownNativeActionEvidence = null;
         }
+        if (PHASE611_OBSERVE) {
+            // Pin exactly the once-read original owning request, including
+            // trapping/forced fields omitted by the normalized DTO.
+            ownTransport.bindReadOnlyRaw(battle, actor, request,
+                    actor.getShowdownId(), ownedRaw[0], parsed[0]);
+        }
         if (PHASE611_OBSERVE) try {
             ownNativeSwitchEvidence = NativeOwnSwitchEvidence.capture(
                     battle, actor, request, actor.getShowdownId(), battle.getTurn(),
-                    ownedRaw[0], parsed[0], ReadOnlyShadowObservationBridge.COBBLEMON_VERSION);
+                    ownedRaw[0], parsed[0], ReadOnlyShadowObservationBridge.COBBLEMON_VERSION, ownTransport);
         } catch (RuntimeException unsupported) {
             ownNativeSwitchEvidence = null;
         }

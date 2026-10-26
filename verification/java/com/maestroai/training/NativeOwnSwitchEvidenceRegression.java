@@ -56,8 +56,9 @@ final class NativeOwnSwitchEvidenceRegression {
             ledger.owner(battle,actor,"p1");
             if(forced)ledger.turnDispatched(battle,1);
             ledger.dispatched(battle,actor,"p1",request,()->parsed);
+            ledger.bindReadOnlyRaw(battle,actor,request,"p1",raw,parsed);
             witness=NativeOwnSwitchEvidence.capture(
-                    battle,actor,request,"p1",forced?1:0,raw,parsed,"1.7.3+1.21.1");
+                    battle,actor,request,"p1",forced?1:0,raw,parsed,"1.7.3+1.21.1",ledger);
             if(!forced)ledger.turnDispatched(battle,1);
             lease=ledger.beginChoice(battle,actor,request,ACTIVE,forced,()->true);
             check(lease.current(),"actual own choice lease opens");
@@ -228,33 +229,65 @@ final class NativeOwnSwitchEvidenceRegression {
         revoked.witness.withdraw();
         reject(revoked::attest,"explicitly withdrawn native source");
 
-        var parsed=OwnRequestJson.parse(raw(false,false));
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",0,raw(false,false),parsed,"wrong-version"),"source version drift");
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p2",0,raw(false,false),parsed,"1.7.3+1.21.1"),"opposite side identity");
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",0,raw(false,true),parsed,"1.7.3+1.21.1"),"raw party/trapping substitution");
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",0,raw(false,false).replace("\"trapped\":false,",""),parsed,
-                "1.7.3+1.21.1"),"missing trapped field");
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",0,raw(false,false).replace("\"trapped\":false",
-                    "\"maybeTrapped\":true,\"trapped\":false"),parsed,
-                "1.7.3+1.21.1"),"unsupported native flag");
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",0,raw(false,false).replace("\"trapped\":false",
-                    "\"canMegaEvo\":true,\"trapped\":false"),parsed,
-                "1.7.3+1.21.1"),"unsupported gimmick flags");
-        var parsedForced=OwnRequestJson.parse(raw(true,false));
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",1,raw(true,false).replace("\"forceSwitch\":[true]",
-                    "\"forceSwitch\":[false]"),parsedForced,
-                "1.7.3+1.21.1"),"forceSwitch not actually requested");
-        reject(()->NativeOwnSwitchEvidence.capture(new Object(),new Object(),new Object(),
-                "p1",1,raw(true,false).replace("\"forceSwitch\":[true]",
-                    "\"forceSwitch\":[true],\"active\":[{}]"),parsedForced,
-                "1.7.3+1.21.1"),"forced request with unsupported active payload");
+        var pinned=new Fixture(false,false);
+        check(OwnRequestJson.parse(raw(false,true)).equals(pinned.parsed),
+                "normalized transport DTO does not retain trapped field");
+        check(!pinned.ledger.matchesReadOnlyRaw(
+                pinned.battle,pinned.actor,pinned.request,"p1",
+                raw(false,true),pinned.parsed),
+                "process-salted owning raw pin detects a trap-field substitution");
+        reject(()->NativeOwnSwitchEvidence.capture(
+                pinned.battle,pinned.actor,pinned.request,"p1",0,
+                raw(false,true),pinned.parsed,"1.7.3+1.21.1",pinned.ledger),
+                "trapped source field must match the exact owning raw request");
+        // Later attempts cannot replace an already established owning raw pin.
+        pinned.ledger.bindReadOnlyRaw(pinned.battle,pinned.actor,pinned.request,
+                "p1",raw(false,true),pinned.parsed);
+        check(pinned.ledger.matchesReadOnlyRaw(pinned.battle,pinned.actor,pinned.request,
+                "p1",raw(false,false),pinned.parsed)
+                && !pinned.ledger.matchesReadOnlyRaw(pinned.battle,pinned.actor,
+                        pinned.request,"p1",raw(false,true),pinned.parsed),
+                "raw dispatch binding cannot be rewritten after capture");
+
+        reject(()->NativeOwnSwitchEvidence.capture(
+                pinned.battle,pinned.actor,pinned.request,"p1",0,
+                raw(false,false),pinned.parsed,"wrong-version",pinned.ledger),
+                "source version drift");
+        reject(()->NativeOwnSwitchEvidence.capture(
+                pinned.battle,pinned.actor,pinned.request,"p2",0,
+                raw(false,false),pinned.parsed,"1.7.3+1.21.1",pinned.ledger),
+                "opposite side identity");
+        reject(()->NativeOwnSwitchEvidence.capture(
+                pinned.battle,pinned.actor,pinned.request,"p1",0,
+                raw(false,false).replace("\"trapped\":false,",""),
+                pinned.parsed,"1.7.3+1.21.1",pinned.ledger),
+                "missing trapped field");
+        reject(()->NativeOwnSwitchEvidence.capture(
+                pinned.battle,pinned.actor,pinned.request,"p1",0,
+                raw(false,false).replace("\"trapped\":false",
+                    "\"maybeTrapped\":true,\"trapped\":false"),
+                pinned.parsed,"1.7.3+1.21.1",pinned.ledger),
+                "unsupported native flag");
+        reject(()->NativeOwnSwitchEvidence.capture(
+                pinned.battle,pinned.actor,pinned.request,"p1",0,
+                raw(false,false).replace("\"trapped\":false",
+                    "\"canMegaEvo\":true,\"trapped\":false"),
+                pinned.parsed,"1.7.3+1.21.1",pinned.ledger),
+                "unsupported gimmick flags");
+
+        var forcedPinned=new Fixture(true,false);
+        reject(()->NativeOwnSwitchEvidence.capture(
+                forcedPinned.battle,forcedPinned.actor,forcedPinned.request,"p1",1,
+                raw(true,false).replace("\"forceSwitch\":[true]",
+                    "\"forceSwitch\":[false]"),forcedPinned.parsed,
+                "1.7.3+1.21.1",forcedPinned.ledger),
+                "forceSwitch not actually requested");
+        reject(()->NativeOwnSwitchEvidence.capture(
+                forcedPinned.battle,forcedPinned.actor,forcedPinned.request,"p1",1,
+                raw(true,false).replace("\"forceSwitch\":[true]",
+                    "\"forceSwitch\":[true],\"active\":[{}]"),
+                forcedPinned.parsed,"1.7.3+1.21.1",forcedPinned.ledger),
+                "forced request with unsupported active payload");
 
         System.out.println("Phase 6.11 native switch evidence PASS: "+checks+" checks");
     }

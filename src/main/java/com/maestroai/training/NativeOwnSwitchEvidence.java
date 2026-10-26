@@ -45,14 +45,16 @@ public final class NativeOwnSwitchEvidence {
      */
     public static NativeOwnSwitchEvidence capture(Object battle,Object actor,Object request,
             String side,int battleTurn,String raw,OwnRequestTransport.Request admitted,
-            String cobblemonVersion){
+            String cobblemonVersion,OwnRequestTransport ledger){
         if(battle==null||actor==null||request==null||!VERSION.equals(cobblemonVersion)
                 ||!Set.of("p1","p2").contains(side)||battleTurn<0||battleTurn>10000
-                ||admitted==null||admitted.mode()==OwnRequestTransport.Mode.WAIT
+                ||ledger==null||admitted==null||admitted.mode()==OwnRequestTransport.Mode.WAIT
                 ||!side.equals(admitted.side())||raw==null||!raw.startsWith("|request|{")
                 ||raw.length()>131072||raw.indexOf('\n')>=0)throw invalid();
         try{
-            if(!admitted.equals(OwnRequestJson.parse(raw)))throw invalid();
+            if(!admitted.equals(OwnRequestJson.parse(raw))
+                    ||!ledger.matchesReadOnlyRaw(battle,actor,request,side,raw,admitted))
+                throw invalid();
             JsonObject root=StrictOwnJson.read(raw.substring(9));
             boolean forced=admitted.mode()==OwnRequestTransport.Mode.FORCED;
             boolean trapped=false;
