@@ -12,6 +12,7 @@ import com.maestroai.training.PublicProtocolFilter;
 import com.maestroai.training.PublicProtocolEvidence;
 import com.maestroai.training.PublicBattleCapture;
 import com.maestroai.training.ReadOnlyShadowObservationBridge;
+import com.maestroai.training.NativeOwnActionEvidence;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -216,6 +217,8 @@ public class MaestroBattleAI extends RCTBattleAI {
     private int lastSwitchTurn = -100;
     private final com.maestroai.training.OwnRequestTransport ownTransport = new com.maestroai.training.OwnRequestTransport();
     private com.maestroai.training.OwnRequestTransport.Lease ownChoiceLease;
+    private NativeOwnActionEvidence ownNativeActionEvidence;
+    private static final boolean PHASE610_OBSERVE = Boolean.getBoolean("maestroai.phase610Observe");
     private final Map<String, PublicTransitionState.Known<Boolean>> ownFreshness = new HashMap<>();
     private com.maestroai.training.RuntimeDomain runtimeDomain;
     private final Map<String, Map<String,Integer>> ownEffectiveStages = new HashMap<>();
@@ -229,8 +232,32 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (!ownTransportVersionSupported()) { ownTransport.invalidate("OWN_TRANSPORT_VERSION_UNSUPPORTED"); return; }
         if (actor.getBattleAI() != this || actor.getBattle() != battle || battle.getActor(actor.getShowdownId()) != actor) return;
         ownTransport.owner(battle, actor, actor.getShowdownId());
-        ownTransport.dispatched(battle, actor, actor.getShowdownId(), request,
-                () -> com.maestroai.training.OwnRequestJson.parse(raw.get()));
+        if (!PHASE610_OBSERVE) {
+            ownTransport.dispatched(battle, actor, actor.getShowdownId(), request,
+                    () -> com.maestroai.training.OwnRequestJson.parse(raw.get()));
+            return;
+        }
+        // Observe the exact already-owned installed request once. No second
+        // raw request read, no opponent request, and no effect on Legacy.
+        if (ownNativeActionEvidence != null) ownNativeActionEvidence.withdraw();
+        ownNativeActionEvidence = null;
+        final String[] ownedRaw = new String[1];
+        final com.maestroai.training.OwnRequestTransport.Request[] parsed =
+                new com.maestroai.training.OwnRequestTransport.Request[1];
+        ownTransport.dispatched(battle, actor, actor.getShowdownId(), request, () -> {
+            ownedRaw[0] = raw.get();
+            parsed[0] = com.maestroai.training.OwnRequestJson.parse(ownedRaw[0]);
+            return parsed[0];
+        });
+        try {
+            ownNativeActionEvidence = NativeOwnActionEvidence.capture(
+                    battle, actor, request, actor.getShowdownId(), battle.getTurn(),
+                    ownedRaw[0], parsed[0], ReadOnlyShadowObservationBridge.COBBLEMON_VERSION);
+        } catch (RuntimeException unsupported) {
+            // Only the observation abstains. The owning transport and Legacy
+            // chooser keep their exact pre-6.10 behavior.
+            ownNativeActionEvidence = null;
+        }
     }
 
     public void ownTurnDispatched(PokemonBattle battle,
@@ -246,7 +273,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                 .map(mod -> mod.getMetadata().getVersion().getFriendlyString().equals("1.7.3+1.21.1")).orElse(false);
     }
 
-    public void ownTransportUnavailable() { ownTransport.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE"); }
+    public void ownTransportUnavailable() {
+        ownTransport.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE");
+        if (ownNativeActionEvidence != null) ownNativeActionEvidence.withdraw();
+    }
 
     /** Error-return is a second readiness notification, never a payload source.
      * If a corrected request arrived first, upstream now restored mustChoose.
@@ -312,6 +342,8 @@ public class MaestroBattleAI extends RCTBattleAI {
                 () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
                 null, null, false);
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            try { observeNativeOwnMoves(battle, activePokemon, moveset, forceSwitch); }
+            catch (RuntimeException ignored) { /* never impact Legacy selection */ }
             // Observe only the Legacy-selected response. A capture failure must
             // never alter legal selection or Shadow's lack of live control.
             try { observeReturnedLegacyChoice(activePokemon, battle, moveset, forceSwitch, response); }
@@ -319,6 +351,38 @@ public class MaestroBattleAI extends RCTBattleAI {
             return response;
         } finally {
             ownTransport.endChoice(); ownChoiceLease = null;
+        }
+    }
+
+    /** Phase 6.10: own installed move agreement only. Never picks an action. */
+    private void observeNativeOwnMoves(PokemonBattle battle, ActiveBattlePokemon activePokemon,
+            ShowdownMoveset moveset, boolean forceSwitch) {
+        if (!PHASE610_OBSERVE || forceSwitch || ownNativeActionEvidence == null
+                || ownChoiceLease == null || !ownChoiceLease.current()
+                || activePokemon == null || moveset == null || moveset.getMoves() == null
+                || activePokemon.getActor() == null || activePokemon.getBattlePokemon() == null)
+            return;
+        var actor = activePokemon.getActor();
+        var ownedMoves = new java.util.ArrayList<String>();
+        for (var move : moveset.getMoves()) {
+            if (move == null || move.getId() == null) return;
+            if (move.canBeUsed()) ownedMoves.add(move.getId());
+        }
+        var view = new NativeOwnActionEvidence.InstalledView(
+                battle, actor, actor.getRequest(), actor.getShowdownId(),
+                activePokemon.getBattlePokemon().getUuid(),
+                ownTransport.dispatchedTurn(battle, actor, battle.getTurn()),
+                ownedMoves, moveset.getTrapped());
+        try {
+            var receipt = ownNativeActionEvidence.attest(ownChoiceLease, view);
+            // Phase 6.9 bridge consumes only a redacted, non-tactical result.
+            // It may abstain because full native spectator frames exceed its
+            // deliberately narrow offline-compatible protocol slice.
+            if (PHASE69_OBSERVE) phase69Bridge.observeOwnActionEvidence(battle, receipt);
+            System.out.println("[MaestroAI] Phase 6.10 " + receipt);
+        } catch (RuntimeException invalid) {
+            ownNativeActionEvidence.withdraw();
+            System.out.println("[MaestroAI] Phase 6.10 own-action observation=UNKNOWN");
         }
     }
 
@@ -4424,6 +4488,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         observedShowdownHistoryFingerprint = 0;
         shadowSwitchTelemetry.reset();
         shadowObservedBattle = null;
+        if (ownNativeActionEvidence != null) ownNativeActionEvidence.withdraw();
+        ownNativeActionEvidence = null;
         phase69Bridge.withdraw();
         phase69Bridge = new ReadOnlyShadowObservationBridge();
         opponentObservedMoves.clear();

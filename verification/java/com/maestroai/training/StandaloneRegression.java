@@ -453,6 +453,7 @@ public final class StandaloneRegression {
         OfflineRuntimeEvidenceContractRegression.run();
         OfflineEvidenceProducerLeaseRegression.run();
         ReadOnlyShadowObservationBridgeRegression.run();
+        NativeOwnActionEvidenceRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();

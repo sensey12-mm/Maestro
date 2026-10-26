@@ -104,6 +104,25 @@ public final class OwnRequestTransport {
         private final Supplier<Boolean> installed;
         private Lease(Supplier<Boolean> installed) { this.generation = epoch; this.capturedTurn = turn; this.installed = installed; }
         public int turn() { return capturedTurn; }
+        /**
+         * Read-only Phase 6.10 provenance: no opponent request, no payload
+         * exposure and no tactical authorization. Must match the EXACT DTO
+         * previously admitted by this dispatch ledger at this lease epoch.
+         */
+        public boolean matchesOwnReadOnlyRequest(Object observedBattle,
+                Object observedActor,Object installedToken,String observedSide,
+                UUID activeUuid,Request parsed) {
+            return current() && OwnRequestTransport.this.battle==observedBattle
+                    && OwnRequestTransport.this.actor==observedActor
+                    && OwnRequestTransport.this.token==installedToken
+                    && Objects.equals(OwnRequestTransport.this.side,observedSide)
+                    && receipt!=null && receipt.equals(parsed)
+                    && receipt.mode()==Mode.MOVE
+                    && parsed.pokemon().stream().filter(p->p.dto().active()
+                            && Objects.equals(p.dto().uuid(),activeUuid)).count()==1
+                    && receiptTurn+1==capturedTurn;
+        }
+
         private boolean belongsTo(OwnRequestTransport ledger) { return OwnRequestTransport.this == ledger; }
         public boolean current() {
             try { return generation == epoch && choiceOpen && receipt != null && Boolean.TRUE.equals(installed.get()); }

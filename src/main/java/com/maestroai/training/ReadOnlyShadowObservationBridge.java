@@ -44,6 +44,22 @@ public final class ReadOnlyShadowObservationBridge {
     private final AtomicLong logicalTick=new AtomicLong();
     private long revision,probedRevision;
     private int publicTurn,publicEventCount;
+    private int witnessedOwnMoveCount;
+    /**
+     * Redacted sidecar readout from the owning native request/choice receipt.
+     * Only observations already bound to THIS battle are recorded. This
+     * cannot convert the spectator stream into a legal-action certificate.
+     */
+    public synchronized boolean observeOwnActionEvidence(
+            Object battle, NativeOwnActionEvidence.Review evidence) {
+        if(withdrawn || owner==null || owner!=battle
+                || evidence==null || !evidence.currentOwnMoveAgreement())
+            return false;
+        witnessedOwnMoveCount=evidence.observedMoveCount();
+        return true;
+    }
+    public synchronized int witnessedOwnMoveCount() {return witnessedOwnMoveCount;}
+
     private OfflineEvidenceProducerLease.Registry registry;
     private OfflineEvidenceProducerLease.Producer producer;
 
@@ -65,6 +81,7 @@ public final class ReadOnlyShadowObservationBridge {
     public synchronized void withdraw(){
         withdrawn=true;
         reason=State.WITHDRAWN;
+        witnessedOwnMoveCount=0;
         eligibleFrames=List.of();
         chunkDigests=List.of();
         if(producer!=null)producer.withdraw();
