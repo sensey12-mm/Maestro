@@ -185,9 +185,10 @@ public final class OfflineShadowTacticalAdapter {
             var known = ranking.utility().known() && ranking.unknown().isEmpty();
             if (!known) reasons.add(Abstention.PHASE4_CONDITIONAL_EFFECTS_UNRESOLVED);
             String id = ranking.action();
-            boolean sourceListed = !id.startsWith("move:")
-                    || CobblemonMechanics.move(id.substring(5)) != null;
-            if (!sourceListed) reasons.add(Abstention.PHASE4_CONDITIONAL_EFFECTS_UNRESOLVED);
+            boolean isMove = id.startsWith("move:");
+            boolean sourceListed = isMove && CobblemonMechanics.move(id.substring(5)) != null;
+            if (isMove && !sourceListed)
+                reasons.add(Abstention.PHASE4_CONDITIONAL_EFFECTS_UNRESOLVED);
             actions.add(new ActionEvidence(id, sourceListed,
                     known ? ranking.utility().value().low() : null,
                     known ? ranking.utility().value().high() : null,

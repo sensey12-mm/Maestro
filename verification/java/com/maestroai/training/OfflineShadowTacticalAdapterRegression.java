@@ -109,6 +109,15 @@ final class OfflineShadowTacticalAdapterRegression {
         check(ambiguous.abstentions().contains(OfflineShadowTacticalAdapter.Abstention.AMBIGUOUS_OPPONENT_IDENTITY),
                 "Illusion and Transform not resolved into unique identity");
 
+        var switchFixture = new BattleSnapshot(1,actor(List.of()),actor(List.of("scratch")),
+                List.of(),List.of(),List.of("tackle"),List.of("reserve"),
+                Map.of(),false,null);
+        var switchReview = OfflineShadowTacticalAdapter.inspect(request(
+                switchFixture, mechanics(Set.of(),false),
+                List.of(plan("switch:reserve","scratch"))));
+        check(switchReview.actions().size()==1
+                && !switchReview.actions().getFirst().sourceListedMove(),
+                "switches are not misreported as Phase 4 source-listed moves");
         var trapped = new BattleSnapshot(1,actor(List.of()),actor(List.of("scratch")),
                 List.of(),List.of(),List.of("tackle"),List.of("reserve"),
                 Map.of(),false,null);
