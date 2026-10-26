@@ -19,13 +19,13 @@ final class OfflineShadowResponseScenariosRegression {
     }
     private static final String OWN="update\n|switch|p1a: Own|Genesect, L50|100/100";
     private static final String FOE="update\n|switch|p2a: Opp|synthetic, L50|100/100";
-    private static List<String> frames(String... replies) {
+    static List<String> frames(String... replies) {
         var result=new ArrayList<>(List.of(OWN, FOE, "update\n|turn|1"));
         for (String reply:replies)
             result.add("update\n|move|p2a: Opp|"+reply+"|p1a: Own");
         return List.copyOf(result);
     }
-    private static BattleSnapshot snapshot(int turn, List<String> ownMoves,
+    static BattleSnapshot snapshot(int turn, List<String> ownMoves,
                                             List<String> replies, List<String> switches) {
         var self=new BattleSnapshot.Combatant("genesect",1,List.of("bug","steel"),
                 Map.of(),List.of(),null,null,false);
@@ -34,7 +34,7 @@ final class OfflineShadowResponseScenariosRegression {
         return new BattleSnapshot(turn,self,foe,List.of(),List.of(),ownMoves,switches,
                 Map.of(),false,null);
     }
-    private static PublicStateSearchAdapter.PublicMechanics mechanics(boolean trapped) {
+    static PublicStateSearchAdapter.PublicMechanics mechanics(boolean trapped) {
         var hp=Known.of(new PublicStateSearchAdapter.Interval(1,1),"synthetic public HP");
         var status=Known.of("none","synthetic status");
         var hazards=new Hazards(Map.of(),true,"synthetic field");
@@ -43,7 +43,7 @@ final class OfflineShadowResponseScenariosRegression {
         return new PublicStateSearchAdapter.PublicMechanics(Map.of(),Map.of(),Set.of(),
                 false,false,trapped,0,new Evidence(context,Map.of(),Map.of()));
     }
-    private static OfflineShadowResponseScenarios.Input input(
+    static OfflineShadowResponseScenarios.Input input(
             List<String> frames, BattleSnapshot state,
             PublicStateSearchAdapter.PublicMechanics mechanics,
             OfflineShadowResponseScenarios.HistoricalScope archived) {
@@ -59,7 +59,7 @@ final class OfflineShadowResponseScenariosRegression {
                 PublicShadowBuildHandoff.Pin.pinned(),CobblemonMechanics.SOURCE,
                 fixture,state,mechanics,archived);
     }
-    private static OfflineShadowResponseScenarios.Input input(
+    static OfflineShadowResponseScenarios.Input input(
             List<String> frames,BattleSnapshot state) {
         return input(frames,state,mechanics(false),null);
     }
@@ -68,7 +68,7 @@ final class OfflineShadowResponseScenariosRegression {
      * Phase 6 opponent. The hidden nickname and source-only Nasty Plot/Swords
      * Dance proposals must remain separate from witnessed fixture Scratch.
      */
-    private static PublicShadowBuildHandoff.Report signedHistorical() {
+    static PublicShadowBuildHandoff.Report signedHistorical() {
         final long now=1_700_000_100L;
         try {
             String log="|gen|9\n|gametype|singles\n|tier|[Gen 9] OU\n"
