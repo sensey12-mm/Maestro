@@ -119,8 +119,8 @@ public final class ReadOnlyShadowObservationBridge {
                         && source.reason==State.SYNTHETIC_FRAME_ELIGIBLE
                         && source.revision==revision && source.publicTurn==turn
                         && source.publicEventCount==events
-                        && source.eligibleFrames.size()==events
-                        && source.chunkDigests.size()==events;
+                        && source.eligibleFrames.size()==source.chunkDigests.size()
+                        && events>=source.eligibleFrames.size();
             }
         }
         @Override public String toString(){
@@ -130,8 +130,8 @@ public final class ReadOnlyShadowObservationBridge {
     synchronized PublicSourceLease publicLease(Object battle){
         if(withdrawn || owner==null || owner!=battle || revision<1 || publicTurn<1
                 || publicEventCount<1 || reason!=State.SYNTHETIC_FRAME_ELIGIBLE
-                || eligibleFrames.size()!=publicEventCount
-                || chunkDigests.size()!=publicEventCount)
+                || eligibleFrames.size()!=chunkDigests.size()
+                || publicEventCount<eligibleFrames.size())
             return null;
         return new PublicSourceLease(this,battle,revision,publicTurn,publicEventCount);
     }
@@ -211,26 +211,30 @@ public final class ReadOnlyShadowObservationBridge {
             withdraw();
             return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
         }
+        final PublicBatchEnvelopeGuard.Result batch;
         final ExpandedPublicEventGuard.Result expanded;
         try {
-            expanded=ExpandedPublicEventGuard.validate(raw);
-        } catch (RuntimeException invalidSource) {
+            // Validate *all* bytes in each complete public update envelope
+            // before evaluating mechanics or retaining the direct-only source.
+            batch=PublicBatchEnvelopeGuard.inspect(raw);
+            expanded=ExpandedPublicEventGuard.validate(batch.mechanicFrames());
+        } catch (RuntimeException incomplete) {
             withdraw();
             return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
         }
-        // Fail closed when the source's independent public-event extractor
-        // differs from the strict original direct event framing.
-        List<String> direct=raw.stream().map(line->line.substring("update\n".length())).toList();
-        if(!direct.equals(visible) || expanded.turn()<publicTurn
-                || expanded.events()!=visible.size()){
+        // Independent source filters may not drop hidden/unrecognized lines.
+        // Provenance still requires every mechanical event to be DIRECT_UPDATE.
+        if(!batch.directMechanics().equals(visible)
+                || expanded.turn()<publicTurn
+                || expanded.events()!=batch.mechanicFrames().size()){
             withdraw();
             return new Observation(State.NO_SAFE_PUBLIC_FRAMES,revision,publicTurn,publicEventCount);
         }
         eligibleFrames=List.copyOf(raw);
-        originalNarrowOnly=expanded.narrowOnly();
+        originalNarrowOnly=expanded.narrowOnly() && batch.narrowOnly();
         chunkDigests=List.copyOf(digests);
         publicTurn=expanded.turn();
-        publicEventCount=expanded.events();
+        publicEventCount=batch.allEvents();
         revision++;
         logicalTick.incrementAndGet();
         reason=expanded.appearanceAmbiguous()

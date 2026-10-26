@@ -458,6 +458,7 @@ public final class StandaloneRegression {
         NativeOwnActionFusionRegression.run();
         CrossStreamEvidenceReadinessRegression.run();
         ExpandedPublicEventGuardRegression.run();
+        PublicBatchEnvelopeGuardRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
