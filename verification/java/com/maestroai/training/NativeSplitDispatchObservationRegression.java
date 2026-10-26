@@ -64,17 +64,66 @@ final class NativeSplitDispatchObservationRegression {
                 && !one.toString().contains("UUID")
                 && !one.toString().contains("packet"),
                 "reports do not expose private identities or packet data");
-        var repeated=f.attempt(1,4);
-        check(repeated.nativeDispatchOrdinal()==2 && repeated.current() && !one.current(),
-                "separate native method returns create fresh single-use observation ordinals");
         var progression=f.attempt(2,5);
-        check(progression.nativeDispatchOrdinal()==3 && progression.current()
-                && !repeated.current(),
-                "turn and history progress, previous report expires");
-        f.session.withdraw();
-        check(!progression.current()
-                && f.attempt(3,6).verdict()==NativeSplitDispatchObservation.Verdict.WITHDRAWN,
-                "lifecycle revocation is terminal");
+        check(progression.nativeDispatchOrdinal()==2 && progression.current()
+                && !one.current(),
+                "native source advance invalidates old recipient scope");
+        var later=f.attempt(3,6);
+        check(later.nativeDispatchOrdinal()==3 && later.current()
+                && !progression.current(),"monotonic method-return ordinals");
+        f.session.battleEnded(f.battle);
+        check(!later.current()
+                && f.attempt(4,7).verdict()==NativeSplitDispatchObservation.Verdict.WITHDRAWN,
+                "native battle-end broadcast withdraws old report");
+
+        var noHook=new Fixture();
+        var missing=noHook.session.status(noHook.battle,1,4,true,false);
+        check(missing.verdict()==NativeSplitDispatchObservation.Verdict.NO_NATIVE_CALLBACK_YET
+                && !missing.current() && !missing.sendMethodReturned()
+                && !missing.recipientDeliveryAuthenticated()
+                && !noHook.session.withdrawn(),
+                "optional Mixin not firing cannot be mistaken for a receipt");
+        check(noHook.attempt(1,4).current(),
+                "a later real callback may supersede missing-hook abstention");
+        var repeatedFixture=new Fixture();
+        var firstReturn=repeatedFixture.attempt(2,7);
+        var repeated=repeatedFixture.attempt(2,7);
+        check(repeated.verdict()==NativeSplitDispatchObservation.Verdict.AMBIGUOUS_DUPLICATE
+                && repeatedFixture.session.withdrawn() && !firstReturn.current(),
+                "indistinguishable duplicate return cannot be double-counted");
+        var sameTurn=new Fixture();
+        check(sameTurn.attempt(2,7).current()
+                && sameTurn.attempt(2,8).current()
+                && !sameTurn.session.withdrawn(),
+                "multiple same-turn returns require source epoch advancement");
+        var changedActors=new Fixture();
+        changedActors.attempt(1,4);
+        check(changedActors.session.observeNativeReturn(
+                    changedActors.battle,List.of(changedActors.p1,changedActors.p3),
+                    changedActors.p1,changedActors.privatePacket,
+                    changedActors.publicPacket,2,5,0,true,false).verdict()
+                ==NativeSplitDispatchObservation.Verdict.FOREIGN_RECIPIENT
+                && changedActors.session.withdrawn(),
+                "actor roster replacements invalidate recipient lineage");
+        var stableActors=new Fixture();
+        check(stableActors.attempt(1,4).current()
+                && stableActors.session.observeNativeReturn(
+                    stableActors.battle,List.of(stableActors.p2,stableActors.p1),
+                    stableActors.p2,stableActors.privatePacket,
+                    stableActors.publicPacket,2,5,0,true,false).current(),
+                "same native actor objects may be enumerated in a different order");
+        var endedWithoutReturn=new Fixture();
+        endedWithoutReturn.session.battleEnded(endedWithoutReturn.battle);
+        check(endedWithoutReturn.session.withdrawn()
+                && endedWithoutReturn.attempt(1,4).verdict()
+                    ==NativeSplitDispatchObservation.Verdict.WITHDRAWN,
+                "native battle end invalidates a never-fired optional hook");
+        var statusStale=new Fixture();
+        var observed=statusStale.attempt(2,5);
+        check(statusStale.session.status(statusStale.battle,1,5,true,false).verdict()
+                ==NativeSplitDispatchObservation.Verdict.STALE_SOURCE
+                && !observed.current(),
+                "stale lifecycle polling poisons source evidence");
 
         var g=new Fixture();
         var prior=g.attempt(3,10);

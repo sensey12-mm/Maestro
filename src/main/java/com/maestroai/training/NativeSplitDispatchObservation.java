@@ -17,6 +17,8 @@ public final class NativeSplitDispatchObservation {
 
     public enum Verdict {
         NATIVE_METHOD_RETURN_OBSERVED,
+        NO_NATIVE_CALLBACK_YET,
+        AMBIGUOUS_DUPLICATE,
         SOURCE_UNAVAILABLE,
         CROSS_BATTLE,
         FOREIGN_RECIPIENT,
@@ -91,12 +93,36 @@ public final class NativeSplitDispatchObservation {
      */
     public static final class Session {
         private Object boundBattle;
+        // Native actor references remain in-process and only for this battle.
+        // Never stored in a report or diagnostic; cleared on withdrawal.
+        private List<Object> boundActors;
         private Stamp stamp;
         private boolean withdrawn;
         private long sequence;
         public synchronized boolean withdrawn(){return withdrawn;}
         public synchronized void withdraw(){
-            withdrawn=true;stamp=null;boundBattle=null;
+            withdrawn=true;stamp=null;boundBattle=null;boundActors=null;
+        }
+        /** The choice or packet read site may ask for readiness even if
+         * the optional native mixin NEVER fired. Absence is not an attestation.
+         */
+        public synchronized Report status(Object battle,int turn,int history,
+                                         boolean pinned,boolean battleEnded) {
+            if(withdrawn)return new Report(this,Verdict.WITHDRAWN,null);
+            if(battle==null || !pinned || battleEnded || turn<0 || history<0)
+                return fail(Verdict.SOURCE_UNAVAILABLE);
+            if(boundBattle!=null && battle!=boundBattle)
+                return fail(Verdict.CROSS_BATTLE);
+            if(stamp==null)return new Report(this,Verdict.NO_NATIVE_CALLBACK_YET,null);
+            if(turn<stamp.turn || history<stamp.historyCount)
+                return fail(Verdict.STALE_SOURCE);
+            return new Report(this,Verdict.NATIVE_METHOD_RETURN_OBSERVED,stamp);
+        }
+        /** Called only from the native BattleEndPacket broadcast path. */
+        public synchronized void battleEnded(Object battle) {
+            if(withdrawn)return;
+            if(boundBattle!=null && battle!=boundBattle){fail(Verdict.CROSS_BATTLE);return;}
+            withdraw();
         }
         private Report fail(Verdict why){
             withdraw();
@@ -130,6 +156,13 @@ public final class NativeSplitDispatchObservation {
                 if(actor==privateActor)ownTarget++;
             }
             if(ownTarget!=1)return fail(Verdict.FOREIGN_RECIPIENT);
+            if(boundActors!=null) {
+                if(boundActors.size()!=battleActors.size())
+                    return fail(Verdict.FOREIGN_RECIPIENT);
+                for(Object expected:boundActors)
+                    if(!distinct.contains(expected))
+                        return fail(Verdict.FOREIGN_RECIPIENT);
+            }
             // Both packet OBJECT references must exist and be different.
             // Payloads are not read or hashed, nor are packet refs retained.
             if(privatePacket==null || publicPacket==null || privatePacket==publicPacket)
@@ -137,8 +170,15 @@ public final class NativeSplitDispatchObservation {
             if(stamp!=null && (actualTurn<stamp.turn
                     || historyChunkCount<stamp.historyCount))
                 return fail(Verdict.STALE_SOURCE);
+            // A second same-epoch return could be a genuine extra packet,
+            // a replay, or a duplicate Mixin callback. Cannot distinguish:
+            // withdraw instead of manufacturing two trusted dispatches.
+            if(stamp!=null && actualTurn==stamp.turn
+                    && historyChunkCount==stamp.historyCount)
+                return fail(Verdict.AMBIGUOUS_DUPLICATE);
             if(sequence==Long.MAX_VALUE)return fail(Verdict.STALE_SOURCE);
             boundBattle=battle;
+            if(boundActors==null)boundActors=new ArrayList<>(battleActors);
             sequence++;
             stamp=new Stamp(actualTurn,historyChunkCount,sequence,
                     battleActors.size(),battleActors.size()-1,spectatorCount);

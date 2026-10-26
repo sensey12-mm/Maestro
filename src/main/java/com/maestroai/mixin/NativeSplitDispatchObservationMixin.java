@@ -17,7 +17,32 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(value=PokemonBattle.class,remap=false)
 public abstract class NativeSplitDispatchObservationMixin {
-    @Inject(method="sendSplitUpdate",at=@At("RETURN"),require=0)
+    /**
+     * Battle-end packet is broadcast by PokemonBattle before registry close.
+     * Observe only the native packet CLASS NAME, never its contents.
+     * If this optional hook fails on an unsupported runtime the observer
+     * retains NO delivery authority and source acceptance remains pending.
+     */
+    @Inject(method="sendUpdate(Lcom/cobblemon/mod/common/api/net/NetworkPacket;)V",
+            at=@At("HEAD"),require=0)
+    private void maestroWithdrawOnNativeBattleEnd(NetworkPacket<?> packet,
+            CallbackInfo ci) {
+        if(packet==null || !packet.getClass().getSimpleName().equals("BattleEndPacket"))
+            return;
+        try {
+            var battle=(PokemonBattle)(Object)this;
+            for(var actor:battle.getActors()) {
+                if(actor instanceof AIBattleActor aiActor
+                        && aiActor.getBattleAI() instanceof MaestroBattleAI ai) {
+                    ai.ownNativeSplitObservationBattleEnded(battle);
+                }
+            }
+        }catch(RuntimeException ignored) {
+            // Lifecycle observation cannot affect native battle termination.
+        }
+    }
+
+    @Inject(method="sendSplitUpdate(Lcom/cobblemon/mod/common/api/battles/model/actor/BattleActor;Lcom/cobblemon/mod/common/api/net/NetworkPacket;Lcom/cobblemon/mod/common/api/net/NetworkPacket;)V",at=@At("RETURN"),require=0)
     private void maestroObserveDispatch(BattleActor privateActor,
             NetworkPacket<?> publicPacket,NetworkPacket<?> privatePacket,
             CallbackInfo ci) {

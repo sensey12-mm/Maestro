@@ -4669,6 +4669,11 @@ public class MaestroBattleAI extends RCTBattleAI {
      * RETURN mixin. Does not read packet bytes or public/private split text.
      * A returned dispatch method is NOT a per-recipient delivery ACK.
      */
+    /** Native BattleEndPacket path; observer lifecycle only. */
+    public void ownNativeSplitObservationBattleEnded(PokemonBattle battle) {
+        if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
+    }
+
     public void ownNativeSplitDispatchReturned(PokemonBattle battle,
             com.cobblemon.mod.common.api.battles.model.actor.BattleActor privateActor,
             com.cobblemon.mod.common.api.net.NetworkPacket<?> privatePacket,
@@ -4709,6 +4714,15 @@ public class MaestroBattleAI extends RCTBattleAI {
                 shadowSwitchTelemetry.reset();
             }
             List<String> history = battle.getShowdownMessages();
+            if (PHASE618_AUDIT) {
+                // Missing optional injection is UNKNOWN, never dispatch proof.
+                var hookStatus=phase618Dispatch.status(
+                        battle,battle.getTurn(),history.size(),
+                        ownTransportVersionSupported(),false);
+                if(hookStatus.verdict()
+                        ==NativeSplitDispatchObservation.Verdict.NO_NATIVE_CALLBACK_YET)
+                    System.out.println("[MaestroAI] Phase 6.19 dispatch-hook=UNOBSERVED");
+            }
             // Size alone cannot detect a replaced or edited public message history.
             int historyFingerprint = history.hashCode();
             if (history.size() == observedShowdownMessageCount

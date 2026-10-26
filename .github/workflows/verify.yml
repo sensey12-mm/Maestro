@@ -33,6 +33,10 @@ jobs:
         run: |
           python3 verification/check_jar.py --self-test
           python3 verification/check_jar.py
+      - name: Verify exact Cobblemon native dispatch Mixin ABI
+        run: |
+          python3 verification/runtime_hook_oracle.py
+          python3 verification/check_native_split_hooks.py
       - name: Verify pinned simulator source and relocated engine
         run: |
           node --version
