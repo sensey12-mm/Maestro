@@ -40,7 +40,7 @@ final class NativeOwnSwitchEvidenceRegression {
                 +(forced?"\"forceSwitch\":[true]":
                     "\"active\":[{\"trapped\":"+trapped+",\"moves\":["
                         +"{\"move\":\"Tackle\",\"id\":\"tackle\",\"pp\":10,"
-                        +"\"maxpp\":20,\"target\":\"normal\",\"disabled\":false}]}")+"}";
+                        +"\"maxpp\":20,\"target\":\"normal\",\"disabled\":false}]}]")+"}";
     }
     private static final class Fixture {
         final Object battle=new Object(),actor=new Object(),request=new Object();
