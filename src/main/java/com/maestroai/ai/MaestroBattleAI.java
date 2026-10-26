@@ -4675,8 +4675,10 @@ public class MaestroBattleAI extends RCTBattleAI {
             com.cobblemon.mod.common.api.net.NetworkPacket<?> publicPacket) {
         if (!PHASE618_AUDIT) return;
         try {
+            var actorSnapshot=new java.util.ArrayList<Object>();
+            for(var nativeActor:battle.getActors()) actorSnapshot.add(nativeActor);
             var receipt=phase618Dispatch.observeNativeReturn(
-                    battle,java.util.List.copyOf(battle.getActors()),
+                    battle,java.util.List.copyOf(actorSnapshot),
                     privateActor,privatePacket,publicPacket,
                     battle.getTurn(),battle.getShowdownMessages().size(),
                     battle.getSpectators().size(),ownTransportVersionSupported(),
