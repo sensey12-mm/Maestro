@@ -114,7 +114,7 @@ final class NativeSplitRecipientCustodyRegression {
                 ==NativeSplitRecipientCustody.Verdict.WITHDRAWN,
                 "replay terminally revokes session");
 
-        deny(source,battle,List.of(),"missing both delivery claims");
+        deny(source,battle,List.of(),9,"missing both delivery claims");
         deny(source,battle,fixtures.subList(0,1),9,"missing public branch");
         deny(source,battle,List.of(fixtures.get(1),fixtures.get(0)),9,
                 "reordered public before private");
