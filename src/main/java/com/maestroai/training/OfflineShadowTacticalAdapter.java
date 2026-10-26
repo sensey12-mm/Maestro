@@ -61,7 +61,6 @@ public final class OfflineShadowTacticalAdapter {
                 throw new IllegalArgumentException("Phase 6.1 accepts only pinned offline review");
             profiles = Map.copyOf(profiles);
             plans = List.copyOf(plans);
-            if (plans.contains(null)) throw new IllegalArgumentException("null conditional plan");
             // BattleSnapshot itself has no public-event provenance certificate.
             // Avoid silently transporting opponent reserves, secret slot data or
             // claims of an opponent item/ability through this offline boundary.
