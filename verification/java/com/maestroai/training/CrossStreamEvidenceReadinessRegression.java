@@ -234,21 +234,24 @@ final class CrossStreamEvidenceReadinessRegression {
                     ==CrossStreamEvidenceReadiness.Verdict.PUBLIC_UNAVAILABLE,
                 "unapproved sideupdate never forms a cross-stream certificate");
 
-        // Public line framing does not cryptographically authenticate actors.
+        // Phase 6.14 now fails closed on a same-slot actor alias before
+        // allowing a 6.13 readiness lease. This is not cryptographic actor
+        // authentication; it is local stream-consistency hardening only.
         var actorLine=new Own(new Object(),false,false);
         var actorStream=new ReadOnlyShadowObservationBridge();
         var spoofed=new ArrayList<>(
                 OfflineShadowResponseScenariosRegression.frames("Scratch"));
         spoofed.set(3,"update\n|move|p2a: PRIVATE_SPOOF|Scratch|p1a: Own");
         check(actorStream.observe(actorLine.battle,spoofed,true).state()
-                ==ReadOnlyShadowObservationBridge.State.SYNTHETIC_FRAME_ELIGIBLE,
-                "public framing alone cannot certify actor display identity");
+                ==ReadOnlyShadowObservationBridge.State.NO_SAFE_PUBLIC_FRAMES
+                && actorStream.withdrawn(),
+                "same-slot forged public actor denied during 6.14 observation");
         var spoofReview=inspect(new CrossStreamEvidenceReadiness.Session(),actorStream,
                 actorLine.battle,actorLine);
-        check(spoofReview.verdict()==CrossStreamEvidenceReadiness.Verdict.CONSISTENT_READ_ONLY
+        check(spoofReview.verdict()==CrossStreamEvidenceReadiness.Verdict.PUBLIC_UNAVAILABLE
                 && !spoofReview.nativeActorAuthenticatedByPublic()
                 && !spoofReview.sourceDeliveryAuthenticated(),
-                "even syntactically consistent forged public actors remain non-authenticated");
+                "6.13 cannot grant readiness from forged on-field public actor");
 
         System.out.println("Phase 6.13 cross-stream readiness PASS: "
                 +checks+" synthetic checks");

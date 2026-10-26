@@ -136,12 +136,10 @@ final class ReadOnlyShadowObservationBridgeRegression {
         var spoof=new ArrayList<>(frames);
         spoof.set(3,"update\n|move|p2a: PRIVATE_ALIAS|Scratch|p1a: Own");
         check(caught.observe(battle,spoof,true).state()
-                ==ReadOnlyShadowObservationBridge.State.SYNTHETIC_FRAME_ELIGIBLE,
-                "public framing alone cannot authenticate spoofed actor");
-        reject(()->caught.probeSynthetic(battle,envelope(spoof,1,1)),
-                "original Phase 6.2 actor-attribution verification still rejects spoof");
-        check(caught.withdrawn(),
-                "the downstream 6.2-6.8 rejection permanently withdraws the bridge");
+                ==ReadOnlyShadowObservationBridge.State.NO_SAFE_PUBLIC_FRAMES,
+                "Phase 6.14 rejects same-slot forged actor before public lease");
+        check(caught.withdrawn() && caught.publicLease(battle)==null,
+                "forged on-field identity permanently withdraws source");
 
         var malformed=new ReadOnlyShadowObservationBridge();
         var turnSkip=new ArrayList<>(frames);

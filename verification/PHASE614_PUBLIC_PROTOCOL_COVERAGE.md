@@ -19,6 +19,10 @@ Unknown events, multiple events in a chunk, private `sideupdate`, `split` with p
 
 **This is an intentional incremental subset of normal Showdown output.** Many real battle events (`upkeep`, weather, boost, multi-line batches, hazards, damage split packets and alternative HP encodings) still abstain and need separate source-level validation and Minecraft observations. A failed observation is not grounds to weaken routing restrictions. The native producer/source authenticity and completeness of actual installed Cobblemon event delivery are **not proven**.
 
+## Verified regression hardening
+
+The first exact-commit Java run failed because an older Phase 6.9 regression expected a forged on-field nickname at an already observed slot to remain syntactically eligible. That behavior is now correctly rejected **at the public observation boundary**, before downstream synthetic custody or Phase 6.13 readiness. The older Phase 6.9 and 6.13 tests are updated to assert the stricter fail-closed outcome rather than weakening the new parser. This is still local stream consistency, not cryptographic actor authentication.
+
 ## Preservation of previous trust boundaries
 
 Phase 6.9's `probeSynthetic` for Phase 6.7–6.8 original fixture custody stays limited to the original narrow `switch/drag/turn/move` syntax; newly accepted public damage/status must NOT create an offline tactical receipt. Phase 6.13 source leases remain short-lived, bound to original battle object, revision, turn and currently unambiguous public appearances. The gate continues to offer only `CONSISTENT_READ_ONLY` or abstentions and never certifies public identity, native installed complete legality, tactical Shadow readiness, opponent decisions or live promotion.
