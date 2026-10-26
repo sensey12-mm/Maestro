@@ -51,6 +51,8 @@ public final class NativeOwnActionFusion {
                     && switches.currentlyObserved()
                     && (moves==null || moves.currentOwnMoveAgreement());
         }
+        /** Internal ownership check, not a public runtime identity proof. */
+        boolean fromBattle(Object battle){return current() && session.boundBattle==battle;}
         public boolean completeLegalSetProven(){return false;}
         public boolean allInstalledSwitchesCertified(){return false;}
         public boolean opponentActionsKnown(){return false;}

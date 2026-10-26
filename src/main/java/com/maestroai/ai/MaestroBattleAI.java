@@ -15,6 +15,7 @@ import com.maestroai.training.ReadOnlyShadowObservationBridge;
 import com.maestroai.training.NativeOwnActionEvidence;
 import com.maestroai.training.NativeOwnSwitchEvidence;
 import com.maestroai.training.NativeOwnActionFusion;
+import com.maestroai.training.CrossStreamEvidenceReadiness;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -221,12 +222,17 @@ public class MaestroBattleAI extends RCTBattleAI {
     private com.maestroai.training.OwnRequestTransport.Lease ownChoiceLease;
     private NativeOwnActionEvidence ownNativeActionEvidence;
     private NativeOwnSwitchEvidence ownNativeSwitchEvidence;
-    private static final boolean PHASE612_OBSERVE = Boolean.getBoolean("maestroai.phase612Observe");
+    private static final boolean PHASE613_OBSERVE =
+            Boolean.getBoolean("maestroai.phase613Observe");
+    private static final boolean PHASE612_OBSERVE =
+            PHASE613_OBSERVE || Boolean.getBoolean("maestroai.phase612Observe");
     private static final boolean PHASE611_OBSERVE =
             PHASE612_OBSERVE || Boolean.getBoolean("maestroai.phase611Observe");
     private static final boolean PHASE610_OBSERVE =
             PHASE612_OBSERVE || Boolean.getBoolean("maestroai.phase610Observe");
     private NativeOwnActionFusion.Session phase612Session = new NativeOwnActionFusion.Session();
+    private CrossStreamEvidenceReadiness.Session phase613Session =
+            new CrossStreamEvidenceReadiness.Session();
     private NativeOwnActionEvidence.Review phase612Move;
     private NativeOwnSwitchEvidence.Review phase612Switch;
     private final Map<String, PublicTransitionState.Known<Boolean>> ownFreshness = new HashMap<>();
@@ -302,6 +308,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (ownNativeActionEvidence != null) ownNativeActionEvidence.withdraw();
         if (ownNativeSwitchEvidence != null) ownNativeSwitchEvidence.withdraw();
         phase612Session.withdraw();
+        phase613Session.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -375,9 +382,10 @@ public class MaestroBattleAI extends RCTBattleAI {
             try { observeNativeOwnSwitches(battle, activePokemon, moveset, forceSwitch); }
             catch (RuntimeException ignored) { /* never impact Legacy selection */ }
             // Fuse only AFTER Legacy has chosen. No fused value enters chooser.
+            NativeOwnActionFusion.Review fused=null;
             if (PHASE612_OBSERVE) try {
                 var owner=activePokemon.getActor();
-                var fused=phase612Session.inspect(ownChoiceLease,
+                fused=phase612Session.inspect(ownChoiceLease,
                         battle,owner,owner.getRequest(),owner.getShowdownId(),
                         activePokemon.getBattlePokemon().getUuid(),
                         ownTransport.dispatchedTurn(battle,owner,battle.getTurn()),
@@ -386,6 +394,23 @@ public class MaestroBattleAI extends RCTBattleAI {
                 System.out.println("[MaestroAI] Phase 6.12 "+fused);
             } catch (RuntimeException unavailable) {
                 System.out.println("[MaestroAI] Phase 6.12 own-action fusion=UNKNOWN");
+            }
+            // Phase 6.13: refresh exact same public battle source immediately
+            // before comparison. No source read can affect Legacy's response.
+            if (PHASE613_OBSERVE) {
+                try {
+                    phase69Bridge.observe(battle,battle.getShowdownMessages(),
+                            ownTransportVersionSupported());
+                } catch (RuntimeException unsupported) {
+                    phase69Bridge.withdraw();
+                }
+                try {
+                    var cross=phase613Session.inspect(phase69Bridge,battle,fused);
+                    System.out.println("[MaestroAI] Phase 6.13 "+cross);
+                } catch (RuntimeException unsupported) {
+                    phase613Session.withdraw();
+                    System.out.println("[MaestroAI] Phase 6.13 cross-stream=UNKNOWN");
+                }
             }
             // Observe only the Legacy-selected response. A capture failure must
             // never alter legal selection or Shadow's lack of live control.
@@ -4573,6 +4598,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         ownNativeSwitchEvidence = null;
         phase612Session.withdraw();
         phase612Session = new NativeOwnActionFusion.Session();
+        phase613Session.withdraw();
+        phase613Session = new CrossStreamEvidenceReadiness.Session();
         phase612Move=null;phase612Switch=null;
         phase69Bridge.withdraw();
         phase69Bridge = new ReadOnlyShadowObservationBridge();
@@ -4610,7 +4637,7 @@ public class MaestroBattleAI extends RCTBattleAI {
     private final PublicBattleCapture shadowReplayCapture = new PublicBattleCapture();
     // Phase 6.9: opt-in read-only public-event bridge. No chooser reads its state.
     private static final boolean PHASE69_OBSERVE =
-            Boolean.getBoolean("maestroai.phase69Observe");
+            PHASE613_OBSERVE || Boolean.getBoolean("maestroai.phase69Observe");
     private ReadOnlyShadowObservationBridge phase69Bridge =
             new ReadOnlyShadowObservationBridge();
 

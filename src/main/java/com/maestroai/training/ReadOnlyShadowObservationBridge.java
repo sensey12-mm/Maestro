@@ -94,6 +94,47 @@ public final class ReadOnlyShadowObservationBridge {
     }
     public synchronized int witnessedOwnMoveCount() {return witnessedOwnMoveCount;}
 
+    /**
+     * Phase 6.13 short-lived, source-issued public observation lease.  Never
+     * exports battle identity or original frames; only the issuing bridge
+     * can construct one.  An advancing/replaced/withdrawn history expires it.
+     */
+    static final class PublicSourceLease {
+        private final ReadOnlyShadowObservationBridge source;
+        private final Object battle;
+        private final long revision;
+        private final int turn,events;
+        private PublicSourceLease(ReadOnlyShadowObservationBridge source,Object battle,
+                long revision,int turn,int events){
+            this.source=source;this.battle=battle;this.revision=revision;
+            this.turn=turn;this.events=events;
+        }
+        long revision(){return revision;}
+        int turn(){return turn;}
+        int eventCount(){return events;}
+        boolean current(){
+            synchronized(source){
+                return !source.withdrawn && source.owner==battle
+                        && source.reason==State.SYNTHETIC_FRAME_ELIGIBLE
+                        && source.revision==revision && source.publicTurn==turn
+                        && source.publicEventCount==events
+                        && source.eligibleFrames.size()==events
+                        && source.chunkDigests.size()==events;
+            }
+        }
+        @Override public String toString(){
+            return "Phase613PublicLease[redacted;authority=NONE]";
+        }
+    }
+    synchronized PublicSourceLease publicLease(Object battle){
+        if(withdrawn || owner==null || owner!=battle || revision<1 || publicTurn<1
+                || publicEventCount<1 || reason!=State.SYNTHETIC_FRAME_ELIGIBLE
+                || eligibleFrames.size()!=publicEventCount
+                || chunkDigests.size()!=publicEventCount)
+            return null;
+        return new PublicSourceLease(this,battle,revision,publicTurn,publicEventCount);
+    }
+
     private OfflineEvidenceProducerLease.Registry registry;
     private OfflineEvidenceProducerLease.Producer producer;
 
