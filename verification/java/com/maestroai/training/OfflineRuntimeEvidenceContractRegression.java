@@ -178,19 +178,19 @@ final class OfflineRuntimeEvidenceContractRegression {
         reject(()->wrongTurn.inspect(envelope(TOKEN,1,original,2,1,
                 List.of("move:tackle"),
                 OfflineRuntimeEvidenceContract.actionFingerprint(
-                    List.of("move:tackle"))),
+                    List.of("move:tackle")))),
                 "future turn with stale original fixture");
         var wrongAppearance=session();
         reject(()->wrongAppearance.inspect(envelope(TOKEN,1,original,1,2,
                 List.of("move:tackle"),
                 OfflineRuntimeEvidenceContract.actionFingerprint(
-                    List.of("move:tackle"))),
+                    List.of("move:tackle")))),
                 "fabricated appearance increment");
         var missingTurn=session();
         reject(()->missingTurn.inspect(envelope(TOKEN,1,original,3,1,
                 List.of("move:tackle"),
                 OfflineRuntimeEvidenceContract.actionFingerprint(
-                    List.of("move:tackle"))),
+                    List.of("move:tackle")))),
                 "skipped turn outside continuity bound");
 
         var laterFrames=new ArrayList<>(
