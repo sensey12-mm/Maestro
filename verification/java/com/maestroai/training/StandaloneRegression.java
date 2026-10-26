@@ -455,6 +455,7 @@ public final class StandaloneRegression {
         ReadOnlyShadowObservationBridgeRegression.run();
         NativeOwnActionEvidenceRegression.run();
         NativeOwnSwitchEvidenceRegression.run();
+        NativeOwnActionFusionRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();

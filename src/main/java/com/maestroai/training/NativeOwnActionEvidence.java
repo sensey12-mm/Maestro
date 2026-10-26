@@ -125,6 +125,16 @@ public final class NativeOwnActionEvidence {
         public int observedMoveCount(){return count;}
         /** Synthetic canonical hash, not an externally signed legal set. */
         public String moveFingerprint(){return fingerprint;}
+        /** Internal source-owner seal; no opponent or raw request getters. */
+        boolean sameChoice(OwnRequestTransport.Lease expected,Object battle,Object actor,
+                Object request,String side,UUID active,int turn){
+            return lease==expected && currentOwnMoveAgreement()
+                    && owner.battle==battle && owner.actor==actor
+                    && owner.requestToken==request && owner.side.equals(side)
+                    && owner.activeUuid.equals(active) && this.turn==turn
+                    && SOURCE.equals(source());
+        }
+        boolean trapped(){return owner.trapped;}
         public boolean currentOwnMoveAgreement(){
             return !owner.withdrawn && lease.current();
         }

@@ -128,6 +128,17 @@ public final class NativeOwnSwitchEvidence {
         public int ownTurn(){return turn;}
         public int observedSwitchCount(){return count;}
         public String candidateFingerprint(){return fingerprint;}
+        /** Internal source-owner seal; no opponent or raw request getters. */
+        boolean sameChoice(OwnRequestTransport.Lease expected,Object battle,Object actor,
+                Object request,String side,UUID active,int turn){
+            return lease==expected && currentlyObserved()
+                    && source.battle==battle && source.actor==actor
+                    && source.requestToken==request && source.side.equals(side)
+                    && source.activeUuid.equals(active) && this.turn==turn
+                    && SOURCE.equals(source());
+        }
+        boolean forced(){return source.forced;}
+        boolean trapped(){return source.trapped;}
         public boolean currentlyObserved(){return !source.withdrawn&&lease.current();}
         public boolean forcedReplacementWitnessed(){return currentlyObserved()&&source.forced;}
         public boolean trappingWitnessed(){return currentlyObserved()&&!source.forced&&source.trapped;}

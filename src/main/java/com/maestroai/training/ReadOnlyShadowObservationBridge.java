@@ -44,6 +44,26 @@ public final class ReadOnlyShadowObservationBridge {
     private final AtomicLong logicalTick=new AtomicLong();
     private long revision,probedRevision;
     private int publicTurn,publicEventCount;
+    private int witnessedFusedMoveCount,witnessedFusedSwitchCount;
+    private boolean witnessedFusedForced;
+    /**
+     * A diagnostic sidecar for the exact same battle object. This never
+     * certifies an executable move, supplies a chooser or promotes Shadow.
+     */
+    public synchronized boolean observeOwnFusedEvidence(
+            Object battle, NativeOwnActionFusion.Review review) {
+        if(withdrawn || owner==null || owner!=battle || review==null || !review.current()
+                || review.completeLegalSetProven() || review.shadowSearchAuthorized()
+                || review.livePromotionAuthorized())return false;
+        witnessedFusedMoveCount=review.ownMoveCount();
+        witnessedFusedSwitchCount=review.ownSwitchCandidateCount();
+        witnessedFusedForced=review.mode()==NativeOwnActionFusion.Mode.FORCED_REPLACEMENT_ONLY;
+        return true;
+    }
+    public synchronized int witnessedFusedMoveCount(){return witnessedFusedMoveCount;}
+    public synchronized int witnessedFusedSwitchCount(){return witnessedFusedSwitchCount;}
+    public synchronized boolean witnessedFusedForced(){return witnessedFusedForced;}
+
     private int witnessedOwnSwitchCount;
     private boolean witnessedForcedReplacement;
     /** Phase 6.11: read-only native-own party counter, never a legal-set grant. */
@@ -96,6 +116,7 @@ public final class ReadOnlyShadowObservationBridge {
         withdrawn=true;
         reason=State.WITHDRAWN;
         witnessedOwnMoveCount=0;
+        witnessedFusedMoveCount=0;witnessedFusedSwitchCount=0;witnessedFusedForced=false;
         witnessedOwnSwitchCount=0;
         witnessedForcedReplacement=false;
         eligibleFrames=List.of();

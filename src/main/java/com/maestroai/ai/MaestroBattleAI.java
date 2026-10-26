@@ -14,6 +14,7 @@ import com.maestroai.training.PublicBattleCapture;
 import com.maestroai.training.ReadOnlyShadowObservationBridge;
 import com.maestroai.training.NativeOwnActionEvidence;
 import com.maestroai.training.NativeOwnSwitchEvidence;
+import com.maestroai.training.NativeOwnActionFusion;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -220,8 +221,14 @@ public class MaestroBattleAI extends RCTBattleAI {
     private com.maestroai.training.OwnRequestTransport.Lease ownChoiceLease;
     private NativeOwnActionEvidence ownNativeActionEvidence;
     private NativeOwnSwitchEvidence ownNativeSwitchEvidence;
-    private static final boolean PHASE611_OBSERVE = Boolean.getBoolean("maestroai.phase611Observe");
-    private static final boolean PHASE610_OBSERVE = Boolean.getBoolean("maestroai.phase610Observe");
+    private static final boolean PHASE612_OBSERVE = Boolean.getBoolean("maestroai.phase612Observe");
+    private static final boolean PHASE611_OBSERVE =
+            PHASE612_OBSERVE || Boolean.getBoolean("maestroai.phase611Observe");
+    private static final boolean PHASE610_OBSERVE =
+            PHASE612_OBSERVE || Boolean.getBoolean("maestroai.phase610Observe");
+    private NativeOwnActionFusion.Session phase612Session = new NativeOwnActionFusion.Session();
+    private NativeOwnActionEvidence.Review phase612Move;
+    private NativeOwnSwitchEvidence.Review phase612Switch;
     private final Map<String, PublicTransitionState.Known<Boolean>> ownFreshness = new HashMap<>();
     private com.maestroai.training.RuntimeDomain runtimeDomain;
     private final Map<String, Map<String,Integer>> ownEffectiveStages = new HashMap<>();
@@ -294,6 +301,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         ownTransport.invalidate("OWN_RUNTIME_HOOK_UNAVAILABLE");
         if (ownNativeActionEvidence != null) ownNativeActionEvidence.withdraw();
         if (ownNativeSwitchEvidence != null) ownNativeSwitchEvidence.withdraw();
+        phase612Session.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -360,10 +368,25 @@ public class MaestroBattleAI extends RCTBattleAI {
                 () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
                 null, null, false);
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            phase612Move=null;
+            phase612Switch=null;
             try { observeNativeOwnMoves(battle, activePokemon, moveset, forceSwitch); }
             catch (RuntimeException ignored) { /* never impact Legacy selection */ }
             try { observeNativeOwnSwitches(battle, activePokemon, moveset, forceSwitch); }
             catch (RuntimeException ignored) { /* never impact Legacy selection */ }
+            // Fuse only AFTER Legacy has chosen. No fused value enters chooser.
+            if (PHASE612_OBSERVE) try {
+                var owner=activePokemon.getActor();
+                var fused=phase612Session.inspect(ownChoiceLease,
+                        battle,owner,owner.getRequest(),owner.getShowdownId(),
+                        activePokemon.getBattlePokemon().getUuid(),
+                        ownTransport.dispatchedTurn(battle,owner,battle.getTurn()),
+                        forceSwitch,phase612Move,phase612Switch);
+                if (PHASE69_OBSERVE) phase69Bridge.observeOwnFusedEvidence(battle,fused);
+                System.out.println("[MaestroAI] Phase 6.12 "+fused);
+            } catch (RuntimeException unavailable) {
+                System.out.println("[MaestroAI] Phase 6.12 own-action fusion=UNKNOWN");
+            }
             // Observe only the Legacy-selected response. A capture failure must
             // never alter legal selection or Shadow's lack of live control.
             try { observeReturnedLegacyChoice(activePokemon, battle, moveset, forceSwitch, response); }
@@ -399,6 +422,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             // It may abstain because full native spectator frames exceed its
             // deliberately narrow offline-compatible protocol slice.
             if (PHASE69_OBSERVE) phase69Bridge.observeOwnActionEvidence(battle, receipt);
+            if (PHASE612_OBSERVE) phase612Move=receipt;
             System.out.println("[MaestroAI] Phase 6.10 " + receipt);
         } catch (RuntimeException invalid) {
             ownNativeActionEvidence.withdraw();
@@ -433,6 +457,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         try {
             var receipt = ownNativeSwitchEvidence.attest(ownChoiceLease, view);
             if (PHASE69_OBSERVE) phase69Bridge.observeOwnSwitchEvidence(battle, receipt);
+            if (PHASE612_OBSERVE) phase612Switch=receipt;
             System.out.println("[MaestroAI] Phase 6.11 " + receipt);
         } catch (RuntimeException unsupported) {
             ownNativeSwitchEvidence.withdraw();
@@ -4546,6 +4571,9 @@ public class MaestroBattleAI extends RCTBattleAI {
         ownNativeActionEvidence = null;
         if (ownNativeSwitchEvidence != null) ownNativeSwitchEvidence.withdraw();
         ownNativeSwitchEvidence = null;
+        phase612Session.withdraw();
+        phase612Session = new NativeOwnActionFusion.Session();
+        phase612Move=null;phase612Switch=null;
         phase69Bridge.withdraw();
         phase69Bridge = new ReadOnlyShadowObservationBridge();
         opponentObservedMoves.clear();
