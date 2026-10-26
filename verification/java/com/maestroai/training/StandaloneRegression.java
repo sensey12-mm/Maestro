@@ -450,6 +450,7 @@ public final class StandaloneRegression {
         OfflineShadowResponseScenariosRegression.run();
         OfflineShadowCoverageAuditRegression.run();
         Phase66OfflineIntegrationRegression.run();
+        OfflineRuntimeEvidenceContractRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
