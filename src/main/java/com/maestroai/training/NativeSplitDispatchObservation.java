@@ -67,6 +67,10 @@ public final class NativeSplitDispatchObservation {
                         && verdict==Verdict.NATIVE_METHOD_RETURN_OBSERVED;
             }
         }
+        /** Internal original-battle identity check; no object escapes. */
+        boolean fromBattle(Object battle) {
+            return battle!=null && current() && owner.boundBattle==battle;
+        }
         public boolean sendMethodReturned(){return current();}
         public boolean intendedRecipientRolesObserved(){return current();}
         public boolean networkSendAcknowledged(){return false;}

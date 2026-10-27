@@ -46,14 +46,17 @@ public final class PublicSplitRoutingGate {
         private final Session session;
         private final Verdict verdict;
         private final long revision;
-        private final int splitPairs,directEvents,chunkCount;
+        private final int splitPairs,directEvents,chunkCount,publicTurn;
+        private final List<Integer> splitChunkOrdinals;
         private final List<String> splitTargets;
         private Report(Session session,Verdict verdict,long revision,
-                       int pairs,int direct,int chunks,List<String> targets) {
+                       int pairs,int direct,int chunks,int turn,List<String> targets,
+                       List<Integer> ordinalChunks) {
             this.session=session;this.verdict=verdict;
             this.revision=revision;splitPairs=pairs;
-            directEvents=direct;chunkCount=chunks;
+            directEvents=direct;chunkCount=chunks;publicTurn=turn;
             splitTargets=List.copyOf(targets);
+            splitChunkOrdinals=List.copyOf(ordinalChunks);
         }
         /** Internal routing targets only; no private/public original text. */
         String targetAt(int zeroBased){return splitTargets.get(zeroBased);}
@@ -67,6 +70,9 @@ public final class PublicSplitRoutingGate {
         public int splitPairs(){return splitPairs;}
         public int directEvents(){return directEvents;}
         public int chunkCount(){return chunkCount;}
+        public int publicTurn(){return publicTurn;}
+        /** Ordinals refer to original 1-based history CHUNKS only. */
+        int splitChunkOrdinal(int pairIndex){return splitChunkOrdinals.get(pairIndex);}
         public boolean current(){
             synchronized(session){
                 return !session.withdrawn && session.revision==revision && revision>0
@@ -146,14 +152,17 @@ public final class PublicSplitRoutingGate {
 
     private record Parsed(int pairs,int direct,List<String> publicEvents,
                           List<PublicEnvelopeProvenance.Route> routes,
-                          List<String> splitTargets) {}
+                          List<String> splitTargets,List<Integer> splitChunkOrdinals,
+                          int turn) {}
 
     private static Parsed parse(List<String> source){
         List<String> publicEvents=new ArrayList<>();
         List<PublicEnvelopeProvenance.Route> routes=new ArrayList<>();
         List<String> splitTargets=new ArrayList<>();
-        int splits=0,direct=0;
+        List<Integer> splitChunks=new ArrayList<>();
+        int splits=0,direct=0,turn=0,chunkOrdinal=0;
         for(String chunk:source){
+            chunkOrdinal++;
             if(chunk==null || chunk.length()>16384 || !chunk.startsWith("update\n")
                     || chunk.indexOf('\r')>=0)throw invalid();
             String[] lines=chunk.split("\n",-1);
@@ -172,10 +181,18 @@ public final class PublicSplitRoutingGate {
                     publicEvents.add(publicLine);
                     routes.add(PublicEnvelopeProvenance.Route.SPLIT_PUBLIC);
                     splitTargets.add(line.substring(7));
+                    splitChunks.add(chunkOrdinal);
                     splits++;
                 } else {
                     if(!DIRECT_TYPES.contains(type))throw invalid();
-                    fields(line);
+                    String[] publicFields=fields(line);
+                    if(type.equals("turn")){
+                        if(publicFields.length!=3
+                                || !publicFields[2].matches("[1-9][0-9]{0,4}"))throw invalid();
+                        int next=Integer.parseInt(publicFields[2]);
+                        if(next!=turn+1 || next>10000)throw invalid();
+                        turn=next;
+                    }
                     publicEvents.add(line);
                     routes.add(PublicEnvelopeProvenance.Route.DIRECT_UPDATE);
                     direct++;
@@ -184,7 +201,7 @@ public final class PublicSplitRoutingGate {
             }
         }
         if(splits+direct==0)throw invalid();
-        return new Parsed(splits,direct,publicEvents,routes,splitTargets);
+        return new Parsed(splits,direct,publicEvents,routes,splitTargets,splitChunks,turn);
     }
 
     public static final class Session {
@@ -214,7 +231,7 @@ public final class PublicSplitRoutingGate {
         }
         private Report fail(Verdict reason){
             withdraw();
-            return new Report(this,reason,revision,0,0,0,List.of());
+            return new Report(this,reason,revision,0,0,0,0,List.of(),List.of());
         }
         /**
          * Probe only: a compatible producer predicate does not certify the
@@ -222,7 +239,7 @@ public final class PublicSplitRoutingGate {
          */
         public synchronized Report inspect(Object battle,List<String> history,
                                            boolean versionPinned){
-            if(withdrawn)return new Report(this,Verdict.WITHDRAWN,revision,0,0,0,List.of());
+            if(withdrawn)return new Report(this,Verdict.WITHDRAWN,revision,0,0,0,0,List.of(),List.of());
             if(!versionPinned)return fail(Verdict.BAD_SOURCE_PIN);
             if(battle==null || boundBattle!=null && battle!=boundBattle)
                 return fail(Verdict.CROSS_BATTLE);
@@ -258,7 +275,8 @@ public final class PublicSplitRoutingGate {
                 boundBattle=battle;
                 return new Report(this,parsed.pairs==0?Verdict.DIRECT_ONLY
                         :Verdict.STRUCTURAL_PUBLIC_PRIVATE_SEPARATION,
-                        revision,parsed.pairs,parsed.direct,copy.size(),parsed.splitTargets());
+                        revision,parsed.pairs,parsed.direct,copy.size(),parsed.turn(),
+                        parsed.splitTargets(),parsed.splitChunkOrdinals());
             }catch(RuntimeException unsafe){
                 return fail(Verdict.MISSING_OR_MALFORMED);
             }

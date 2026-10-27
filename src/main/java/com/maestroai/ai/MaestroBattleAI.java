@@ -19,6 +19,7 @@ import com.maestroai.training.CrossStreamEvidenceReadiness;
 import com.maestroai.training.PublicSplitRoutingGate;
 import com.maestroai.training.NativeSplitRecipientCustody;
 import com.maestroai.training.NativeSplitDispatchObservation;
+import com.maestroai.training.NativeDispatchHistoryCorrelation;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -313,6 +314,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase612Session.withdraw();
         phase613Session.withdraw();
         phase618Dispatch.withdraw();
+        phase620Correlation.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4613,6 +4615,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase617Recipients = new NativeSplitRecipientCustody.Session();
         phase618Dispatch.withdraw();
         phase618Dispatch = new NativeSplitDispatchObservation.Session();
+        phase620Correlation.withdraw();
+        phase620Correlation = new NativeDispatchHistoryCorrelation.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4651,16 +4655,20 @@ public class MaestroBattleAI extends RCTBattleAI {
     private ReadOnlyShadowObservationBridge phase69Bridge =
             new ReadOnlyShadowObservationBridge();
     // Phase 6.16: separate REDACTED split-custody audit, opt-in only.
+    private static final boolean PHASE620_AUDIT =
+            Boolean.getBoolean("maestroai.phase620Audit");
     private static final boolean PHASE617_AUDIT =
             Boolean.getBoolean("maestroai.phase617Audit");
     private static final boolean PHASE616_AUDIT =
-            PHASE617_AUDIT || Boolean.getBoolean("maestroai.phase616Audit");
+            PHASE620_AUDIT || PHASE617_AUDIT || Boolean.getBoolean("maestroai.phase616Audit");
     private PublicSplitRoutingGate.Session phase616Split =
             new PublicSplitRoutingGate.Session();
     private NativeSplitRecipientCustody.Session phase617Recipients =
             new NativeSplitRecipientCustody.Session();
     private static final boolean PHASE618_AUDIT =
-            Boolean.getBoolean("maestroai.phase618Audit");
+            PHASE620_AUDIT || Boolean.getBoolean("maestroai.phase618Audit");
+    private NativeDispatchHistoryCorrelation.Session phase620Correlation =
+            new NativeDispatchHistoryCorrelation.Session();
     private NativeSplitDispatchObservation.Session phase618Dispatch =
             new NativeSplitDispatchObservation.Session();
 
@@ -4672,6 +4680,7 @@ public class MaestroBattleAI extends RCTBattleAI {
     /** Native BattleEndPacket path; observer lifecycle only. */
     public void ownNativeSplitObservationBattleEnded(PokemonBattle battle) {
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
+        if (PHASE620_AUDIT) phase620Correlation.withdraw();
     }
 
     public void ownNativeSplitDispatchReturned(PokemonBattle battle,
@@ -4761,6 +4770,16 @@ public class MaestroBattleAI extends RCTBattleAI {
                 var routing=phase616Split.inspect(
                         battle, history, ownTransportVersionSupported());
                 System.out.println("[MaestroAI] Phase 6.16 " + routing);
+                if (PHASE620_AUDIT) {
+                    // This compares ONLY live source-owned metadata and can
+                    // never prove packet/event identity or client delivery.
+                    var nativeWindow=phase618Dispatch.status(
+                            battle,battle.getTurn(),history.size(),
+                            ownTransportVersionSupported(),battle.getEnded());
+                    var correlation=phase620Correlation.inspect(
+                            battle,routing,nativeWindow);
+                    System.out.println("[MaestroAI] Phase 6.20 " + correlation);
+                }
                 if (PHASE617_AUDIT) {
                     // A historical split is NOT a native per-recipient send
                     // acknowledgment. Only a redacted UNOBSERVED report is
