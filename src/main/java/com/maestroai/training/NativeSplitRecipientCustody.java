@@ -70,6 +70,14 @@ public final class NativeSplitRecipientCustody {
             this.owner=owner;this.structural=structural;
             this.verdict=verdict;this.revision=revision;this.pairs=pairs;
         }
+        /** Internal original structural lineage, not a recipient delivery proof. */
+        boolean fromBattle(Object battle){
+            return current() && structural.sameBattle(battle);
+        }
+        /** Same original structural receipt, not an equivalent count/turn. */
+        boolean fromExactStructuralReport(PublicSplitRoutingGate.Report candidate){
+            return current() && candidate!=null && structural==candidate;
+        }
         public String schema(){return SCHEMA;}
         public String source(){return SOURCE;}
         public Verdict verdict(){return verdict;}

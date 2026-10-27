@@ -51,6 +51,11 @@ public final class CrossStreamEvidenceReadiness {
             forced=nativeReview!=null &&
                     nativeEvidence.mode()==NativeOwnActionFusion.Mode.FORCED_REPLACEMENT_ONLY;
         }
+        /** Only an original public lease PLUS current own native source qualify. */
+        boolean fromBattle(Object battle){
+            return current() && publicLease.fromBattle(battle)
+                    && nativeReview.fromBattle(battle);
+        }
         public String schema(){return SCHEMA;}
         public String nativeSource(){return NATIVE_SOURCE;}
         public String publicSource(){return PUBLIC_SOURCE;}

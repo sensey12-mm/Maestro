@@ -20,6 +20,7 @@ import com.maestroai.training.PublicSplitRoutingGate;
 import com.maestroai.training.NativeSplitRecipientCustody;
 import com.maestroai.training.NativeSplitDispatchObservation;
 import com.maestroai.training.NativeDispatchHistoryCorrelation;
+import com.maestroai.training.NativeEvidenceEndToEndGate;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -226,8 +227,12 @@ public class MaestroBattleAI extends RCTBattleAI {
     private com.maestroai.training.OwnRequestTransport.Lease ownChoiceLease;
     private NativeOwnActionEvidence ownNativeActionEvidence;
     private NativeOwnSwitchEvidence ownNativeSwitchEvidence;
+    private static final boolean PHASE621_OBSERVE =
+            Boolean.getBoolean("maestroai.phase621Observe");
     private static final boolean PHASE613_OBSERVE =
-            Boolean.getBoolean("maestroai.phase613Observe");
+            PHASE621_OBSERVE || Boolean.getBoolean("maestroai.phase613Observe");
+    private NativeEvidenceEndToEndGate.Session phase621Gate =
+            new NativeEvidenceEndToEndGate.Session();
     private static final boolean PHASE612_OBSERVE =
             PHASE613_OBSERVE || Boolean.getBoolean("maestroai.phase612Observe");
     private static final boolean PHASE611_OBSERVE =
@@ -315,6 +320,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase613Session.withdraw();
         phase618Dispatch.withdraw();
         phase620Correlation.withdraw();
+        phase621Gate.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -413,6 +419,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                 try {
                     var cross=phase613Session.inspect(phase69Bridge,battle,fused);
                     System.out.println("[MaestroAI] Phase 6.13 "+cross);
+                    if (PHASE621_OBSERVE) {
+                        var endToEnd=phase621Gate.inspectDirect(battle,cross);
+                        System.out.println("[MaestroAI] Phase 6.21 "+endToEnd);
+                    }
                 } catch (RuntimeException unsupported) {
                     phase613Session.withdraw();
                     System.out.println("[MaestroAI] Phase 6.13 cross-stream=UNKNOWN");
@@ -4617,6 +4627,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase618Dispatch = new NativeSplitDispatchObservation.Session();
         phase620Correlation.withdraw();
         phase620Correlation = new NativeDispatchHistoryCorrelation.Session();
+        phase621Gate.withdraw();
+        phase621Gate = new NativeEvidenceEndToEndGate.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4656,9 +4668,9 @@ public class MaestroBattleAI extends RCTBattleAI {
             new ReadOnlyShadowObservationBridge();
     // Phase 6.16: separate REDACTED split-custody audit, opt-in only.
     private static final boolean PHASE620_AUDIT =
-            Boolean.getBoolean("maestroai.phase620Audit");
+            PHASE621_OBSERVE || Boolean.getBoolean("maestroai.phase620Audit");
     private static final boolean PHASE617_AUDIT =
-            Boolean.getBoolean("maestroai.phase617Audit");
+            PHASE621_OBSERVE || Boolean.getBoolean("maestroai.phase617Audit");
     private static final boolean PHASE616_AUDIT =
             PHASE620_AUDIT || PHASE617_AUDIT || Boolean.getBoolean("maestroai.phase616Audit");
     private PublicSplitRoutingGate.Session phase616Split =
@@ -4779,6 +4791,11 @@ public class MaestroBattleAI extends RCTBattleAI {
                     var correlation=phase620Correlation.inspect(
                             battle,routing,nativeWindow);
                     System.out.println("[MaestroAI] Phase 6.20 " + correlation);
+                    if (PHASE621_OBSERVE) {
+                        var recipient=phase617Recipients.inspect(battle,routing);
+                        var safety=phase621Gate.inspectSplit(battle,correlation,recipient);
+                        System.out.println("[MaestroAI] Phase 6.21 " + safety);
+                    }
                 }
                 if (PHASE617_AUDIT) {
                     // A historical split is NOT a native per-recipient send

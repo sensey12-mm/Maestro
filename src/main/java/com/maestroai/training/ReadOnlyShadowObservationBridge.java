@@ -110,6 +110,10 @@ public final class ReadOnlyShadowObservationBridge {
             this.source=source;this.battle=battle;this.revision=revision;
             this.turn=turn;this.events=events;
         }
+        /** Internal original-session provenance, never exported as a battle ID. */
+        boolean fromBattle(Object candidate){
+            return candidate!=null && battle==candidate && current();
+        }
         long revision(){return revision;}
         int turn(){return turn;}
         int eventCount(){return events;}

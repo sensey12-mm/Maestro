@@ -46,6 +46,16 @@ public final class NativeDispatchHistoryCorrelation {
             splitCount=this.history==null?0:history.splitPairs();
             historyChunks=this.history==null?0:history.chunkCount();
         }
+        /** Internal original two-stream object identity seal. */
+        boolean fromBattle(Object battle){
+            return current() && history.sameBattle(battle)
+                    && nativeReturn.fromBattle(battle);
+        }
+        /** Exact in-memory structural receipt, not reconstructed metadata. */
+        boolean sharesSplitSource(NativeSplitRecipientCustody.Report recipient){
+            return current() && recipient!=null
+                    && recipient.fromExactStructuralReport(history);
+        }
         public String schema(){return SCHEMA;}
         public String source(){return SOURCE;}
         public Verdict verdict(){return verdict;}
