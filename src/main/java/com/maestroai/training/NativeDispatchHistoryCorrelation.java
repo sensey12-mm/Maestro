@@ -127,7 +127,7 @@ public final class NativeDispatchHistoryCorrelation {
                 return fail(Verdict.BAD_SOURCE);
             if(!nativeReturn.fromBattle(originalBattle))
                 return fail(Verdict.BATTLE_MISMATCH);
-            if(nativeReturn.nativeReturnOrdinal()<lastOrdinal)
+            if(nativeReturn.nativeDispatchOrdinal()<lastOrdinal)
                 return fail(Verdict.REPLAYED_OR_STALE);
             if(structural.splitPairs()==0)
                 return abstain(Verdict.MISSING_SPLIT_HISTORY);
@@ -138,7 +138,7 @@ public final class NativeDispatchHistoryCorrelation {
                     || nativeReturn.historyChunksAtReturn()<0)
                 return fail(Verdict.HISTORY_WINDOW_CONTRADICTION);
             final int newSplits=structural.splitPairs()-lastSplitCount;
-            final long newReturns=nativeReturn.nativeReturnOrdinal()-lastOrdinal;
+            final long newReturns=nativeReturn.nativeDispatchOrdinal()-lastOrdinal;
             if(lastRevision!=0 && structural.revision()<=lastRevision
                     && newReturns>0)
                 return fail(Verdict.REPLAYED_OR_STALE);
@@ -158,7 +158,7 @@ public final class NativeDispatchHistoryCorrelation {
                 return fail(Verdict.REPLAYED_OR_STALE);
             battle=originalBattle;
             lastRevision=structural.revision();
-            lastOrdinal=nativeReturn.nativeReturnOrdinal();
+            lastOrdinal=nativeReturn.nativeDispatchOrdinal();
             lastSplitCount=structural.splitPairs();
             return new Report(this,Verdict.PLAUSIBLE_WINDOW_UNVERIFIED,
                     structural,nativeReturn);
