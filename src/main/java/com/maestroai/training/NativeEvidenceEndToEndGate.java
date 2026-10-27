@@ -51,6 +51,10 @@ public final class NativeEvidenceEndToEndGate {
         public String schema(){return SCHEMA;}
         public String source(){return SOURCE;}
         public Verdict verdict(){return verdict;}
+        /** Original source-owned battle lineage, not runtime authentication. */
+        boolean fromBattle(Object originalBattle){
+            return originalBattle!=null && current() && session.battle==originalBattle;
+        }
         public Track track(){return track;}
         public int publicTurn(){return turn;}
         public long publicRevision(){return revision;}

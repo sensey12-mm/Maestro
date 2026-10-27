@@ -21,6 +21,7 @@ import com.maestroai.training.NativeSplitRecipientCustody;
 import com.maestroai.training.NativeSplitDispatchObservation;
 import com.maestroai.training.NativeDispatchHistoryCorrelation;
 import com.maestroai.training.NativeEvidenceEndToEndGate;
+import com.maestroai.training.RuntimeObservationAcceptanceHarness;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -227,8 +228,12 @@ public class MaestroBattleAI extends RCTBattleAI {
     private com.maestroai.training.OwnRequestTransport.Lease ownChoiceLease;
     private NativeOwnActionEvidence ownNativeActionEvidence;
     private NativeOwnSwitchEvidence ownNativeSwitchEvidence;
+    private static final boolean PHASE622_OBSERVE =
+            Boolean.getBoolean("maestroai.phase622Observe");
     private static final boolean PHASE621_OBSERVE =
-            Boolean.getBoolean("maestroai.phase621Observe");
+            PHASE622_OBSERVE || Boolean.getBoolean("maestroai.phase621Observe");
+    private RuntimeObservationAcceptanceHarness.Session phase622Harness =
+            new RuntimeObservationAcceptanceHarness.Session();
     private static final boolean PHASE613_OBSERVE =
             PHASE621_OBSERVE || Boolean.getBoolean("maestroai.phase613Observe");
     private NativeEvidenceEndToEndGate.Session phase621Gate =
@@ -321,6 +326,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase618Dispatch.withdraw();
         phase620Correlation.withdraw();
         phase621Gate.withdraw();
+        phase622Harness.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -422,6 +428,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                     if (PHASE621_OBSERVE) {
                         var endToEnd=phase621Gate.inspectDirect(battle,cross);
                         System.out.println("[MaestroAI] Phase 6.21 "+endToEnd);
+                        if (PHASE622_OBSERVE) {
+                            var acceptance=phase622Harness.observePhase621(battle,endToEnd);
+                            System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+                        }
                     }
                 } catch (RuntimeException unsupported) {
                     phase613Session.withdraw();
@@ -4629,6 +4639,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase620Correlation = new NativeDispatchHistoryCorrelation.Session();
         phase621Gate.withdraw();
         phase621Gate = new NativeEvidenceEndToEndGate.Session();
+        phase622Harness.withdraw();
+        phase622Harness = new RuntimeObservationAcceptanceHarness.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4691,8 +4703,18 @@ public class MaestroBattleAI extends RCTBattleAI {
      */
     /** Native BattleEndPacket path; observer lifecycle only. */
     public void ownNativeSplitObservationBattleEnded(PokemonBattle battle) {
+        if (PHASE622_OBSERVE) try {
+            System.out.println("[MaestroAI] Phase 6.22 " + phase622Harness.battleEndHook(battle));
+        } catch (RuntimeException ignored) { phase622Harness.withdraw(); }
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
+        if (PHASE621_OBSERVE) {
+            phase621Gate.withdraw();
+            phase613Session.withdraw();
+            phase69Bridge.withdraw();
+            phase616Split.withdraw();
+            phase617Recipients.withdraw();
+        }
     }
 
     public void ownNativeSplitDispatchReturned(PokemonBattle battle,
@@ -4710,8 +4732,13 @@ public class MaestroBattleAI extends RCTBattleAI {
                     battle.getSpectators().size(),ownTransportVersionSupported(),
                     false);
             System.out.println("[MaestroAI] Phase 6.18 "+receipt);
+            if (PHASE622_OBSERVE) {
+                var acceptance=phase622Harness.nativeReturnHook(battle,receipt);
+                System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+            }
         }catch(RuntimeException unknown) {
             phase618Dispatch.withdraw();
+            if (PHASE622_OBSERVE) phase622Harness.withdraw();
             System.out.println("[MaestroAI] Phase 6.18 dispatch=UNKNOWN");
         }
     }
@@ -4735,6 +4762,14 @@ public class MaestroBattleAI extends RCTBattleAI {
                 shadowSwitchTelemetry.reset();
             }
             List<String> history = battle.getShowdownMessages();
+            if (PHASE622_OBSERVE) try {
+                var acceptance=phase622Harness.publicHistory(battle,battle.getTurn(),
+                        history,ownTransportVersionSupported());
+                System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+            } catch (RuntimeException unavailable) {
+                phase622Harness.withdraw();
+                System.out.println("[MaestroAI] Phase 6.22 source=UNKNOWN;authority=NONE");
+            }
             if (PHASE618_AUDIT) {
                 // Missing optional injection is UNKNOWN, never dispatch proof.
                 var hookStatus=phase618Dispatch.status(
@@ -4795,6 +4830,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         var recipient=phase617Recipients.inspect(battle,routing);
                         var safety=phase621Gate.inspectSplit(battle,correlation,recipient);
                         System.out.println("[MaestroAI] Phase 6.21 " + safety);
+                        if (PHASE622_OBSERVE) {
+                            var acceptance=phase622Harness.observePhase621(battle,safety);
+                            System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+                        }
                     }
                 }
                 if (PHASE617_AUDIT) {

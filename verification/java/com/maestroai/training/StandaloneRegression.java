@@ -464,6 +464,7 @@ public final class StandaloneRegression {
         NativeSplitDispatchObservationRegression.run();
         NativeDispatchHistoryCorrelationRegression.run();
         NativeEvidenceEndToEndGateRegression.run();
+        RuntimeObservationAcceptanceHarnessRegression.run();
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
