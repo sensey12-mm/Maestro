@@ -22,6 +22,7 @@ import com.maestroai.training.NativeSplitDispatchObservation;
 import com.maestroai.training.NativeDispatchHistoryCorrelation;
 import com.maestroai.training.NativeEvidenceEndToEndGate;
 import com.maestroai.training.RuntimeObservationAcceptanceHarness;
+import com.maestroai.training.NativeSidedDispatchReachability;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -327,6 +328,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase620Correlation.withdraw();
         phase621Gate.withdraw();
         phase622Harness.withdraw();
+        phase624Sided.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4641,6 +4643,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase621Gate = new NativeEvidenceEndToEndGate.Session();
         phase622Harness.withdraw();
         phase622Harness = new RuntimeObservationAcceptanceHarness.Session();
+        phase624Sided.withdraw();
+        phase624Sided = new NativeSidedDispatchReachability.Session();
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4695,6 +4699,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             new NativeDispatchHistoryCorrelation.Session();
     private NativeSplitDispatchObservation.Session phase618Dispatch =
             new NativeSplitDispatchObservation.Session();
+    // Phase 6.24: sided-return is separate from Phase 6.18 split-return.
+    private static final boolean PHASE624_OBSERVE =
+            Boolean.getBoolean("maestroai.phase624Observe");
+    private NativeSidedDispatchReachability.Session phase624Sided =
+            new NativeSidedDispatchReachability.Session();
 
     /**
      * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
@@ -4706,6 +4715,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (PHASE622_OBSERVE) try {
             System.out.println("[MaestroAI] Phase 6.22 " + phase622Harness.battleEndHook(battle));
         } catch (RuntimeException ignored) { phase622Harness.withdraw(); }
+        if (PHASE624_OBSERVE) phase624Sided.battleEnded(battle);
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
         if (PHASE621_OBSERVE) {
@@ -4714,6 +4724,30 @@ public class MaestroBattleAI extends RCTBattleAI {
             phase69Bridge.withdraw();
             phase616Split.withdraw();
             phase617Recipients.withdraw();
+        }
+    }
+
+    /**
+     * Cobblemon sendSidedUpdate RETURN is distinct from sendSplitUpdate
+     * and original Showdown |split|. Diagnostic-only; no payload logging.
+     */
+    public void ownNativeSidedDispatchReturned(PokemonBattle battle,
+            com.cobblemon.mod.common.api.battles.model.actor.BattleActor sourceActor,
+            com.cobblemon.mod.common.api.net.NetworkPacket<?> allyPacket,
+            com.cobblemon.mod.common.api.net.NetworkPacket<?> opponentPacket,
+            boolean spectatorsAsAlly) {
+        if (!PHASE624_OBSERVE) return;
+        try {
+            var actors = new java.util.ArrayList<Object>();
+            for (var actor : battle.getActors()) actors.add(actor);
+            var receipt=phase624Sided.nativeReturn(battle,actors,
+                    sourceActor,allyPacket,opponentPacket,spectatorsAsAlly,
+                    battle.getTurn(),battle.getShowdownMessages().size(),
+                    ownTransportVersionSupported(),battle.getEnded());
+            System.out.println("[MaestroAI] Phase 6.24 "+receipt);
+        } catch(RuntimeException unavailable) {
+            phase624Sided.withdraw();
+            System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
         }
     }
 
@@ -4762,6 +4796,14 @@ public class MaestroBattleAI extends RCTBattleAI {
                 shadowSwitchTelemetry.reset();
             }
             List<String> history = battle.getShowdownMessages();
+            if (PHASE624_OBSERVE) try {
+                var status=phase624Sided.status(battle,battle.getTurn(),
+                        history.size(),ownTransportVersionSupported(),battle.getEnded());
+                System.out.println("[MaestroAI] Phase 6.24 "+status);
+            } catch(RuntimeException unavailable) {
+                phase624Sided.withdraw();
+                System.out.println("[MaestroAI] Phase 6.24 sidedStatus=UNKNOWN;authority=NONE");
+            }
             if (PHASE622_OBSERVE) try {
                 var acceptance=phase622Harness.publicHistory(battle,battle.getTurn(),
                         history,ownTransportVersionSupported());

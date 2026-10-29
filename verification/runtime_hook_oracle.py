@@ -79,6 +79,10 @@ SPLIT_DESCRIPTOR = ("sendSplitUpdate",
     "(Lcom/cobblemon/mod/common/api/battles/model/actor/BattleActor;"
     "Lcom/cobblemon/mod/common/api/net/NetworkPacket;"
     "Lcom/cobblemon/mod/common/api/net/NetworkPacket;)V")
+SIDED_DESCRIPTOR = ("sendSidedUpdate",
+    "(Lcom/cobblemon/mod/common/api/battles/model/actor/BattleActor;"
+    "Lcom/cobblemon/mod/common/api/net/NetworkPacket;"
+    "Lcom/cobblemon/mod/common/api/net/NetworkPacket;Z)V")
 END_BROADCAST_DESCRIPTOR = ("sendUpdate",
     "(Lcom/cobblemon/mod/common/api/net/NetworkPacket;)V")
 
@@ -103,6 +107,8 @@ def verify_pinned_hooks(pinned_dependency: bytes):
             raise ValueError("pinned PokemonBattle.class missing") from missing
         if SPLIT_DESCRIPTOR not in own_native:
             raise ValueError("Pinned sendSplitUpdate JVM descriptor does not match Mixin ABI")
+        if SIDED_DESCRIPTOR not in own_native:
+            raise ValueError("Pinned sendSidedUpdate JVM descriptor does not match Mixin ABI")
         if END_BROADCAST_DESCRIPTOR not in own_native:
             raise ValueError("Pinned BattleEndPacket broadcast JVM descriptor unavailable")
         # Source selector and handler must match the same exact JVM descriptor.
@@ -112,6 +118,8 @@ def verify_pinned_hooks(pinned_dependency: bytes):
         if mixin.is_file():
             text = mixin.read_text()
             if ('method="sendSplitUpdate' + SPLIT_DESCRIPTOR[1] + '"' not in text
+                    or 'method="sendSidedUpdate' + SIDED_DESCRIPTOR[1] + '"' not in text
+                    or 'private void maestroObserveSidedDispatch(' not in text
                     or 'method="sendUpdate' + END_BROADCAST_DESCRIPTOR[1] + '"' not in text
                     or 'at=@At("RETURN"),require=0' not in text
                     or 'at=@At("HEAD"),require=0' not in text):
@@ -126,7 +134,7 @@ def verify_pinned_hooks(pinned_dependency: bytes):
                 raise ValueError("pinned runtime selector methods unavailable: "
                                  + name.split("/")[-1].removesuffix(".class")
                                  + " (" + ",".join(sorted(absent)) + ")")
-    print("Pinned split-return Mixin ABI PASS: exact native descriptor, optional RETURN handler; runtime apply NOT attested")
+    print("Pinned split/sided-return Mixin ABIs PASS: both exact descriptors, optional RETURN handlers; runtime apply NOT attested")
     print("Pinned Cobblemon JVM hook selectors PASS: "
           "own-request, own-turn and public-domain methods declared; "
           "runtime Mixin application NOT ATTESTED")
@@ -166,6 +174,13 @@ class HookOracleRegression(unittest.TestCase):
                          declared_methods(cls("(Ljava/lang/Object;)V"),True))
         with self.assertRaises(ValueError):
             declared_methods(cls(SPLIT_DESCRIPTOR[1])[:-1],True)
+
+    def test_sided_and_split_are_distinct_contracts(self):
+        # sendSidedUpdate carries spectatorsAsAlly as an actual boolean arg;
+        # Showdown split routing and native packet sending cannot be conflated.
+        self.assertNotEqual(SIDED_DESCRIPTOR, SPLIT_DESCRIPTOR)
+        self.assertTrue(SIDED_DESCRIPTOR[1].endswith(";Z)V"))
+        self.assertTrue(SPLIT_DESCRIPTOR[1].endswith(";)V"))
 
     def test_not_a_class(self):
         with self.assertRaises(ValueError):

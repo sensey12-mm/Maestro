@@ -42,6 +42,30 @@ public abstract class NativeSplitDispatchObservationMixin {
         }
     }
 
+    /**
+     * Phase 6.24: Cobblemon's common switch and HP interpretation dispatch
+     * uses sendSidedUpdate, not sendSplitUpdate. This RETURN witness is
+     * not a Showdown split-event or recipient delivery certificate.
+     */
+    @Inject(method="sendSidedUpdate(Lcom/cobblemon/mod/common/api/battles/model/actor/BattleActor;Lcom/cobblemon/mod/common/api/net/NetworkPacket;Lcom/cobblemon/mod/common/api/net/NetworkPacket;Z)V",
+            at=@At("RETURN"),require=0)
+    private void maestroObserveSidedDispatch(BattleActor sourceActor,
+            NetworkPacket<?> allyPacket,NetworkPacket<?> opponentPacket,
+            boolean spectatorsAsAlly,CallbackInfo ci){
+        try {
+            var battle=(PokemonBattle)(Object)this;
+            for(var actor:battle.getActors()){
+                if(actor instanceof AIBattleActor aiActor
+                        && aiActor.getBattleAI() instanceof MaestroBattleAI ai){
+                    ai.ownNativeSidedDispatchReturned(battle,sourceActor,
+                            allyPacket,opponentPacket,spectatorsAsAlly);
+                }
+            }
+        }catch(RuntimeException ignored){
+            // Never interfere with native packet sending or Legacy control.
+        }
+    }
+
     @Inject(method="sendSplitUpdate(Lcom/cobblemon/mod/common/api/battles/model/actor/BattleActor;Lcom/cobblemon/mod/common/api/net/NetworkPacket;Lcom/cobblemon/mod/common/api/net/NetworkPacket;)V",at=@At("RETURN"),require=0)
     private void maestroObserveDispatch(BattleActor privateActor,
             NetworkPacket<?> publicPacket,NetworkPacket<?> privatePacket,
