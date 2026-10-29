@@ -26,6 +26,7 @@ public final class PublicSplitRoutingGate {
     private static final Set<String> DIRECT_TYPES=
             Set.of("turn","move","switch","drag","replace","detailschange",
                     "-formechange","-transform","-damage","-heal","-status",
+                    "-ability","-boost",
                     "-curestatus","faint");
     private static final Pattern ACTOR=Pattern.compile("p[12][a-c]: [^|\\r\\n]{1,80}");
     private static final Pattern HP=Pattern.compile(
@@ -186,6 +187,27 @@ public final class PublicSplitRoutingGate {
                 } else {
                     if(!DIRECT_TYPES.contains(type))throw invalid();
                     String[] publicFields=fields(line);
+                    // Only verified common public events are added in 6.23.
+                    // A wider public filter is NOT evidence of source ownership.
+                    // All parsed source is compared with the independent filter.
+                    if(type.equals("-ability")){
+                        if(publicFields.length<4 || publicFields.length>6
+                                || !ACTOR.matcher(publicFields[2]).matches()
+                                || !publicFields[3].matches("[a-zA-Z0-9][a-zA-Z0-9 ():']{0,95}"))
+                            throw invalid();
+                        for(int field=4;field<publicFields.length;field++)
+                            if(!tag(publicFields[field]))throw invalid();
+                    }
+                    if(type.equals("-boost")){
+                        if(publicFields.length<5 || publicFields.length>7
+                                || !ACTOR.matcher(publicFields[2]).matches()
+                                || !Set.of("atk","def","spa","spd","spe",
+                                          "accuracy","evasion").contains(publicFields[3])
+                                || !publicFields[4].matches("[1-6]"))
+                            throw invalid();
+                        for(int field=5;field<publicFields.length;field++)
+                            if(!tag(publicFields[field]))throw invalid();
+                    }
                     if(type.equals("turn")){
                         if(publicFields.length!=3
                                 || !publicFields[2].matches("[1-9][0-9]{0,4}"))throw invalid();

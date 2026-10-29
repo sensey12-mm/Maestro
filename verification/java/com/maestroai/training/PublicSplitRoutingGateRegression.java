@@ -97,6 +97,56 @@ final class PublicSplitRoutingGateRegression {
                 ==PublicSplitRoutingGate.Verdict.WITHDRAWN,
                 "source pin restoration cannot revive session");
 
+        // 6.23: battle-opening native history contains two split switches,
+        // then direct -ability/-boost before turn 1. A 6.16 parser that
+        // rejects these already-allowlisted public events poisoned all real
+        // runtime sources, even though independent provenance was available.
+        // Synthetic identities only. No private owner logs become fixtures.
+        var nativeOpening=List.of(
+                split("p1","|switch|p1a: Own|Genesect, L100|80/100",
+                        "|switch|p1a: Own|Genesect, L100|100/100"),
+                split("p2","|switch|p2a: Opp|Xerneas, L100|80/100",
+                        "|switch|p2a: Opp|Xerneas, L100|100/100"),
+                "update\n|-ability|p2a: Opp|Fairy Aura",
+                "update\n|-boost|p2a: Opp|atk|1",
+                "update\n|turn|1");
+        var openSession=new PublicSplitRoutingGate.Session();
+        var openReport=inspect(openSession,battle,nativeOpening);
+        check(openReport.verdict()
+                    ==PublicSplitRoutingGate.Verdict.STRUCTURAL_PUBLIC_PRIVATE_SEPARATION
+                && openReport.current() && openReport.splitPairs()==2
+                && openReport.directEvents()==3 && openReport.chunkCount()==5
+                && openReport.publicTurn()==1,
+                "runtime-shaped turn-zero switch/ability/boost history is recognized");
+        check(PublicProtocolFilter.publicEvents(nativeOpening).size()==5
+                && PublicEnvelopeProvenance.reconcile(
+                        nativeOpening,PublicProtocolFilter.publicEvents(nativeOpening)).complete(),
+                "independent public filter agrees on exact opening event order");
+        check(!openReport.liveSourceDeliveryAuthenticated()
+                && !openReport.runtimeActorAuthenticated()
+                && !openReport.shadowSearchAuthorized()
+                && !openReport.tacticalDecisionAuthorized()
+                && !openReport.livePromotionAuthorized(),
+                "runtime-shaped opening does not certify provenance or tactics");
+        var openNext=add(nativeOpening,
+                "update\n|move|p1a: Own|Iron Head|p2a: Opp");
+        check(inspect(openSession,battle,openNext).revision()==2,
+                "normal append advances a source-bound revision, not proof");
+        var openedRevoked=openSession.inspect(new Object(),openNext,true);
+        check(openedRevoked.verdict()==PublicSplitRoutingGate.Verdict.CROSS_BATTLE
+                && !openReport.current() && openSession.withdrawn(),
+                "cross-battle callback after opening irreversibly withdraws");
+        deny(add(nativeOpening,"update\n|-ability|p1a: Own|{"+SECRET+"}"),
+                "ability value pretending to contain an opaque private object");
+        deny(add(nativeOpening,"update\n|-boost|p2a: Opp|atk|99"),
+                "out-of-range boosted stat level");
+        deny(add(nativeOpening,"update\n|-boost|p2a: Opp|atk|1|[private] "+SECRET),
+                "unrecognized boost annotation");
+        deny(add(nativeOpening,"sideupdate\np1\n|request|"+SECRET),
+                "native private request never recast as a public event");
+        deny(add(nativeOpening,"update\n|-unboost|p1a: Own|atk|1"),
+                "other unreviewed direct types remain unsupported");
+
         // The independently implemented filter sees ONLY second/public split
         // lines. Phase 6.9 must *still* reject the entire private-bearing input.
         var filtered=PublicProtocolFilter.publicEvents(one);
