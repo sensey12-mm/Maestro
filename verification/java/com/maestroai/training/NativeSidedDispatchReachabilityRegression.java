@@ -167,11 +167,13 @@ final class NativeSidedDispatchReachabilityRegression {
                 "first choice preserves exact same-battle source");
         var firstChoice=scope.forBattle(openingBattle)
                 .status(openingBattle,0,7,true,false);
-        require(firstChoice.current()
+        require(!firstChoice.current()
                 && firstChoice.observedSidedReturnOrdinal()==2
                 && firstChoice.verdict()
-                    ==NativeSidedDispatchReachability.Verdict.NATIVE_SIDED_RETURN_OBSERVED_UNVERIFIED,
-                "first choice never reports NO callback after real early sends");
+                    ==NativeSidedDispatchReachability.Verdict.NATIVE_SIDED_RETURN_PRIOR_EPOCH
+                && !e2.current(),
+                "first choice retains early count but cannot assert a CURRENT "
+                    +"callback after public history has advanced");
         denyAll(firstChoice);
         var later=returned(scope.forBattle(openingBattle),
                 openingBattle,one,actors,1,8,false);
@@ -215,6 +217,72 @@ final class NativeSidedDispatchReachabilityRegression {
                 && futureFirst.observedSidedReturnOrdinal()==1
                 && scope.forBattle(futureBattle)==nextPhysicalSession,
                 "future native dispatch precedes future first choice safely");
+
+
+        // 6.27: source HISTORY can progress between native sided callbacks.
+        // The previous method RETURN remains recorded, not current.
+        var progress=new NativeSidedDispatchReachability.Session();
+        var initial=progress.status(battle,0,1,true,false);
+        require(initial.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.NO_NATIVE_SIDED_CALLBACK_YET
+                && !initial.nativeSidedMethodReturned(),
+                "initial status-only epoch binds source without inventing return");
+        var beforePoll=returned(progress,battle,one,actors,0,2,false);
+        require(beforePoll.current() && beforePoll.observedSidedReturnOrdinal()==1,
+                "native callback after initial poll attested at exact epoch");
+        var advanced=progress.status(battle,0,3,true,false);
+        require(advanced.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.NATIVE_SIDED_RETURN_PRIOR_EPOCH
+                && !advanced.current() && !advanced.nativeSidedMethodReturned()
+                && advanced.observedSidedReturnOrdinal()==1
+                && !beforePoll.current(),
+                "append-only history revokes current method-return freshness");
+        denyAll(advanced);
+        var advanceTurn=progress.status(battle,1,3,true,false);
+        require(advanceTurn.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.NATIVE_SIDED_RETURN_PRIOR_EPOCH
+                && !advanceTurn.current()
+                && advanceTurn.observedSidedReturnOrdinal()==1,
+                "turn progression without callback is also historical only");
+        var staleCallback=returned(progress,battle,one,actors,0,3,false);
+        require(staleCallback.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.REGRESSED_SOURCE
+                && progress.withdrawn() && !advanced.current(),
+                "late native callback cannot rewind observed turn lineage");
+        var newSession=new NativeSidedDispatchReachability.Session();
+        var newFirst=returned(newSession,battle,two,actors,0,2,false);
+        newSession.status(battle,0,4,true,false);
+        var renewed=returned(newSession,battle,two,actors,1,5,true);
+        require(renewed.current()
+                && renewed.observedSidedReturnOrdinal()==2
+                && !newFirst.current(),
+                "fresh native callback can restore current status at a new epoch");
+        var sameEpoch=newSession.status(battle,1,5,true,false);
+        require(sameEpoch.current() && sameEpoch.nativeSidedMethodReturned()
+                && sameEpoch.observedSidedReturnOrdinal()==2,
+                "same epoch polling preserves current callback without incrementing");
+        var foreignBeforeReturn=new NativeSidedDispatchReachability.Session();
+        var foreignFirst=foreignBeforeReturn.status(battle,0,0,true,false);
+        var foreignSecond=returned(foreignBeforeReturn,new Object(),one,actors,0,1,false);
+        require(foreignFirst.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.NO_NATIVE_SIDED_CALLBACK_YET
+                && foreignSecond.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.CROSS_BATTLE
+                && foreignBeforeReturn.withdrawn(),
+                "first status poll binds physical battle before native callback");
+        var oversizedPoll=new NativeSidedDispatchReachability.Session();
+        require(oversizedPoll.status(battle,10001,1,true,false).verdict()
+                    ==NativeSidedDispatchReachability.Verdict.SOURCE_UNAVAILABLE
+                && oversizedPoll.withdrawn(),
+                "status-only metadata bounds match the native callback contract");
+        var historicalRedacted=new NativeSidedDispatchReachability.Session();
+        var histReport=returned(historicalRedacted,battle,one,actors,0,1,false);
+        historicalRedacted.status(battle,2,5,true,false);
+        require(!histReport.current() && histReport.observedSidedReturnOrdinal()==1,
+                "old report never regains freshness just by another status poll");
+        require(historicalRedacted.battleEnded(battle).verdict()
+                    ==NativeSidedDispatchReachability.Verdict.WITHDRAWN,
+                "battle end still revokes historical evidence after source advances");
 
         System.out.println("Phase 6.24 native-sided reachability regression PASS: "
                 +count+" synthetic assertions");

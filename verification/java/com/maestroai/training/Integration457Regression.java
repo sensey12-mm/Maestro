@@ -85,6 +85,25 @@ final class Integration457Regression {
         check(Phase7Readiness.Status.AWAITING_INTEGRATED_PHASES_4_5_6 != null,
                 "Phase 7's unmet integration state remains expressible");
 
+        // Phase 6.27: an apparently maximally successful OFFLINE Phase 7
+        // report cannot impersonate genuine integrated Phase 4/5/6 evidence.
+        var allStages=new java.util.EnumMap<Phase7Readiness.Stage,
+                Phase7Readiness.Gate>(Phase7Readiness.Stage.class);
+        for(var stage:Phase7Readiness.Stage.values())
+            allStages.put(stage,Phase7Readiness.Gate.PASS);
+        var offlineReadiness=new Phase7Readiness.Report(
+                Phase7Readiness.SCHEMA,
+                Phase7Readiness.Status.AWAITING_INTEGRATED_PHASES_4_5_6,
+                Phase7Readiness.EvidenceTier.EXTERNALLY_REVIEWED_OFFLINE,
+                "0".repeat(64), "1".repeat(64),
+                null,null,null,null,null,
+                100,100,100,allStages);
+        check(!offlineReadiness.integrated()
+                && offlineReadiness.json().contains("phase6-integrated-search")
+                && offlineReadiness.json().contains("no-live-shadow-promotion"),
+                "even all-PASS offline stages cannot certify integrated readiness");
+
+
         // Inspect the actual compiled branch's runtime entrypoint to guard
         // against dropping Phase 4 selection or inadvertently wiring Phase 5
         // into live decisions during manual source reconciliation.

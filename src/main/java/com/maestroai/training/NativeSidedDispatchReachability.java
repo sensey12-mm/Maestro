@@ -22,6 +22,7 @@ public final class NativeSidedDispatchReachability {
 
     public enum Verdict {
         NO_NATIVE_SIDED_CALLBACK_YET, NATIVE_SIDED_RETURN_OBSERVED_UNVERIFIED,
+        NATIVE_SIDED_RETURN_PRIOR_EPOCH,
         SOURCE_UNAVAILABLE, CROSS_BATTLE, FOREIGN_SOURCE_ACTOR,
         INVALID_PACKETS, REGRESSED_SOURCE, WITHDRAWN
     }
@@ -52,7 +53,9 @@ public final class NativeSidedDispatchReachability {
                 return !owner.withdrawn
                         && verdict==Verdict.NATIVE_SIDED_RETURN_OBSERVED_UNVERIFIED
                         && ordinal>0 && ordinal==owner.ordinal
-                        && owner.lastTurn==turn && owner.lastHistory==historyChunks;
+                        && owner.lastTurn==turn && owner.lastHistory==historyChunks
+                        && owner.observedTurn==turn
+                        && owner.observedHistory==historyChunks;
             }
         }
         public boolean nativeSidedMethodReturned(){return current();}
@@ -82,6 +85,9 @@ public final class NativeSidedDispatchReachability {
         private List<Object> boundActors;
         private long ordinal;
         private int lastTurn=-1,lastHistory=-1,actorCount;
+        // Most recent checked source epoch, including polls without a callback.
+        // A prior RETURN stays historical when the original source advances.
+        private int observedTurn=-1,observedHistory=-1;
         private SpectatorRouting spectatorRouting=SpectatorRouting.NOT_OBSERVED;
         private boolean withdrawn;
         public synchronized boolean withdrawn(){return withdrawn;}
@@ -98,12 +104,20 @@ public final class NativeSidedDispatchReachability {
                 int historyChunks,boolean sourcePinned,boolean ended){
             if(withdrawn)return reply(Verdict.WITHDRAWN);
             if(originalBattle==null || !sourcePinned || ended
-                    || turn<0 || historyChunks<0)return fail(Verdict.SOURCE_UNAVAILABLE);
+                    || turn<0 || turn>10000 || historyChunks<0
+                    || historyChunks>100000)return fail(Verdict.SOURCE_UNAVAILABLE);
             if(battle!=null && battle!=originalBattle)return fail(Verdict.CROSS_BATTLE);
-            if(turn<lastTurn || historyChunks<lastHistory)
+            // Even an initial status-only poll binds physical battle identity.
+            if(turn<observedTurn || historyChunks<observedHistory)
                 return fail(Verdict.REGRESSED_SOURCE);
-            return reply(ordinal==0?Verdict.NO_NATIVE_SIDED_CALLBACK_YET
-                    :Verdict.NATIVE_SIDED_RETURN_OBSERVED_UNVERIFIED);
+            if(battle==null)battle=originalBattle;
+            observedTurn=turn;observedHistory=historyChunks;
+            if(ordinal==0)return reply(Verdict.NO_NATIVE_SIDED_CALLBACK_YET);
+            // The old native callback still happened. But it is not a
+            // CURRENT method-return witness for a newer history/turn.
+            return reply(turn==lastTurn && historyChunks==lastHistory
+                    ?Verdict.NATIVE_SIDED_RETURN_OBSERVED_UNVERIFIED
+                    :Verdict.NATIVE_SIDED_RETURN_PRIOR_EPOCH);
         }
 
         /** Called only from the optional native sendSidedUpdate RETURN mixin. */
@@ -141,7 +155,7 @@ public final class NativeSidedDispatchReachability {
                 return fail(Verdict.INVALID_PACKETS);
             // Multiple legitimate sided packets may return at the SAME
             // turn/history epoch. Count local callbacks, NOT events/delivery.
-            if(turn<lastTurn || historyChunks<lastHistory
+            if(turn<observedTurn || historyChunks<observedHistory
                     || ordinal==Long.MAX_VALUE)
                 return fail(Verdict.REGRESSED_SOURCE);
             if(battle==null)battle=originalBattle;
@@ -149,6 +163,7 @@ public final class NativeSidedDispatchReachability {
                 boundActors=new ArrayList<>(originalBattleActors);
             ordinal++;
             lastTurn=turn;lastHistory=historyChunks;
+            observedTurn=turn;observedHistory=historyChunks;
             actorCount=originalBattleActors.size();
             spectatorRouting=spectatorsAsAlly
                     ?SpectatorRouting.ALLY_BRANCH
