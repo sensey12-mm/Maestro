@@ -7,8 +7,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: verify-${{ github.event.pull_request.number || github.ref }}-${{ github.ref == 'refs/heads/Maestro-6' && github.sha || 'shared' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' }}
+  group: verify-${{ github.event.pull_request.number || github.ref }}-${{ (github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567') && github.sha || 'shared' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567' }}
 jobs:
   verify:
     runs-on: ubuntu-latest
