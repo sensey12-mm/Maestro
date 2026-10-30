@@ -58,6 +58,12 @@ public final class NativeSidedDispatchReachability {
                         && owner.observedHistory==historyChunks;
             }
         }
+        /** Original in-process source identity only; not a public actor proof. */
+        boolean fromBattle(Object originalBattle){
+            synchronized(owner){
+                return originalBattle!=null && current() && owner.battle==originalBattle;
+            }
+        }
         public boolean nativeSidedMethodReturned(){return current();}
         public boolean nativeSplitMethodReturnedProven(){return false;}
         public boolean originalShowdownSplitLinked(){return false;}
