@@ -27,7 +27,7 @@ public final class PublicSplitRoutingGate {
             Set.of("turn","move","switch","drag","replace","detailschange",
                     "-formechange","-transform","-damage","-heal","-status",
                     "-ability","-boost",
-                    "-curestatus","faint");
+                    "-curestatus","faint","-activate","-sidestart","-unboost","-end");
     private static final Pattern ACTOR=Pattern.compile("p[12][a-c]: [^|\\r\\n]{1,80}");
     private static final Pattern HP=Pattern.compile(
             "(?:[0-9]{1,5}/[1-9][0-9]{0,5}|[0-9]{1,3}%)(?: (?:brn|par|psn|tox|slp|frz|fnt))?");
@@ -151,6 +151,36 @@ public final class PublicSplitRoutingGate {
                     || value.matches("\\[(?:from|of)\\] [a-zA-Z0-9 :()'\\-]{1,96}"));
     }
 
+
+    /**
+     * Cobblemon's ShowdownInterpreter stores private sideupdate frames
+     * in the same original history as public updates. Inspect only envelope
+     * framing: never parse, copy or expose private request/error bodies.
+     */
+    private static boolean ignoreNativePrivateSideupdate(String chunk) {
+        if (!chunk.startsWith("sideupdate")) return false;
+        String[] parts=chunk.split("\n",-1);
+        if(parts.length!=3 || !parts[0].equals("sideupdate")
+                || !Set.of("p1","p2").contains(parts[1]))
+            throw invalid();
+        String content=parts[2];
+        if(content.startsWith("|request|")) {
+            String payload=content.substring("|request|".length());
+            // The native RequestInstruction expects JSON or null.
+            // Do not deserialize, reflect, or retain the private payload.
+            if(!(payload.equals("null")
+                    || payload.length()>=2 && payload.startsWith("{")
+                       && payload.endsWith("}")))throw invalid();
+        } else if(content.startsWith("|error|")) {
+            if(content.length()<= "|error|".length())throw invalid();
+        } else throw invalid();
+        return true;
+    }
+
+    private static boolean publicEffect(String s) {
+        return s!=null && s.matches("[a-zA-Z0-9][a-zA-Z0-9 :.()'\\-]{0,95}");
+    }
+
     private record Parsed(int pairs,int direct,List<String> publicEvents,
                           List<PublicEnvelopeProvenance.Route> routes,
                           List<String> splitTargets,List<Integer> splitChunkOrdinals,
@@ -164,8 +194,12 @@ public final class PublicSplitRoutingGate {
         int splits=0,direct=0,turn=0,chunkOrdinal=0;
         for(String chunk:source){
             chunkOrdinal++;
-            if(chunk==null || chunk.length()>16384 || !chunk.startsWith("update\n")
-                    || chunk.indexOf('\r')>=0)throw invalid();
+            if(chunk==null || chunk.length()>16384 || chunk.indexOf('\r')>=0)
+                throw invalid();
+            // A private packet contributes to salted original-history
+            // digests, never to publicEvents, routes, or split receipts.
+            if(ignoreNativePrivateSideupdate(chunk))continue;
+            if(!chunk.startsWith("update\n"))throw invalid();
             String[] lines=chunk.split("\n",-1);
             if(lines.length<2 || lines.length>MAX_LINES+1
                     || !lines[0].equals("update"))throw invalid();
@@ -195,10 +229,15 @@ public final class PublicSplitRoutingGate {
                                 || !ACTOR.matcher(publicFields[2]).matches()
                                 || !publicFields[3].matches("[a-zA-Z0-9][a-zA-Z0-9 ():']{0,95}"))
                             throw invalid();
-                        for(int field=4;field<publicFields.length;field++)
+                        // Download's public ability announcement may include
+                        // a single literal boost-mode suffix, not a generic
+                        // untagged annotation.
+                        if(publicFields.length==5 && publicFields[4].equals("boost")) {
+                            // Exact witnessed public mode only.
+                        } else for(int field=4;field<publicFields.length;field++)
                             if(!tag(publicFields[field]))throw invalid();
                     }
-                    if(type.equals("-boost")){
+                    if(type.equals("-boost") || type.equals("-unboost")){
                         if(publicFields.length<5 || publicFields.length>7
                                 || !ACTOR.matcher(publicFields[2]).matches()
                                 || !Set.of("atk","def","spa","spd","spe",
@@ -207,6 +246,20 @@ public final class PublicSplitRoutingGate {
                             throw invalid();
                         for(int field=5;field<publicFields.length;field++)
                             if(!tag(publicFields[field]))throw invalid();
+                    }
+                    // Independently public-allowlisted and parsed by pinned
+                    // Cobblemon: accept only the narrow source-owned shapes.
+                    if(type.equals("-activate") || type.equals("-end")){
+                        if(publicFields.length<4 || publicFields.length>7
+                                || !ACTOR.matcher(publicFields[2]).matches()
+                                || !publicEffect(publicFields[3]))throw invalid();
+                        for(int field=4;field<publicFields.length;field++)
+                            if(!tag(publicFields[field]))throw invalid();
+                    }
+                    if(type.equals("-sidestart")){
+                        if(publicFields.length!=4
+                                || !publicFields[2].matches("p[12](?:: [^|\\r\\n]{1,80})?")
+                                || !publicEffect(publicFields[3]))throw invalid();
                     }
                     if(type.equals("turn")){
                         if(publicFields.length!=3

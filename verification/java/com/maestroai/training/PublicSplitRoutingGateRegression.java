@@ -147,6 +147,119 @@ final class PublicSplitRoutingGateRegression {
         deny(add(nativeOpening,"update\n|-unboost|p1a: Own|atk|1"),
                 "other unreviewed direct types remain unsupported");
 
+
+        // Phase 6.26: the pinned native interpreter stores private sideupdate
+        // requests/errors alongside public update chunks. Synthetic only:
+        // source-shaped messages without ANY real user battle payloads.
+        var sevenChunks=List.of(
+                "sideupdate\np1\n|request|{\"active\":[]}",
+                split("p1","|switch|p1a: Alpha|Genesect, L100|80/100",
+                        "|switch|p1a: Alpha|Genesect, L100|100/100"),
+                split("p2","|switch|p2a: Beta|Xerneas, L100|70/100",
+                        "|switch|p2a: Beta|Xerneas, L100|100/100"),
+                "update\n|-ability|p2a: Beta|Download|boost",
+                "update\n|-boost|p2a: Beta|spa|1",
+                "update\n|turn|1",
+                "sideupdate\np2\n|request|{\"active\":[{\"moves\":[]}]}");
+        var mixedSession=new PublicSplitRoutingGate.Session();
+        var mixed=inspect(mixedSession,battle,sevenChunks);
+        check(mixed.current() && mixed.verdict()
+                    ==PublicSplitRoutingGate.Verdict.STRUCTURAL_PUBLIC_PRIVATE_SEPARATION
+                && mixed.splitPairs()==2 && mixed.directEvents()==3
+                && mixed.chunkCount()==7 && mixed.publicTurn()==1,
+                "real-shaped seven-chunk opening skips only private-side frames");
+        var mixedPublic=PublicProtocolFilter.publicEvents(sevenChunks);
+        var mixedProvenance=PublicEnvelopeProvenance.reconcile(
+                sevenChunks,mixedPublic);
+        check(mixedPublic.size()==5 && mixedProvenance.complete()
+                && mixedProvenance.origins().size()==5
+                && mixedProvenance.origins().get(0).route()
+                    ==PublicEnvelopeProvenance.Route.SPLIT_PUBLIC
+                && mixedProvenance.origins().get(1).route()
+                    ==PublicEnvelopeProvenance.Route.SPLIT_PUBLIC
+                && mixedProvenance.origins().get(2).route()
+                    ==PublicEnvelopeProvenance.Route.DIRECT_UPDATE,
+                "two independent public consumers ignore sideupdate bodies");
+        check(!mixed.toString().contains("request")
+                && !mixed.toString().contains("active")
+                && !mixed.toString().contains(SECRET)
+                && !mixed.privatePayloadExportable()
+                && !mixed.liveSourceDeliveryAuthenticated()
+                && !mixed.runtimeActorAuthenticated()
+                && !mixed.publicReadinessLeaseAuthorized()
+                && !mixed.shadowSearchAuthorized()
+                && !mixed.tacticalDecisionAuthorized()
+                && !mixed.livePromotionAuthorized(),
+                "accepted private frame stays private and has no tactical authority");
+        var expanded=add(sevenChunks,
+                "update\n|-activate|p1a: Alpha|move: Substitute",
+                "update\n|-sidestart|p1: Alpha|move: Stealth Rock",
+                "update\n|-unboost|p2a: Beta|def|1",
+                "update\n|-end|p1a: Alpha|move: Substitute|[silent]");
+        var expandedReport=inspect(mixedSession,battle,expanded);
+        check(expandedReport.current() && expandedReport.revision()==2
+                && expandedReport.splitPairs()==2
+                && expandedReport.directEvents()==7
+                && expandedReport.chunkCount()==11
+                && PublicEnvelopeProvenance.reconcile(expanded,
+                        PublicProtocolFilter.publicEvents(expanded)).complete(),
+                "narrow activation, side condition, unboost and end formats accepted");
+        check(!expandedReport.liveSourceDeliveryAuthenticated()
+                && !expandedReport.publicReadinessLeaseAuthorized()
+                && !expandedReport.shadowSearchAuthorized()
+                && !expandedReport.livePromotionAuthorized(),
+                "newly recognized direct kinds never grant delivery or gameplay control");
+        var privateAltered=new ArrayList<>(expanded);
+        privateAltered.set(0,"sideupdate\np1\n|request|{\"active\":[1]}");
+        var poisoned=inspect(mixedSession,battle,privateAltered);
+        check(poisoned.verdict()==PublicSplitRoutingGate.Verdict.HISTORY_REWRITTEN
+                && mixedSession.withdrawn() && !expandedReport.current(),
+                "private-frame alteration still revokes salted history custody");
+        deny(add(nativeOpening,"update\n|-ability|p2a: Opp|Download|boost|[silent]"),
+                "literal ability mode cannot blend with arbitrary annotations");
+        deny(add(nativeOpening,"update\n|-ability|p2a: Opp|Download|custom"),
+                "unreviewed untagged ability mode rejected");
+        deny(add(nativeOpening,"update\n|-activate|p1a: Own|{"+SECRET+"}"),
+                "private object not admissible as public effect");
+        deny(add(nativeOpening,"update\n|-sidestart|p3: Unlisted|move: Spikes"),
+                "unsupported third side cannot be introduced as a public event");
+        deny(add(nativeOpening,"update\n|-sidestart|p1: Own|{"+SECRET+"}"),
+                "private source object not admissible as a side condition");
+        deny(add(nativeOpening,"update\n|-unboost|p1a: Own|atk|99"),
+                "stat magnitude out of supported bounds rejected");
+        deny(add(nativeOpening,"update\n|-end|p1a: Own|move: Substitute|[private] "+SECRET),
+                "unrecognized end annotation refused");
+        deny(add(nativeOpening,"sideupdate\np3\n|request|{}"),
+                "wrong native side target refused");
+        deny(add(nativeOpening,"sideupdate\np1\n|move|p1a: Own|Secret"),
+                "public-looking event inside private sideupdate refused");
+        deny(add(nativeOpening,"sideupdate\np1\n|request|{}\nupdate\n|turn|2"),
+                "embedded frame inside opaque private envelope refused");
+        deny(add(nativeOpening,"sideupdate\np1\n|request|"),
+                "empty private request refused");
+        deny(add(nativeOpening,"sideupdate\np1\n|error|"),
+                "empty private error refused");
+        deny(add(nativeOpening,"update\n|request|{}"),
+                "private request cannot masquerade as a public update");
+        var benignPrivateError=add(nativeOpening,
+                "sideupdate\np1\n|error|[Invalid choice] unsupported action");
+        var errorReceipt=inspect(new PublicSplitRoutingGate.Session(),
+                battle,benignPrivateError);
+        check(errorReceipt.current() && errorReceipt.chunkCount()==6
+                && errorReceipt.directEvents()==3
+                && !errorReceipt.privatePayloadExportable(),
+                "synthetic native private error skipped without exposing text");
+        var sensitiveRequest=add(nativeOpening,
+                "sideupdate\np1\n|request|{\"secret\":\""+SECRET+"\"}");
+        var sensitiveReceipt=inspect(new PublicSplitRoutingGate.Session(),
+                battle,sensitiveRequest);
+        check(sensitiveReceipt.current()
+                && !sensitiveReceipt.toString().contains(SECRET)
+                && PublicProtocolFilter.publicEvents(sensitiveRequest).size()==5
+                && PublicEnvelopeProvenance.reconcile(sensitiveRequest,
+                        PublicProtocolFilter.publicEvents(sensitiveRequest)).complete(),
+                "opaque valid private JSON never leaks into public events");
+
         // The independently implemented filter sees ONLY second/public split
         // lines. Phase 6.9 must *still* reject the entire private-bearing input.
         var filtered=PublicProtocolFilter.publicEvents(one);
