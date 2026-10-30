@@ -1,7 +1,7 @@
 name: Verify MaestroAI
 on:
   push:
-    branches: [main, Maestro457, Maestro-6]
+    branches: [main, Maestro457, Maestro-6, Maestro4567]
   pull_request:
     branches: [main]
 permissions:
