@@ -164,4 +164,35 @@ public final class NativeSidedDispatchReachability {
             return reply(Verdict.WITHDRAWN);
         }
     }
+    /**
+     * One physical-battle owner. Native RETURN callbacks may arrive BEFORE
+     * the first AI choice resets Legacy memory: same-battle evidence survives
+     * that reset. Withdrawn sessions cannot revive within that battle.
+     */
+    public static final class BattleScope {
+        private Object activeBattle;
+        private Session session=new Session();
+
+        public synchronized Session forBattle(Object physicalBattle){
+            if(physicalBattle==null){
+                session.withdraw();
+                return session;
+            }
+            if(activeBattle!=physicalBattle){
+                session.withdraw();
+                session=new Session();
+                activeBattle=physicalBattle;
+            }
+            return session;
+        }
+        public synchronized Report end(Object physicalBattle){
+            // Late end from a previous battle cannot revoke a newer source.
+            if(physicalBattle==null || activeBattle!=physicalBattle)return null;
+            // Keep identity bound: late callbacks in this ended battle MUST
+            // NOT trigger a fresh session.
+            return session.battleEnded(physicalBattle);
+        }
+        public synchronized void withdraw(){session.withdraw();}
+    }
+
 }

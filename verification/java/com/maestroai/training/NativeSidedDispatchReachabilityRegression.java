@@ -152,7 +152,71 @@ final class NativeSidedDispatchReachabilityRegression {
         require(fresh.status(new Object(),0,0,true,false).verdict()
                 ==NativeSidedDispatchReachability.Verdict.NO_NATIVE_SIDED_CALLBACK_YET,
                 "new physical battle has zero callback evidence");
-        System.out.println("Phase 6.24 native-sided reachability regression PASS: "
+
+        // 6.25: the initial native callbacks happen before first AI choice.
+        // They must survive Legacy's first-choice memory reset.
+        Object openingBattle=new Object();
+        var scope=new NativeSidedDispatchReachability.BattleScope();
+        var early=scope.forBattle(openingBattle);
+        var e1=returned(early,openingBattle,one,actors,0,5,false);
+        var e2=returned(early,openingBattle,two,actors,0,5,false);
+        require(e1.observedSidedReturnOrdinal()==1
+                && e2.observedSidedReturnOrdinal()==2,
+                "native events before first choice have real ordinals");
+        require(scope.forBattle(openingBattle)==early,
+                "first choice preserves exact same-battle source");
+        var firstChoice=scope.forBattle(openingBattle)
+                .status(openingBattle,0,7,true,false);
+        require(firstChoice.current()
+                && firstChoice.observedSidedReturnOrdinal()==2
+                && firstChoice.verdict()
+                    ==NativeSidedDispatchReachability.Verdict.NATIVE_SIDED_RETURN_OBSERVED_UNVERIFIED,
+                "first choice never reports NO callback after real early sends");
+        denyAll(firstChoice);
+        var later=returned(scope.forBattle(openingBattle),
+                openingBattle,one,actors,1,8,false);
+        require(later.current() && later.observedSidedReturnOrdinal()==3
+                && !e2.current(),
+                "post-choice callbacks extend existing ordinal");
+        scope.withdraw();
+        require(scope.forBattle(openingBattle)==early
+                && scope.forBattle(openingBattle)
+                    .status(openingBattle,1,8,true,false).verdict()
+                    ==NativeSidedDispatchReachability.Verdict.WITHDRAWN,
+                "same battle cannot revive withdrawn session at another choice");
+        Object nextBattle=new Object();
+        var next=scope.forBattle(nextBattle);
+        require(next!=early && !later.current()
+                && next.status(nextBattle,0,0,true,false).verdict()
+                    ==NativeSidedDispatchReachability.Verdict.NO_NATIVE_SIDED_CALLBACK_YET,
+                "new battle starts independent with no callbacks");
+        require(scope.end(openingBattle)==null
+                && scope.forBattle(nextBattle)==next,
+                "late previous-battle end never withdraws new session");
+        var nextFirst=returned(next,nextBattle,two,actors,0,2,true);
+        require(nextFirst.current() && nextFirst.observedSidedReturnOrdinal()==1,
+                "new battle's initial callback is ordinal one");
+        var ended=scope.end(nextBattle);
+        require(ended!=null
+                && ended.verdict()==NativeSidedDispatchReachability.Verdict.WITHDRAWN
+                && next.withdrawn() && !nextFirst.current(),
+                "native battle-end revokes original source and returns redacted receipt");
+        denyAll(ended);
+        require(scope.forBattle(nextBattle)==next
+                && scope.forBattle(nextBattle)
+                    .nativeReturn(nextBattle,actors,one,new Object(),new Object(),
+                            false,1,3,true,false).verdict()
+                    ==NativeSidedDispatchReachability.Verdict.WITHDRAWN,
+                "late same-battle callbacks after end stay withdrawn");
+        Object futureBattle=new Object();
+        var future=scope.forBattle(futureBattle);
+        var futureFirst=returned(future,futureBattle,one,actors,0,2,false);
+        require(futureFirst.current()
+                && futureFirst.observedSidedReturnOrdinal()==1
+                && scope.forBattle(futureBattle)==future,
+                "future native dispatch precedes future first choice safely");
+
+        System.out.println("Phase 6.24 native-sided reachability regression PASS: 
                 +count+" synthetic assertions");
     }
 }

@@ -328,7 +328,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase620Correlation.withdraw();
         phase621Gate.withdraw();
         phase622Harness.withdraw();
-        phase624Sided.withdraw();
+        phase624Scope.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4643,8 +4643,9 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase621Gate = new NativeEvidenceEndToEndGate.Session();
         phase622Harness.withdraw();
         phase622Harness = new RuntimeObservationAcceptanceHarness.Session();
-        phase624Sided.withdraw();
-        phase624Sided = new NativeSidedDispatchReachability.Session();
+        // Native sided callbacks at turn 0 can precede the first AI
+        // choice. Preserve the existing same-battle witness.
+        if (PHASE624_OBSERVE) phase624Scope.forBattle(battle);
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4702,8 +4703,8 @@ public class MaestroBattleAI extends RCTBattleAI {
     // Phase 6.24: sided-return is separate from Phase 6.18 split-return.
     private static final boolean PHASE624_OBSERVE =
             Boolean.getBoolean("maestroai.phase624Observe");
-    private NativeSidedDispatchReachability.Session phase624Sided =
-            new NativeSidedDispatchReachability.Session();
+    private final NativeSidedDispatchReachability.BattleScope phase624Scope =
+            new NativeSidedDispatchReachability.BattleScope();
 
     /**
      * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
@@ -4715,7 +4716,10 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (PHASE622_OBSERVE) try {
             System.out.println("[MaestroAI] Phase 6.22 " + phase622Harness.battleEndHook(battle));
         } catch (RuntimeException ignored) { phase622Harness.withdraw(); }
-        if (PHASE624_OBSERVE) phase624Sided.battleEnded(battle);
+        if (PHASE624_OBSERVE) {
+            var ended=phase624Scope.end(battle);
+            if(ended!=null) System.out.println("[MaestroAI] Phase 6.24 "+ended);
+        }
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
         if (PHASE621_OBSERVE) {
@@ -4740,13 +4744,13 @@ public class MaestroBattleAI extends RCTBattleAI {
         try {
             var actors = new java.util.ArrayList<Object>();
             for (var actor : battle.getActors()) actors.add(actor);
-            var receipt=phase624Sided.nativeReturn(battle,actors,
+            var receipt=phase624Scope.forBattle(battle).nativeReturn(battle,actors,
                     sourceActor,allyPacket,opponentPacket,spectatorsAsAlly,
                     battle.getTurn(),battle.getShowdownMessages().size(),
                     ownTransportVersionSupported(),battle.getEnded());
             System.out.println("[MaestroAI] Phase 6.24 "+receipt);
         } catch(RuntimeException unavailable) {
-            phase624Sided.withdraw();
+            phase624Scope.withdraw();
             System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
         }
     }
@@ -4797,11 +4801,12 @@ public class MaestroBattleAI extends RCTBattleAI {
             }
             List<String> history = battle.getShowdownMessages();
             if (PHASE624_OBSERVE) try {
-                var status=phase624Sided.status(battle,battle.getTurn(),
+                var status=phase624Scope.forBattle(battle).status(
+                        battle,battle.getTurn(),
                         history.size(),ownTransportVersionSupported(),battle.getEnded());
                 System.out.println("[MaestroAI] Phase 6.24 "+status);
             } catch(RuntimeException unavailable) {
-                phase624Sided.withdraw();
+                phase624Scope.withdraw();
                 System.out.println("[MaestroAI] Phase 6.24 sidedStatus=UNKNOWN;authority=NONE");
             }
             if (PHASE622_OBSERVE) try {
