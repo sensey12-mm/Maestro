@@ -49,6 +49,8 @@ def check_workflow(source):
             raise ValueError('Missing main branch verification')
         if event == 'push' and 'Maestro-6' not in branches:
             raise ValueError('Missing Maestro-6 Phase 6 CI trigger')
+        if event == 'push' and 'Maestro4567' not in branches:
+            raise ValueError('Missing Maestro4567 integration CI trigger')
         # Required verify must be scheduled for every main PR/push, including
         # README-only changes. Workflow-level path skips leave required checks pending.
         if re.search(r'(?m)^ +(paths|paths-ignore):', block):
@@ -92,7 +94,14 @@ class SafeguardRegression(unittest.TestCase):
                 with self.subTest(event=event), self.assertRaises(ValueError):
                     check_workflow(source.replace('  ' + event + ':', replacement, 1))
         with self.assertRaises(ValueError):
-            check_workflow(source.replace('branches: [main, Maestro457, Maestro-6]', 'branches: [other]'))
+            check_workflow(source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567]', 'branches: [other]'))
+    def test_dedicated_integration_branch_cannot_be_skipped(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        broken = source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567]',
+                                'branches: [main, Maestro457, Maestro-6]')
+        with self.assertRaisesRegex(ValueError, 'Maestro4567'):
+            check_workflow(broken)
+
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)
         with tempfile.TemporaryDirectory() as d:
