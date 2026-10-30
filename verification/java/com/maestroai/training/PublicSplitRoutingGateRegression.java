@@ -144,7 +144,7 @@ final class PublicSplitRoutingGateRegression {
                 "unrecognized boost annotation");
         deny(add(nativeOpening,"sideupdate\np1\n|request|"+SECRET),
                 "native private request never recast as a public event");
-        deny(add(nativeOpening,"update\n|-unboost|p1a: Own|atk|1"),
+        deny(add(nativeOpening,"update\n|-item|p1a: Own|Leftovers"),
                 "other unreviewed direct types remain unsupported");
 
 
