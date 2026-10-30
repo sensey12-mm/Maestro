@@ -216,7 +216,7 @@ final class NativeSidedDispatchReachabilityRegression {
                 && scope.forBattle(futureBattle)==future,
                 "future native dispatch precedes future first choice safely");
 
-        System.out.println("Phase 6.24 native-sided reachability regression PASS: 
+        System.out.println("Phase 6.24 native-sided reachability regression PASS: "
                 +count+" synthetic assertions");
     }
 }
