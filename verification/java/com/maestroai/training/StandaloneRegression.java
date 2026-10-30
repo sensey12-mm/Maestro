@@ -445,6 +445,7 @@ public final class StandaloneRegression {
         Phase7ShadowReplayRegression.run();
         Phase7SelfPlayRegression.run();
         Integration457Regression.run();
+        Integration4567Regression.run();
         OfflineShadowTacticalAdapterRegression.run();
         OfflineShadowProvenanceGateRegression.run();
         OfflineShadowResponseScenariosRegression.run();
