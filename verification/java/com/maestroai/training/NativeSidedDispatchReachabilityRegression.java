@@ -209,11 +209,11 @@ final class NativeSidedDispatchReachabilityRegression {
                     ==NativeSidedDispatchReachability.Verdict.WITHDRAWN,
                 "late same-battle callbacks after end stay withdrawn");
         Object futureBattle=new Object();
-        var future=scope.forBattle(futureBattle);
-        var futureFirst=returned(future,futureBattle,one,actors,0,2,false);
+        var nextPhysicalSession=scope.forBattle(futureBattle);
+        var futureFirst=returned(nextPhysicalSession,futureBattle,one,actors,0,2,false);
         require(futureFirst.current()
                 && futureFirst.observedSidedReturnOrdinal()==1
-                && scope.forBattle(futureBattle)==future,
+                && scope.forBattle(futureBattle)==nextPhysicalSession,
                 "future native dispatch precedes future first choice safely");
 
         System.out.println("Phase 6.24 native-sided reachability regression PASS: "
