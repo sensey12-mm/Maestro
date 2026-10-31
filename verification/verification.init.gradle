@@ -30,6 +30,18 @@ allprojects {
                         System.getProperty('maestroai.phase5HistoricalRolesObserve', 'false')
             }
         }
+        p.tasks.register('phase5ArchiveImport', JavaExec) {
+            dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            classpath = p.sourceSets.verification.output +
+                    p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
+                    p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
+            mainClass = 'com.maestroai.training.PublicHistoricalRoleArchiveProvisioner'
+            doFirst {
+                if (!p.hasProperty('phase5ImportArgs'))
+                    throw new GradleException('Missing phase5ImportArgs: see Phase 5 operator guide')
+                args(p.property('phase5ImportArgs').toString().split('\\|', -1))
+            }
+        }
         p.tasks.register('phase7Benchmark', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
             classpath = p.sourceSets.verification.output +

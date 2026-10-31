@@ -60,3 +60,40 @@ On Linux use `./gradlew`. The `...` notation above is an instruction placeholder
 - `OBSERVER_DISABLED` / `ARCHIVE_UNPROVISIONED`: no historical source was installed.
 
 This never loads a battle, writes private files, creates keys, downloads replay content or enables Shadow decisions. A successful preflight is a prerequisite for manual Minecraft acceptance, not a substitute. The operator must separately validate replay-use permission and clock trust; synthetic test fixtures cannot confer that approval.
+
+## Offline signed-custody importer (v1.0.86)
+
+This is an **offline local operator tool**, not a new intelligence engine. It imports a separately reviewed, externally **Ed25519-signed** manifest into the existing atomic Phase 5 custody journal. It never generates keys, signs statements, approves replays or downloads historical data.
+
+Inputs:
+- Existing **absolute** state directory (fresh and empty of custody state for \`init\`), e.g. \`C:\MaestroLocal\custody\`.
+- Absolute independent bootstrap root \`root.properties\`, held **outside** the state directory and from an operator-verified trusted channel. Exact keys:
+  \`bootstrapKeyId\`, \`bootstrapEd25519Spki\`, \`bootstrapKeyActiveFrom\`, \`bootstrapKeyringEpoch\`, \`bootstrapMinimumRevision\`, \`bootstrapEarliestSignature\`; optional \`bootstrapManifestDigest\`. All key material is **public**.
+- Absolute externally signed \`signed-review.properties\` outside the state directory. Required:
+  \`schemaVersion=1\`, \`signerKeyId\`, \`signedAtEpochSecond\`, \`previousManifestDigest\`, \`signatureBase64\`, \`ledgerRevision\`, \`decisionCount\`, plus for each zero-based decision \`decision.0.replayId\`, \`decision.0.format\`, \`decision.0.inputSha256\`, \`decision.0.status\`, \`decision.0.decidedAtEpochSecond\`, \`decision.0.expiresAtEpochSecond\`, \`decision.0.reviewDigest\`. For additional decisions use \`decision.1.*\` etc. These are **already signed fields**. The external signer must sign the exact bytes from \`PublicSignedCustody.canonicalBytes\` in a controlled offline signing process. This importer cannot construct a genuine approved decision on its own.
+- A separately validated **trusted Unix UTC epoch second** (do not copy the current time from an untrusted replay or bundle). The tool accepts it as a supplied value; it **cannot** cryptographically attest clock accuracy.
+- For \`advance\` only, absolute independently stored \`prior-pin.properties\` with \`checkpointStateSha256\`, \`checkpointRevision\`, \`checkpointKeyringEpoch\`. Do NOT use a pin supplied in the untrusted bundle or state directory.
+
+The two arguments below are illustrative placeholders; they are not real approved inputs. On Windows use a CMD shell with paths without \`|\`, running from the public Maestro source checkout:
+
+\`\`\`text
+gradlew.bat --no-daemon -I verification/verification.init.gradle phase5ArchiveImport "-Pphase5ImportArgs=init|C:\MaestroLocal\custody|C:\MaestroTrust\root.properties|C:\MaestroTrust\signed-review.properties|<verified-unix-second>"
+\`\`\`
+
+To append **one already signed** later ledger decision (for example revocation), use:
+
+\`\`\`text
+gradlew.bat --no-daemon -I verification/verification.init.gradle phase5ArchiveImport "-Pphase5ImportArgs=advance|C:\MaestroLocal\custody|C:\MaestroTrust\root.properties|C:\MaestroTrust\signed-review-next.properties|C:\MaestroTrust\prior-pin.properties|<verified-unix-second>"
+\`\`\`
+
+The tool verifies the external Ed25519 root, signature, prior signed digest, appended chronological decision, external pin and state before writing. A rejected import prints only \`Phase5Import[verdict=ABSTAIN;authority=NONE]\`; it does not print file paths or replay IDs. A successful import prints the **new exact checkpoint** for the operator to independently anchor **outside** the custody directory. Store this checkpoint in trusted settings before accepting another update. This tool does **not** support keyring rotations: they require separately verified signed \`KeyringUpdate\` and a new checkpoint.
+
+### Exact Minecraft handoff
+
+1. Verify the final exact-commit public CI/JAR, and independently verify real replay-use rights, signer authority and clock.
+2. Import the externally signed manifest with the offline tool; save its checkpoint separately. The reviewed spectator replay file remains separate; the import does **not** download it or automatically grant its use.
+3. Configure \`-Dmaestroai.phase5HistoricalRolesObserve=true\` and the existing \`maestroai.phase5Archive.*\` JVM properties using the same root, replay and independently pinned *latest* checkpoint. Restart Minecraft after every approved custody advance.
+4. Run \`phase5ArchivePreflight\`. Only \`SOURCE_READY_FOR_MINECRAFT_TEST\` is locally provisioned; it still does **not** prove real rights or Minecraft runtime behavior.
+5. Use the existing 4 BrAI teams/8 battles and the [installed acceptance matrix](PHASE5_INSTALLED_HISTORICAL_INTELLIGENCE_ACCEPTANCE.md); verify actual callbacks, historical/live separation, identity abstention and Legacy chooser isolation. No game acceptance is claimed until that evidence exists.
+
+**Do not** put private signing keys, private gameplay logs, unreviewed replays or local operator trust files in GitHub. The tool's successful local signature check does not itself establish independent rights or latest-keyring custody.

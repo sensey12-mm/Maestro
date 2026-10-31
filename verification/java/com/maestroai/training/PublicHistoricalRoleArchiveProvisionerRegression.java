@@ -1,0 +1,166 @@
+package com.maestroai.training;
+
+import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
+import java.security.*;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/** Offline provisioner: synthetic signatures only, NEVER operator approvals. */
+final class PublicHistoricalRoleArchiveProvisionerRegression {
+    private PublicHistoricalRoleArchiveProvisionerRegression(){}
+    private static int checks;
+    private static void check(boolean ok,String why){
+        if(!ok)throw new AssertionError("Archive import regression: "+why);
+        checks++;
+    }
+    private static void reject(Runnable runnable,String why){
+        try{runnable.run();}
+        catch(IllegalArgumentException valid){
+            check(!valid.toString().contains("SECRET_REVIEWER")
+                    && !valid.toString().contains("gen9ou-99887766"),why);
+            return;
+        }
+        throw new AssertionError("Archive import accepted "+why);
+    }
+    private static String asText(Map<String,String> values){
+        return values.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .map(x->x.getKey()+"="+x.getValue()+"\n")
+                .collect(Collectors.joining());
+    }
+    private static void put(Path file,Map<String,String> fields)throws Exception{
+        Files.writeString(file,asText(fields),StandardCharsets.UTF_8);
+    }
+    private static String signedText(PublicSignedCustody.SignedManifest signed){
+        var fields=new HashMap<String,String>();
+        fields.put("schemaVersion","1");
+        fields.put("signerKeyId",signed.signerKeyId());
+        fields.put("signedAtEpochSecond",Long.toString(signed.signedAtEpochSecond()));
+        fields.put("previousManifestDigest",signed.previousManifestDigest());
+        fields.put("signatureBase64",signed.signatureBase64());
+        fields.put("decisionCount",Integer.toString(signed.ledger().decisions().size()));
+        fields.put("ledgerRevision",Long.toString(signed.ledger().revision()));
+        for(int i=0;i<signed.ledger().decisions().size();i++){
+            var d=signed.ledger().decisions().get(i);
+            String prefix="decision."+i+".";
+            fields.put(prefix+"replayId",d.replayId());
+            fields.put(prefix+"format",d.format());
+            fields.put(prefix+"inputSha256",d.inputSha256());
+            fields.put(prefix+"status",d.status().name());
+            fields.put(prefix+"decidedAtEpochSecond",Long.toString(d.decidedAtEpochSecond()));
+            fields.put(prefix+"expiresAtEpochSecond",Long.toString(d.expiresAtEpochSecond()));
+            fields.put(prefix+"reviewDigest",d.reviewDigest());
+        }
+        return asText(fields);
+    }
+    private static PublicSignedCustody.SignedManifest sign(
+            KeyPair pair,PublicReplayCustody.Ledger ledger,long when,String prior)throws Exception{
+        byte[] bytes=PublicSignedCustody.canonicalBytes(1,"reviewer-a",when,prior,ledger);
+        var signature=Signature.getInstance("Ed25519");
+        signature.initSign(pair.getPrivate());
+        signature.update(bytes);
+        return new PublicSignedCustody.SignedManifest(1,"reviewer-a",when,
+                prior,ledger,Base64.getEncoder().encodeToString(signature.sign()));
+    }
+    private static void delete(Path dir)throws Exception{
+        try(var stream=Files.walk(dir)){
+            for(Path path:stream.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);
+        }
+    }
+    static void run()throws Exception{
+        Path rootDirectory=Files.createTempDirectory("phase5-offline-import-").toAbsolutePath();
+        try{
+            Path state=Files.createDirectory(rootDirectory.resolve("state"));
+            Path root=Files.createFile(rootDirectory.resolve("independent-root.properties"));
+            Path signedFile=Files.createFile(rootDirectory.resolve("signed-review.properties"));
+            Path pinFile=Files.createFile(rootDirectory.resolve("external-prior-pin.properties"));
+            var signer=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            var attacker=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            final long time=1_700_000_100L;
+            var rootFields=new HashMap<String,String>();
+            rootFields.put("bootstrapKeyId","reviewer-a");
+            rootFields.put("bootstrapEd25519Spki",Base64.getEncoder()
+                    .encodeToString(signer.getPublic().getEncoded()));
+            rootFields.put("bootstrapKeyActiveFrom",Long.toString(time-200));
+            rootFields.put("bootstrapKeyringEpoch","1");
+            rootFields.put("bootstrapMinimumRevision","1");
+            rootFields.put("bootstrapEarliestSignature",Long.toString(time-200));
+            put(root,rootFields);
+            var decision=new PublicReplayCustody.Decision("gen9ou-99887766","gen9ou",
+                    "a".repeat(64),PublicReplayCustody.Status.APPROVED,
+                    time-60,time+500,"b".repeat(64));
+            var first=new PublicReplayCustody.Ledger(1,1,List.of(decision));
+            var signed=sign(signer,first,time-40,"0".repeat(64));
+            Files.writeString(signedFile,signedText(signed));
+            var provisioned=PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    false,state,root,signedFile,null,time);
+            check(provisioned.custodyRevision()==1 && provisioned.keyringEpoch()==1,
+                    "verified initial signed import");
+            var policy=new PublicSignedCustody.TrustedPolicy(1,1,1,time-200,"",
+                    List.of(new PublicSignedCustody.TrustedKey("reviewer-a",
+                            rootFields.get("bootstrapEd25519Spki"),time-200,0)));
+            check(PublicCustodyTrustStore.recover(state,policy,provisioned,time)
+                    .signedLedgerVerified(),"imported journal recoverable from external root");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    false,state,root,signedFile,null,time),"no overwrite on init");
+            put(pinFile,Map.of("checkpointStateSha256",provisioned.stateSha256(),
+                    "checkpointRevision","1","checkpointKeyringEpoch","1"));
+            var revoked=new PublicReplayCustody.Decision(decision.replayId(),
+                    decision.format(),decision.inputSha256(),
+                    PublicReplayCustody.Status.REVOKED,time-20,0,"c".repeat(64));
+            var after=new PublicReplayCustody.Ledger(1,2,List.of(decision,revoked));
+            var next=sign(signer,after,time-10,PublicSignedCustody.manifestDigest(signed));
+            Files.writeString(signedFile,signedText(next));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,signedFile,null,time),"advance needs external pin");
+            var forgedFields=new HashMap<>(rootFields);
+            forgedFields.put("bootstrapEd25519Spki",Base64.getEncoder()
+                    .encodeToString(attacker.getPublic().getEncoded()));
+            Path badRoot=rootDirectory.resolve("forged-root.properties");
+            put(badRoot,forgedFields);
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,badRoot,signedFile,pinFile,time),"forged independent key");
+            Path corruptSigned=rootDirectory.resolve("corrupt-signed.properties");
+            Files.writeString(corruptSigned,signedText(next)
+                    .replace("status=REVOKED","status=APPROVED"));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,corruptSigned,pinFile,time),"tampered signed revocation");
+            Path duplicate=rootDirectory.resolve("duplicate.properties");
+            Files.writeString(duplicate,signedText(next)+"signerKeyId=reviewer-a\n");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,duplicate,pinFile,time),"ambiguous duplicate keys");
+            Path internalPin=state.resolve("untrusted-pin.properties");
+            Files.writeString(internalPin,Files.readString(pinFile));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,signedFile,internalPin,time),
+                    "checkpoint cannot originate inside journal directory");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,signedFile,pinFile,time-100),
+                    "future-signed successor rejected on old clock");
+            check(PublicCustodyTrustStore.recover(state,policy,provisioned,time)
+                    .custodyRevision()==1,"failed imports preserve original checkpoint");
+
+            var current=PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,signedFile,pinFile,time);
+            check(current.custodyRevision()==2 && !current.equals(provisioned),
+                    "signed append-only revocation imported");
+            check(PublicCustodyTrustStore.recover(state,policy,current,time)
+                    .custodyRevision()==2,"revocation journal validates");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,signedFile,pinFile,time),"stale pin replay fails");
+            reject(()->PublicCustodyTrustStore.recover(state,policy,provisioned,time),
+                    "old independent checkpoint cannot downgrade state");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    false,state,root,signedFile,null,time),"no replay of init after advance");
+            check(PublicCustodyTrustStore.recover(state,policy,current,time)
+                    .signedLedgerVerified(),"failed rollback leaves latest state intact");
+            var keyInside=state.resolve("fake-root.properties");
+            Files.writeString(keyInside,Files.readString(root));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,keyInside,signedFile,pinFile,time),
+                    "bootstrap from state directory is never independently anchored");
+            System.out.println("Phase 5 offline signed import PASS: "+checks
+                    +" bootstrap/revocation/rollback cases; Minecraft UNTESTED");
+        }finally{delete(rootDirectory);}
+    }
+}
