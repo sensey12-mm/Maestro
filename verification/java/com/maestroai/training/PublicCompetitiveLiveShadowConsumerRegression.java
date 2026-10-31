@@ -107,6 +107,27 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
         check(live.current(),"synthetic online source ready for historical role testing");
         return new SyntheticLiveFixture(live,f.routingOwner(),f.battle(),original);
     }
+    /**
+     * Real Phase 6 native/public source construction, but deliberately
+     * ambiguous public appearance (Illusion/Transform/form change).
+     */
+    static SyntheticLiveFixture syntheticUncertainLiveSource(String event){
+        if(!Set.of("illusion","transform","formechange").contains(event))
+            throw new IllegalArgumentException("Unsupported synthetic uncertainty");
+        String protocol=switch(event){
+            case "illusion" -> "update\n|replace|p2a: "+SECRET+"|Zoroark, L100|100/100";
+            case "transform" -> "update\n|-transform|p2a: "+SECRET+"|p1a: Own";
+            default -> "update\n|-formechange|p2a: "+SECRET+"|Glimmora-Rare";
+        };
+        var original=history("update\n|move|p2a: "+SECRET+"|Stealth Rock|p1a: Own",protocol);
+        var f=fixture(new Object(),false,original);
+        var live=evaluate(new PublicCompetitiveLiveShadowConsumer.Session(),f);
+        check(!live.current()
+                && live.observedCapabilities().isEmpty()
+                && !live.tacticalDecisionAuthorized(),
+                "ambiguous native public appearance never issues a live tactical lease");
+        return new SyntheticLiveFixture(live,f.routingOwner(),f.battle(),original);
+    }
 
     static void run() throws Exception {
         var pin=PublicCompetitiveLiveShadowConsumer.Request.pinned();

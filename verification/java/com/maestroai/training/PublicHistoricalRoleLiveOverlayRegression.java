@@ -83,6 +83,25 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                 "replay revokes earlier overlay rather than refreshing a role");
         noAuthority(replay);
 
+        // Phase 6 native sided source, identity continuity and Phase 5 live
+        // consumer all participate; uncertainty cannot rebind an archived
+        // source to Illusion, Transform, or a newly revealed form.
+        for(String uncertain:new String[]{"illusion","transform","formechange"}){
+            var ambiguous=PublicCompetitiveLiveShadowConsumerRegression
+                    .syntheticUncertainLiveSource(uncertain);
+            var undecided=new PublicHistoricalRoleLiveOverlay.Session();
+            var denied=undecided.inspect(ambiguous.physicalBattle(),
+                    ambiguous.live(),history.archive(),refreshed);
+            check(denied.verdict()
+                    ==PublicHistoricalRoleLiveOverlay.Verdict.SOURCE_MISMATCH
+                    && undecided.withdrawn()
+                    && !denied.current()
+                    && denied.unboundHistoricalRolePossibilities().isEmpty()
+                    && denied.currentPublicCapabilities().isEmpty(),
+                    "Phase 6 uncertainty abstains from historical roles: "+uncertain);
+            noAuthority(denied);
+        }
+
         var foreign=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
         var different=new PublicHistoricalRoleLiveOverlay.Session();
         var mismatch=different.inspect(new Object(),source.live(),history.archive(),refreshed);
