@@ -383,6 +383,12 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     false,state,root,signedFile,null,time),"no overwrite on init");
             put(pinFile,Map.of("checkpointStateSha256",provisioned.stateSha256(),
                     "checkpointRevision","1","checkpointKeyringEpoch","1"));
+            // The full real signing pipeline from this fixture is also fed
+            // through the read-only local commissioning validator.
+            var audit=PublicPhase5CommissioningAuditRegression.accepted(
+                    rootDirectory,state,root,pinFile,replay,launcher,time);
+            check(audit.locallyReady(),
+                    "unified audit admits the externally pinned signed synthetic custody");
             var revoked=new PublicReplayCustody.Decision(decision.replayId(),
                     decision.format(),decision.inputSha256(),
                     PublicReplayCustody.Status.REVOKED,time-20,0,"c".repeat(64));
@@ -445,6 +451,8 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
                             .CUSTODY_OR_ARCHIVE_REJECTED,
                     "signed revocation withdraws game-preflight historical source");
+            PublicPhase5CommissioningAuditRegression.revoked(
+                    rootDirectory,state,root,pinFile,replay,launcher,time);
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
                     true,state,root,signedFile,pinFile,time),"stale pin replay fails");
             reject(()->PublicCustodyTrustStore.recover(state,policy,provisioned,time),
