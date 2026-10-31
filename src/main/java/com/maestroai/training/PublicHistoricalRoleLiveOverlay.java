@@ -220,10 +220,11 @@ public final class PublicHistoricalRoleLiveOverlay {
         private TrustedSource trusted;
         private long callbackOrdinal,lastCheckedAt,acceptedRevision,lastKeyringEpoch,lastMinimumRevision;
         private PublicSignedCustody.Verified lastVerified;
-        private boolean withdrawn;
+        private boolean withdrawn, pausedWithoutNew;
         public synchronized boolean withdrawn(){return withdrawn;}
         public synchronized void withdraw(){
             withdrawn=true;battle=null;archive=null;trusted=null;
+            pausedWithoutNew=false;
         }
         public synchronized boolean battleEnded(Object ended){
             if(ended==null || battle!=ended)return false;
@@ -298,12 +299,14 @@ public final class PublicHistoricalRoleLiveOverlay {
                 // A revoked signer, stale clock or changed replay still fails
                 // closed through the original independent-custody checks.
                 if(battle==null || archive!=originalArchive || trusted!=source
-                        || lastVerified==null || lastLive==null)
+                        || lastVerified==null
+                        || lastLive==null && !pausedWithoutNew)
                     return fail(Verdict.SOURCE_MISMATCH);
                 if(!checkedCurrentCustody())
                     return reply(Verdict.STALE_OR_REVOKED_CUSTODY);
                 callbackOrdinal++;
                 lastLive=null;
+                pausedWithoutNew=true;
                 return reply(Verdict.NO_LIVE_SOURCE);
             }
             if(!live.fromBattle(physicalBattle) || live.publicOpponentSide()
@@ -327,6 +330,7 @@ public final class PublicHistoricalRoleLiveOverlay {
             if(!checkedCurrentCustody())return reply(Verdict.STALE_OR_REVOKED_CUSTODY);
             callbackOrdinal++;
             lastLive=live;
+            pausedWithoutNew=false;
             return new Report(this,Verdict.HISTORICAL_ROLES_UNBOUND_SHADOW_DIAGNOSTIC,
                     physicalBattle,live,originalArchive);
         }

@@ -155,6 +155,14 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                 && !firstRole.current()
                 && firstRole.unboundHistoricalRolePossibilities().isEmpty(),
                 "source-attested no-new callback pauses and invalidates previous role");
+        var repeatedNoNew=lease.next(false);
+        var again=sequenceSession.inspect(lease.physicalBattle(),
+                repeatedNoNew,history.archive(),refreshed);
+        check(again.verdict()==PublicHistoricalRoleLiveOverlay.Verdict.NO_LIVE_SOURCE
+                && !sequenceSession.withdrawn()
+                && !firstRole.current() && !paused.current()
+                && firstRole.unboundHistoricalRolePossibilities().isEmpty(),
+                "multiple source-attested no-new callbacks stay abstinent but can later recover");
         var futureSource=lease.next(true);
         var resumed=sequenceSession.inspect(lease.physicalBattle(),
                 futureSource,history.archive(),refreshed);

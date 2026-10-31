@@ -242,6 +242,12 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
                 && noNew.observedCapabilities().isEmpty()
                 && !firstEpoch.current(),
                 "fresh source epoch with identical public history abstains without reviving old move evidence");
+        var repeatNoNew=epochs.next(false);
+        check(repeatNoNew.verdict()==PublicCompetitiveLiveShadowConsumer.Verdict.NO_NEW_PUBLIC_EVIDENCE
+                && repeatNoNew.attestedNoNew(epochs.physicalBattle())
+                && !noNew.attestedNoNew(epochs.physicalBattle())
+                && !firstEpoch.current(),
+                "second independent no-new native callback supersedes prior sentinel");
         var nextEpoch=epochs.next(true);
         check(nextEpoch.current()
                 && nextEpoch.observedCapabilities().contains(
