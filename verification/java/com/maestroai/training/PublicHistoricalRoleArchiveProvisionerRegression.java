@@ -453,8 +453,13 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
                             .CUSTODY_OR_ARCHIVE_REJECTED,
                     "signed revocation withdraws game-preflight historical source");
+            Path latestAuditPin=rootDirectory.resolve("latest-independent-audit-pin.properties");
+            put(latestAuditPin,Map.of(
+                    "checkpointStateSha256",current.stateSha256(),
+                    "checkpointRevision",Long.toString(current.custodyRevision()),
+                    "checkpointKeyringEpoch",Long.toString(current.keyringEpoch())));
             PublicPhase5CommissioningAuditRegression.revoked(
-                    rootDirectory,state,root,pinFile,replay,launcher,time);
+                    rootDirectory,state,root,latestAuditPin,replay,launcher,time);
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
                     true,state,root,signedFile,pinFile,time),"stale pin replay fails");
             reject(()->PublicCustodyTrustStore.recover(state,policy,provisioned,time),
