@@ -86,6 +86,33 @@ final class PublicHistoricalRoleOperatorActivationRegression {
             var clock=new AtomicLong(NOW);
             var installed=PublicHistoricalRoleOperatorActivation.fromProperties(
                     options,clock::get);
+            var preflight=new Properties();
+            preflight.putAll(options);
+            preflight.setProperty("maestroai.phase5HistoricalRolesObserve","true");
+            var diagnostic=PublicHistoricalRoleOperatorPreflight.inspect(
+                    preflight,clock::get);
+            check(diagnostic.locallyProvisioned()
+                    && diagnostic.verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
+                            .SOURCE_READY_FOR_MINECRAFT_TEST
+                    && !diagnostic.minecraftAccepted()
+                    && !diagnostic.liveBattleEvidenceSeen()
+                    && !diagnostic.independentReplayRightsAttested()
+                    && !diagnostic.shadowTacticalAuthority()
+                    && !diagnostic.toString().contains("gen9ou-")
+                    && !diagnostic.toString().contains("SYNTHETIC")
+                    && !diagnostic.toString().contains(directory.toString()),
+                    "preflight checks live local source without claiming installed acceptance");
+            var disabled=new Properties();
+            disabled.putAll(preflight);
+            disabled.setProperty("maestroai.phase5HistoricalRolesObserve","false");
+            check(PublicHistoricalRoleOperatorPreflight.inspect(disabled,clock::get)
+                    .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict.OBSERVER_DISABLED,
+                    "diagnostics disabled means no archive readiness claim");
+            var unprovisioned=new Properties();
+            unprovisioned.setProperty("maestroai.phase5HistoricalRolesObserve","true");
+            check(PublicHistoricalRoleOperatorPreflight.inspect(unprovisioned,clock::get)
+                    .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict.ARCHIVE_UNPROVISIONED,
+                    "no configured archive remains abstained");
             check(installed!=null && installed.archive()
                     .sourceScopedUnboundRoles().contains(
                         PublicHistoricalRoleLiveOverlay.Role.SPECIAL_ATTACK_BOOST_SIGNAL_POSSIBLE),
@@ -122,6 +149,13 @@ final class PublicHistoricalRoleOperatorActivationRegression {
             invalidHash.setProperty(PREFIX+"checkpointStateSha256","a".repeat(64));
             rejected(()->PublicHistoricalRoleOperatorActivation.fromProperties(
                     invalidHash,clock::get),"wrong independent checkpoint");
+            var badPreflight=new Properties();
+            badPreflight.putAll(invalidHash);
+            badPreflight.setProperty("maestroai.phase5HistoricalRolesObserve","true");
+            check(PublicHistoricalRoleOperatorPreflight.inspect(badPreflight,clock::get)
+                    .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
+                            .CUSTODY_OR_ARCHIVE_REJECTED,
+                    "preflight rejects a substituted checkpoint without disclosing it");
             var wrongKey=new Properties();
             wrongKey.putAll(options);
             var attacker=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -223,6 +257,10 @@ final class PublicHistoricalRoleOperatorActivationRegression {
             check(!report2.current() && session2.withdrawn()
                     && report2.unboundHistoricalRolePossibilities().isEmpty(),
                     "tampered trust journal withdraws without leaked role");
+            check(PublicHistoricalRoleOperatorPreflight.inspect(preflight,clock::get)
+                    .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
+                            .CUSTODY_OR_ARCHIVE_REJECTED,
+                    "preflight rejects corrupted trust state after installation");
             rejected(()->PublicHistoricalRoleOperatorActivation.fromProperties(
                     options,clock::get),"tampered journal rejected on boot");
             // No raw replay identifiers or opponent details in objects/errors.

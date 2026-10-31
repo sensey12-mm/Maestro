@@ -44,3 +44,19 @@ Use the **exact successful public Actions JAR** in the existing Minecraft 1.21.1
 The installed-game entrypoint still requires Java 21, Fabric, Cobblemon 1.7.3 and the unmodified pack. The operator activation is opt-in and anchored to the same immutable approved replay. The regression explicitly checks a publicly witnessed hazard plus a separate *unbound* historical role, report withdrawal after replay alteration/removal and signed-approval expiry, and no resurrection after the evidence returns. Earlier overlay and native source regressions cover wrong physical battles, repeated callbacks, contradictory public history, and battle-end withdrawal. Java/CI checks do **not** substitute for real Minecraft observations.
 
 **Status:** Minecraft installation not accessible to the developer; no actual battle has been run or witnessed in this batch. Record the installed JAR version, exact SHA, native callback observations, and diagnostic-only/Legacy-off comparison only after authorized in-game testing. Never publish raw battle logs or private IDs.
+
+## Read-only operator preflight (v1.0.85)
+
+Before installing the JAR, the operator can execute a **local preflight** in the source checkout using Java 21 and the existing Gradle verification classpath:
+
+```text
+gradlew.bat --no-daemon -I verification/verification.init.gradle phase5ArchivePreflight -Dmaestroai.phase5HistoricalRolesObserve=true -Dmaestroai.phase5Archive.directory=... [the other independently provisioned -Dmaestroai.phase5Archive.* settings]
+```
+
+On Linux use `./gradlew`. The `...` notation above is an instruction placeholder, **not** a runnable literal; the full property names are listed in the table earlier. A plain unprovisioned invocation reports `OBSERVER_DISABLED` or `ARCHIVE_UNPROVISIONED` and exits with a nonzero code. The preflight checks the same original replay, trusted public-key root, signed journal, pinned checkpoint, and freshness as the live installer. It prints one redacted verdict:
+
+- `SOURCE_READY_FOR_MINECRAFT_TEST`: local **operator-declared** source prerequisites verified, **NOT** independently proven replay rights, an attested clock or a Minecraft acceptance.
+- `CUSTODY_OR_ARCHIVE_REJECTED`: malformed/expired/substituted or otherwise unsupported archive configuration; no local paths, source IDs or private data are printed.
+- `OBSERVER_DISABLED` / `ARCHIVE_UNPROVISIONED`: no historical source was installed.
+
+This never loads a battle, writes private files, creates keys, downloads replay content or enables Shadow decisions. A successful preflight is a prerequisite for manual Minecraft acceptance, not a substitute. The operator must separately validate replay-use permission and clock trust; synthetic test fixtures cannot confer that approval.

@@ -14,6 +14,22 @@ allprojects {
                     p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
             mainClass = 'com.maestroai.training.StandaloneRegression'
         }
+        // Offline-only operator readiness probe: same signed archive
+        // inputs as Minecraft startup, but cannot certify game acceptance.
+        p.tasks.register('phase5ArchivePreflight', JavaExec) {
+            dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            classpath = p.sourceSets.verification.output +
+                    p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
+                    p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
+            mainClass = 'com.maestroai.training.PublicHistoricalRoleOperatorPreflight'
+            doFirst {
+                def keys = System.getProperties().stringPropertyNames()
+                        .findAll { it.startsWith('maestroai.phase5Archive.') }
+                keys.each { key -> systemProperty key, System.getProperty(key) }
+                systemProperty 'maestroai.phase5HistoricalRolesObserve',
+                        System.getProperty('maestroai.phase5HistoricalRolesObserve', 'false')
+            }
+        }
         p.tasks.register('phase7Benchmark', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
             classpath = p.sourceSets.verification.output +
