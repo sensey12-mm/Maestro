@@ -92,6 +92,22 @@ def verify_public_inputs(dependency, resources):
     print('Pinned native public inputs PASS: 12 factory hashes, eight base learnsets, Hisui form and one-battle player items')
 
 
+
+def selected_profiles(args):
+    """Only a verified all, native, or pack profile. No silent skip mode."""
+    if args == []: return True, True
+    if args == ['--native']: return True, False
+    if args == ['--pack']: return False, True
+    raise ValueError('Unknown source oracle profile')
+
+
+def bounded_run(command, limit=2400):
+    """Fail closed when a spawned node/Gradle process stalls indefinitely."""
+    if not command or command[0] not in ('node','bash') or limit <= 0:
+        raise ValueError('Invalid simulator subprocess')
+    subprocess.run(command, check=True, timeout=limit)
+
+
 class SourceGuards(unittest.TestCase):
     def archive(self, names, symlink=False):
         stream = io.BytesIO()
@@ -135,6 +151,22 @@ class SourceGuards(unittest.TestCase):
 
     def test_right_source(self):
         self.assertEqual(checked_bytes(b'synthetic', hashlib.sha256(b'synthetic').hexdigest()), b'synthetic')
+
+    def test_split_source_profiles_retain_both_required_checks(self):
+        self.assertEqual(selected_profiles([]), (True, True))
+        self.assertEqual(selected_profiles(['--native']), (True, False))
+        self.assertEqual(selected_profiles(['--pack']), (False, True))
+        self.assertEqual(tuple(a or b for a,b in zip(
+            selected_profiles('--native'.split()),
+            selected_profiles('--pack'.split()))), (True, True))
+        for args in (['--skip'], ['--native','--pack'], ['--pack','--native']):
+            with self.assertRaises(ValueError): selected_profiles(args)
+
+    def test_bounded_process_does_not_ignore_timeout(self):
+        with self.assertRaises(ValueError): bounded_run([], 1)
+        with self.assertRaises(ValueError): bounded_run(['bash'], 0)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            bounded_run(['bash','-c','sleep 0.2'], 0.01)
 
     def test_missing_dependency(self):
         with tempfile.TemporaryDirectory() as folder, self.assertRaises(ValueError): cache_dependency(Path(folder))
@@ -216,7 +248,7 @@ def main():
             unittest.defaultTestLoader.loadTestsFromTestCase(InstallerGuards),
         ))
         return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
-    if sys.argv[1:]: raise ValueError('Unknown oracle argument')
+    do_native,do_pack=selected_profiles(sys.argv[1:])
     home = Path(os.environ.get('GRADLE_USER_HOME', str(Path.home() / '.gradle')))
     dependency = checked_bytes(cache_dependency(home).read_bytes(), DEPENDENCY_SHA256)
     # Registration verification executes the original published abilities patch
@@ -228,68 +260,70 @@ def main():
     verify_public_inputs(dependency, Path("src/main/resources/com/maestroai/training"))
     with zipfile.ZipFile(io.BytesIO(dependency)) as archive:
         simulator = checked_bytes(archive.read('data/cobblemon/showdown.zip'), SIMULATOR_SHA256)
-    with tempfile.TemporaryDirectory(prefix='maestroai-source-') as folder:
-        with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
-            safe_entries(archive)
-            archive.extractall(folder)
-        subprocess.run(['node', 'verification/source_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/move_attestation_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/blocked_hit_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/healing_recoil_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/recoil_continuation_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/pivot_outcome_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/modifier_composition_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/accuracy_miss_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/residual_recovery_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/sandstorm_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/weather_suppression_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/weather_speed_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/utility_umbrella_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/weather_ability_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/roster_ability_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/download_entry_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/weather_entry_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/weather_entry_oracle.cjs', folder, '--setters'], check=True)
-        subprocess.run(['node', 'verification/own_mega_y_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/own_z_move_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/own_reentry_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/cold_weather_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/toxic_entry_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/status_speed_oracle.cjs', folder], check=True)
-        subprocess.run(['node', 'verification/psychic_terrain_oracle.cjs', folder], check=True)
-        subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                        'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
-    assets = pack_sources(Path('src/main/resources/com/maestroai/training'))
-    with tempfile.TemporaryDirectory(prefix='maestroai-pack-source-') as folder:
-        simulator_root = Path(folder) / 'showdown'
-        simulator_root.mkdir()
-        with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
-            safe_entries(archive); archive.extractall(simulator_root)
-        from pack_loader_oracle import run_installer
-        scripts=run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
-        (Path(folder)/'pack-item-fixtures.json').write_text(json.dumps(scripts))
-        from addon_reload_oracle import addon_sources
-        addon=addon_sources(home, Path('src/main/resources/com/maestroai/training'))
-        (Path(folder)/'za-definition-fixtures.json').write_text(json.dumps(addon))
-        from raid_condition_oracle import raid_sources, pack_native_sources
-        raid=raid_sources(home, Path('src/main/resources/com/maestroai/training'))
-        (Path(folder)/'raid-condition-fixtures.json').write_text(json.dumps(raid))
-        (Path(folder)/'pack-native-fixtures.json').write_text(json.dumps(pack_native_sources(home, Path('src/main/resources/com/maestroai/training'))))
-        subprocess.run(['node','verification/addon_reload_oracle.cjs',str(simulator_root)],check=True)
-        subprocess.run(['node','verification/raid_condition_oracle.cjs',str(simulator_root)],check=True)
-        subprocess.run(['node','verification/pack_item_reload_oracle.cjs',str(simulator_root)],check=True)
-        subprocess.run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
-        subprocess.run(['node', 'verification/method_provenance_oracle.cjs', str(simulator_root)], check=True)
-        subprocess.run(['node', 'verification/source_oracle.cjs', str(simulator_root)], check=True)
-        subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                        'sourceVerification', '-PverificationSource=' + str(simulator_root),
-                        '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true', '--stacktrace'], check=True)
-        for name, data in assets.items(): (simulator_root / name).write_bytes(data)
-        subprocess.run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                        'sourceVerification', '-PverificationSource=' + str(simulator_root),
-                        '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true',
-                        '-PverificationLayoutOnly=true', '--stacktrace'], check=True)
-    print('Pinned external source checks PASS; temporary source tree removed; no Minecraft acceptance claimed')
+    if do_native:
+        with tempfile.TemporaryDirectory(prefix='maestroai-source-') as folder:
+            with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
+                safe_entries(archive)
+                archive.extractall(folder)
+            bounded_run(['node', 'verification/source_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/move_attestation_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/blocked_hit_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/healing_recoil_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/recoil_continuation_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/pivot_outcome_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/modifier_composition_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/accuracy_miss_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/residual_recovery_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/sandstorm_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/weather_suppression_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/weather_speed_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/utility_umbrella_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/weather_ability_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/roster_ability_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/download_entry_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/weather_entry_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/weather_entry_oracle.cjs', folder, '--setters'], check=True)
+            bounded_run(['node', 'verification/own_mega_y_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/own_z_move_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/own_reentry_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/cold_weather_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/toxic_entry_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/status_speed_oracle.cjs', folder], check=True)
+            bounded_run(['node', 'verification/psychic_terrain_oracle.cjs', folder], check=True)
+            bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
+                            'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
+    if do_pack:
+        assets = pack_sources(Path('src/main/resources/com/maestroai/training'))
+        with tempfile.TemporaryDirectory(prefix='maestroai-pack-source-') as folder:
+            simulator_root = Path(folder) / 'showdown'
+            simulator_root.mkdir()
+            with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
+                safe_entries(archive); archive.extractall(simulator_root)
+            from pack_loader_oracle import run_installer
+            scripts=run_installer(home, simulator_root, assets, Path('src/main/resources/com/maestroai/training'))
+            (Path(folder)/'pack-item-fixtures.json').write_text(json.dumps(scripts))
+            from addon_reload_oracle import addon_sources
+            addon=addon_sources(home, Path('src/main/resources/com/maestroai/training'))
+            (Path(folder)/'za-definition-fixtures.json').write_text(json.dumps(addon))
+            from raid_condition_oracle import raid_sources, pack_native_sources
+            raid=raid_sources(home, Path('src/main/resources/com/maestroai/training'))
+            (Path(folder)/'raid-condition-fixtures.json').write_text(json.dumps(raid))
+            (Path(folder)/'pack-native-fixtures.json').write_text(json.dumps(pack_native_sources(home, Path('src/main/resources/com/maestroai/training'))))
+            bounded_run(['node','verification/addon_reload_oracle.cjs',str(simulator_root)],check=True)
+            bounded_run(['node','verification/raid_condition_oracle.cjs',str(simulator_root)],check=True)
+            bounded_run(['node','verification/pack_item_reload_oracle.cjs',str(simulator_root)],check=True)
+            bounded_run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
+            bounded_run(['node', 'verification/method_provenance_oracle.cjs', str(simulator_root)], check=True)
+            bounded_run(['node', 'verification/source_oracle.cjs', str(simulator_root)], check=True)
+            bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
+                            'sourceVerification', '-PverificationSource=' + str(simulator_root),
+                            '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true', '--stacktrace'], check=True)
+            for name, data in assets.items(): (simulator_root / name).write_bytes(data)
+            bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
+                            'sourceVerification', '-PverificationSource=' + str(simulator_root),
+                            '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true',
+                            '-PverificationLayoutOnly=true', '--stacktrace'], check=True)
+    print('Pinned external source checks PASS; mode='+('both' if do_native and do_pack else 'native' if do_native else 'pack')+'; temporary source tree removed; no Minecraft acceptance claimed')
     return 0
 
 
