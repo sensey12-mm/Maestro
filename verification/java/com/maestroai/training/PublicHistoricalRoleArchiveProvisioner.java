@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.InvalidPathException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -69,7 +68,7 @@ public final class PublicHistoricalRoleArchiveProvisioner {
             }
             if(result.isEmpty())throw denied();
             return Map.copyOf(result);
-        }catch(IOException | InvalidPathException | RuntimeException ex){
+        }catch(IOException | RuntimeException ex){
             throw denied();
         }
     }
