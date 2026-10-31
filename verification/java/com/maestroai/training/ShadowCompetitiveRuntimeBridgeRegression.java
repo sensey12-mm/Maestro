@@ -189,8 +189,8 @@ final class ShadowCompetitiveRuntimeBridgeRegression {
         // Read-only integration contract is not called by Minecraft chooser.
         var ai=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choose(")
-                && ai.contains("null, null, false);")
+        check(ai.contains("LivePromotionGate.choosePrepared(")
+                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
                 && !ai.contains("ShadowCompetitiveRuntimeBridge.")
                 && !ai.contains("PublicShadowBuildHandoff.prepare(")
                 && !ai.contains("PublicCompetitiveConsumerContract.prepare("),

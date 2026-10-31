@@ -215,8 +215,8 @@ final class ShadowOpponentIdentityIntegrationRegression {
         check(choiceStart>=0 && choiceEnd>choiceStart,
                 "native live chooser source boundaries exist");
         String chooser=ai.substring(choiceStart,choiceEnd);
-        check(chooser.contains("LivePromotionGate.choose(")
-                && chooser.contains("null, null, false);")
+        check(chooser.contains("LivePromotionGate.choosePrepared(")
+                && chooser.contains("false); // Owner has NOT authorized live Shadow selection.")
                 && !chooser.contains("inspectWithContinuity(")
                 && !chooser.contains("ShadowCompetitiveRuntimeBridge.")
                 && !chooser.contains("PublicOpponentIdentityContinuity.")

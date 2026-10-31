@@ -171,8 +171,8 @@ final class IntegrationRuntimeReadinessGateRegression {
         // Independent production chooser boundary; the gate never supplies
         // a promoted candidate or consumes Phase 5 offline hypotheses.
         String ai=Files.readString(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choose(")
-                && ai.contains("null, null, false);")
+        check(ai.contains("LivePromotionGate.choosePrepared(")
+                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
                 && !ai.contains("IntegrationRuntimeReadinessGate")
                 && !ai.contains("PublicCompetitiveConsumerContract.ConsumerRequest")
                 && !ai.contains("OfflineShadowTacticalAdapter.inspect("),
