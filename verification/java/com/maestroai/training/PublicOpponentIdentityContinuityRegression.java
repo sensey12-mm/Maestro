@@ -237,12 +237,18 @@ final class PublicOpponentIdentityContinuityRegression {
                 "existing Phase 5 offline-only purpose unchanged");
         String ai=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choose(")
-                && ai.contains("null, null, false);")
-                && !ai.contains("PublicOpponentIdentityContinuity.")
-                && !ai.contains("ShadowCompetitiveRuntimeBridge.")
+        int chooserStart=ai.indexOf("public ShowdownActionResponse choose(");
+        int chooserEnd=ai.indexOf("private ShowdownActionResponse chooseLegacy(");
+        check(chooserStart>=0 && chooserEnd>chooserStart,
+                "source-level live chooser boundary located");
+        String chooser=ai.substring(chooserStart,chooserEnd);
+        check(chooser.contains("LivePromotionGate.choose(")
+                && chooser.contains("null, null, false);")
+                && !chooser.contains("PublicOpponentIdentityContinuity.")
+                && !chooser.contains("ShadowCompetitiveRuntimeBridge.")
+                && !chooser.contains("PublicCompetitiveLiveShadowConsumer.")
                 && !ai.contains("PublicShadowBuildHandoff.prepare("),
-                "production live chooser does not consume Phase 6.29 identities");
+                "actual live chooser cannot consume Phase 5/6 diagnostics");
         System.out.println("Phase 6.29 public opponent continuity PASS: "
                 +checks+" synthetic/source checks; Minecraft UNTESTED");
     }
