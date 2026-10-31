@@ -69,6 +69,17 @@ public final class IntegrationRuntimeReadinessGate {
                 return originalBattle!=null && owner.battle==originalBattle && current();
             }
         }
+        /**
+         * Exact ORIGINAL Phase 6.16 routing receipt, not same-looking revision,
+         * turn, split count, or a caller-created identity assertion.
+         * Package-private: this is read-only source custody, not actor proof.
+         */
+        boolean sharesOriginalRouting(PublicSplitRoutingGate.Report original){
+            synchronized(owner){
+                return original!=null && routing==original && current()
+                        && original.current();
+            }
+        }
         /** Source-side actor membership only, not public actor authentication. */
         public boolean nativeActorMembershipObserved(){return current();}
         /** Structural private-first/public-second parsing only. */

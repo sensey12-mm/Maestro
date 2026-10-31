@@ -104,6 +104,25 @@ public final class PublicOpponentIdentityContinuity {
         public boolean samePhysicalBattle(Object physicalBattle){
             return current() && physicalBattle!=null && owner.battle==physicalBattle;
         }
+        /**
+         * Phase 6.30: exact receipt identity. Equality of revision, turn,
+         * count, hash guessed by a caller, or physical battle alone is NOT
+         * sufficient. The same original Phase 6.16 Report instance must
+         * have been consumed by both independent source-owned gates.
+         * Still cannot authenticate a native opponent or persistent Pokemon.
+         */
+        boolean sharesRuntimeRouting(Object physicalBattle,
+                IntegrationRuntimeReadinessGate.Report runtime){
+            synchronized(owner){
+                return runtime!=null && source!=null && current()
+                        && samePhysicalBattle(physicalBattle)
+                        && runtime.fromBattle(physicalBattle)
+                        && runtime.sharesOriginalRouting(source)
+                        && revision==runtime.publicRevision()
+                        && chunks==runtime.historyChunks()
+                        && turn==runtime.observedTurn();
+            }
+        }
         /** Public side labels are NOT authenticated opponent-side selection. */
         public boolean opponentSideAuthenticated(){return false;}
         public boolean nativeActorIdentityAuthenticated(){return false;}

@@ -27,7 +27,9 @@ public final class ShadowCompetitiveRuntimeBridge {
         MISSING_OFFLINE_CONTRACT, MISSING_RUNTIME_SOURCE,
         INCOMPATIBLE_PIN, PUBLIC_ACTOR_NOT_AUTHENTICATED,
         UNTRUSTED_ACTOR_ASSERTION, WRONG_BATTLE,
-        SOURCE_STALE, REPLAYED_OR_REGRESSED, WITHDRAWN
+        SOURCE_STALE, REPLAYED_OR_REGRESSED,
+        MISSING_CONTINUITY, SOURCE_CUSTODY_MISMATCH, IDENTITY_UNCERTAIN,
+        WITHDRAWN
     }
 
     /**
@@ -105,12 +107,19 @@ public final class ShadowCompetitiveRuntimeBridge {
         private final Session owner;
         private final Verdict verdict;
         private final IntegrationRuntimeReadinessGate.Report source;
+        private final PublicOpponentIdentityContinuity.Report continuity;
         private final long revision, ordinal;
         private final int turn, chunks;
         private Report(Session owner,Verdict verdict,
                        IntegrationRuntimeReadinessGate.Report source){
+            this(owner,verdict,source,null);
+        }
+        private Report(Session owner,Verdict verdict,
+                       IntegrationRuntimeReadinessGate.Report source,
+                       PublicOpponentIdentityContinuity.Report continuity){
             this.owner=owner;this.verdict=verdict;
             this.source=verdict==Verdict.PREPARED_UNBOUND_OFFLINE_ONLY?source:null;
+            this.continuity=this.source==null?null:continuity;
             revision=this.source==null?0:source.publicRevision();
             ordinal=this.source==null?0:source.nativeReturnOrdinal();
             turn=this.source==null?0:source.observedTurn();
@@ -129,9 +138,20 @@ public final class ShadowCompetitiveRuntimeBridge {
                 return !owner.withdrawn && source!=null && source.current()
                         && owner.battle!=null && source.fromBattle(owner.battle)
                         && revision==owner.lastRevision && ordinal==owner.lastOrdinal
-                        && turn==owner.lastTurn && chunks==owner.lastChunks;
+                        && turn==owner.lastTurn && chunks==owner.lastChunks
+                        && (continuity==null ||
+                            continuity.sharesRuntimeRouting(owner.battle,source));
             }
         }
+        /**
+         * Source custody only: the Phase 6.29 continuity observation and
+         * Phase 6.28 runtime gate used the EXACT same original Phase 6.16
+         * routing report. Still not an actor / Pokemon / historical identity.
+         */
+        public boolean publicContinuitySourceAligned(){
+            return continuity!=null && current();
+        }
+        public boolean publicAppearanceIdentityEstablished(){return false;}
         public boolean historicalActorMatchedToCurrentOpponent(){return false;}
         public boolean publicOpponentActorAuthenticated(){return false;}
         public boolean displayAppearanceIsPersistentIdentity(){return false;}
@@ -148,6 +168,7 @@ public final class ShadowCompetitiveRuntimeBridge {
             return "Phase628Bridge[verdict="+verdict
                     +";revision="+revision+";ordinal="+ordinal
                     +";turn="+turn+";chunks="+chunks
+                    +";continuity="+(continuity==null?"NOT_BOUND":"SOURCE_ALIGNED_UNBOUND")
                     +";actor=UNAUTHENTICATED;historicalJoin=BLOCKED;"
                     +"phase5=OFFLINE_ONLY;authority=NONE]";
         }
@@ -171,6 +192,61 @@ public final class ShadowCompetitiveRuntimeBridge {
         private Report fail(Verdict kind){
             withdraw();return verdict(kind);
         }
+        /**
+         * Phase 6.30 source-bound integration. A caller MAY NOT supply an
+         * identity classification in place of an original 6.29 receipt.
+         * Ordinary public positions can only yield unbound observations;
+         * Illusion, Transform, re-entry, form changes or uncertain positions
+         * fail closed without exporting a live Phase 5 build.
+         */
+        public synchronized Report inspectWithContinuity(Object physicalBattle,
+                HistoricalDescriptor offline,
+                IntegrationRuntimeReadinessGate.Report runtime,
+                PublicOpponentIdentityContinuity.Report identity){
+            if(withdrawn)return verdict(Verdict.WITHDRAWN);
+            if(physicalBattle==null || battle!=null && battle!=physicalBattle)
+                return fail(Verdict.WRONG_BATTLE);
+            if(identity==null)return verdict(Verdict.MISSING_CONTINUITY);
+            if(!PublicOpponentIdentityContinuity.SCHEMA.equals(identity.schema())
+                    || !SOURCE.equals(identity.source())
+                    || identity.phase5OnlineAuthorized()
+                    || identity.shadowSearchAuthorized()
+                    || identity.nativeActorIdentityAuthenticated()
+                    || identity.persistentPokemonIdentityConfirmed())
+                return fail(Verdict.INCOMPATIBLE_PIN);
+            if(!identity.current())
+                return fail(Verdict.SOURCE_STALE);
+            if(!identity.samePhysicalBattle(physicalBattle))
+                return fail(Verdict.WRONG_BATTLE);
+            if(runtime==null)return verdict(Verdict.MISSING_RUNTIME_SOURCE);
+            if(!runtime.current())
+                return fail(Verdict.SOURCE_STALE);
+            if(!runtime.fromBattle(physicalBattle))
+                return fail(Verdict.WRONG_BATTLE);
+            if(!identity.sharesRuntimeRouting(physicalBattle,runtime))
+                return fail(Verdict.SOURCE_CUSTODY_MISMATCH);
+            if(identity.verdict()
+                    !=PublicOpponentIdentityContinuity.Verdict.PUBLIC_POSITIONS_ONLY_UNBOUND
+                    || !identity.currentPublicAppearanceObserved()
+                    || !identity.uncertainty().equals(
+                            java.util.Set.of(PublicOpponentIdentityContinuity
+                                    .Uncertainty.PUBLIC_DISPLAY_ONLY))
+                    || identity.shadowOnlyUncertainty()!=IdentityEvidence.PUBLIC_DISPLAY_ONLY)
+                return fail(Verdict.IDENTITY_UNCERTAIN);
+
+            // Use the already verified Phase 6.28 source gate; never bypass
+            // its rollback, actor-membership or offline Phase 5 restrictions.
+            Report legacy=inspect(physicalBattle,offline,runtime,
+                    IdentityEvidence.PUBLIC_DISPLAY_ONLY);
+            if(legacy.verdict()!=Verdict.PREPARED_UNBOUND_OFFLINE_ONLY)
+                return legacy;
+            if(!identity.sharesRuntimeRouting(physicalBattle,runtime)
+                    || !legacy.current())
+                return fail(Verdict.SOURCE_STALE);
+            return new Report(this,Verdict.PREPARED_UNBOUND_OFFLINE_ONLY,
+                    runtime,identity);
+        }
+
         public synchronized Report inspect(Object physicalBattle,
                 HistoricalDescriptor offline,
                 IntegrationRuntimeReadinessGate.Report runtime,
