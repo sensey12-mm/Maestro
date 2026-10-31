@@ -4845,7 +4845,14 @@ public class MaestroBattleAI extends RCTBattleAI {
                 }
                 if (duplicateOwn || own==null) {
                     phase631Scope.withdraw();
+                    // An ambiguous owning native actor invalidates all Phase 5
+                    // online and historical leases, not merely the side report.
+                    // Never preserve an earlier positive Shadow receipt here.
+                    if (PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.withdraw();
+                    if (PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.withdraw();
                     System.out.println("[MaestroAI] Phase 6.31 nativeSide=UNKNOWN;authority=NONE");
+                    if (PHASE5_LIVE_SHADOW_OBSERVE)
+                        System.out.println("[MaestroAI] Phase 5 online Shadow=UNKNOWN;authority=NONE");
                 } else {
                     // Source-owned native BattleActor.getShowdownId and getSide,
                     // never names, requests, party slots or historical builds.

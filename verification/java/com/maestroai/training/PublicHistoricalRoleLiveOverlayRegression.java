@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Phase 5 live historical source-roles; synthetic Ed25519 and native custody. */
 final class PublicHistoricalRoleLiveOverlayRegression {
@@ -73,6 +74,43 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                     PublicCompetitiveLiveShadowConsumer.Capability.HAZARD_SET_OBSERVED),
                 "source-backed historical boost signal remains separate from Glimmora public hazard");
         noAuthority(accepted);
+        // A trust provider may revoke between sequential queries. One printed
+        // diagnostic must not combine a positive currentness verdict from
+        // query #2 with already-withdrawn roles from query #3.
+        var printLive=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+        var printCount=new AtomicInteger();
+        var printSession=new PublicHistoricalRoleLiveOverlay.Session();
+        PublicHistoricalRoleLiveOverlay.TrustedSource volatileSource=()->{
+            if(printCount.incrementAndGet()<=2)return history.custody();
+            throw new IllegalStateException("synthetic trust revoked after initial print");
+        };
+        var printReport=live(printSession,printLive,history,volatileSource);
+        check(printReport.current() && printCount.get()==2,
+                "first two synthetic independently checked custody samples current");
+        // The next check is deliberately revoked: the report must print only
+        // current=false and empty historical roles. No stale leaked labels.
+        String revokedDiagnostic=printReport.toString();
+        check(revokedDiagnostic.contains(";current=false;roles=[]")
+                && printSession.withdrawn() && !printReport.current(),
+                "one categorical log line never leaks revoked roles");
+        noAuthority(printReport);
+        // A separate controlled source can change *after* the first render
+        // lease check. Ensure toString() performs just one trust lookup.
+        var stableLogLive=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+        var stableLogSession=new PublicHistoricalRoleLiveOverlay.Session();
+        var logPolls=new AtomicInteger();
+        PublicHistoricalRoleLiveOverlay.TrustedSource logTrust=()->{
+            if(logPolls.incrementAndGet()<=2)return history.custody();
+            throw new IllegalStateException("revoked after rendering snapshot");
+        };
+        var stableLog=live(stableLogSession,stableLogLive,history,logTrust);
+        String line=stableLog.toString();
+        check(line.contains(";current=true;roles=[SPECIAL_ATTACK_BOOST_SIGNAL_POSSIBLE]")
+                && logPolls.get()==2,
+                "single historical snapshot cannot mix current flag with a later lease check");
+        check(!stableLog.current() && stableLogSession.withdrawn()
+                && stableLog.unboundHistoricalRolePossibilities().isEmpty(),
+                "subsequent external revocation still withdraws the historical lease");
         // The original source-issued report is immutable; no second synthetic
         // receipt can pretend to be a new Cobblemon native callback.
         var replay=live(session,source,history,refreshed);
@@ -261,6 +299,13 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                 && !ai.substring(begin,end).contains("PublicHistoricalRoleLiveOverlay")
                 && ai.substring(begin,end).contains("null, null, false);"),
                 "operator only installs a source; Legacy chooser is isolated");
+        int ambiguous=ai.indexOf("if (duplicateOwn || own==null)");
+        int repaired=ai.indexOf("} else {",ambiguous);
+        check(ambiguous>0 && repaired>ambiguous
+                && ai.substring(ambiguous,repaired).contains("phase631Scope.withdraw()")
+                && ai.substring(ambiguous,repaired).contains("phase5LiveScope.withdraw()")
+                && ai.substring(ambiguous,repaired).contains("phase5HistoricalScope.withdraw()"),
+                "native actor ambiguity explicitly revokes both Phase 5 live leases");
         System.out.println("Phase 5 live historical roles PASS: "+checks
                 +" signed/offline and original native source regressions; Minecraft UNTESTED");
     }

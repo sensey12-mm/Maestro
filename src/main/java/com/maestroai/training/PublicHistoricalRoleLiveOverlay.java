@@ -182,11 +182,19 @@ public final class PublicHistoricalRoleLiveOverlay {
         public boolean livePromotionAuthorized(){return false;}
         public boolean privateReplayContentExportable(){return false;}
         @Override public String toString(){
-            return "Phase5HistoricalRoleOverlay[verdict="+verdict
-                    +";current="+current()
-                    +";roles="+unboundHistoricalRolePossibilities()
-                    +";presentPokemon=UNKNOWN;historicalJoin=UNBOUND"
-                    +";forecast=NONE;authority=NONE]";
+            // One complete trust/callback lease check per diagnostic snapshot.
+            // Rechecking while concatenating could print current=true and
+            // roles=[] after a simultaneous revocation: a contradictory
+            // receipt that obscures whether historical intelligence was live.
+            synchronized(owner){
+                boolean active=current();
+                Set<Role> visible=active?archive.roleLabels:Set.of();
+                return "Phase5HistoricalRoleOverlay[verdict="+verdict
+                        +";current="+active
+                        +";roles="+visible
+                        +";presentPokemon=UNKNOWN;historicalJoin=UNBOUND"
+                        +";forecast=NONE;authority=NONE]";
+            }
         }
     }
     public static final class BattleScope {
