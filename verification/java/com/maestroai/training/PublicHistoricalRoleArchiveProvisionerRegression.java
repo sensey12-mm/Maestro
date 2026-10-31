@@ -161,6 +161,20 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     .replace("status=REVOKED","status=APPROVED"));
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
                     true,state,root,corruptSigned,pinFile,time),"tampered signed revocation");
+            // Keep all chronology and record fields otherwise legal: only
+            // the Ed25519 signature must reject this changed review digest.
+            Path mutatedReview=rootDirectory.resolve("mutated-review.properties");
+            Files.writeString(mutatedReview,signedText(next)
+                    .replace("c".repeat(64),"d".repeat(64)));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,mutatedReview,pinFile,time),
+                    "signature mismatch with otherwise valid revocation");
+            Path wrongPin=rootDirectory.resolve("wrong-pin.properties");
+            put(wrongPin,Map.of("checkpointStateSha256","e".repeat(64),
+                    "checkpointRevision","1","checkpointKeyringEpoch","1"));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,state,root,signedFile,wrongPin,time),
+                    "externally incorrect checkpoint cannot advance");
             Path duplicate=rootDirectory.resolve("duplicate.properties");
             Files.writeString(duplicate,signedText(next)+"signerKeyId=reviewer-a\n");
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
