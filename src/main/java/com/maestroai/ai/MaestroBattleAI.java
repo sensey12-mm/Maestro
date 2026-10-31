@@ -24,6 +24,7 @@ import com.maestroai.training.NativeEvidenceEndToEndGate;
 import com.maestroai.training.RuntimeObservationAcceptanceHarness;
 import com.maestroai.training.NativeSidedDispatchReachability;
 import com.maestroai.training.NativeOpponentSideProvenance;
+import com.maestroai.training.NativeOpponentRevealRecipientEvidence;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -331,6 +332,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase622Harness.withdraw();
         phase624Scope.withdraw();
         phase631Scope.withdraw();
+        phase634Scope.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4649,6 +4651,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         // choice. Preserve the existing same-battle witness.
         if (PHASE624_OBSERVE) phase624Scope.forBattle(battle);
         if (PHASE631_OBSERVE) phase631Scope.forBattle(battle);
+        if (PHASE634_OBSERVE) phase634Scope.forBattle(battle);
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4706,14 +4709,20 @@ public class MaestroBattleAI extends RCTBattleAI {
     // Phase 6.24: sided-return is separate from Phase 6.18 split-return.
     // Phase 6.31 is opt-in, read-only and NEVER authorizes Shadow decisions.
     // It uses the already pinned 6.24 native callback as its source receipt.
+    // Optional native public-branch RETURN evidence; no packet contents,
+    // client-delivery claim, Phase 5 online consumer, or move authority.
+    private static final boolean PHASE634_OBSERVE =
+            Boolean.getBoolean("maestroai.phase634Observe");
     private static final boolean PHASE631_OBSERVE =
-            Boolean.getBoolean("maestroai.phase631Observe");
+            PHASE634_OBSERVE || Boolean.getBoolean("maestroai.phase631Observe");
     private static final boolean PHASE624_OBSERVE =
             PHASE631_OBSERVE || Boolean.getBoolean("maestroai.phase624Observe");
     private final NativeSidedDispatchReachability.BattleScope phase624Scope =
             new NativeSidedDispatchReachability.BattleScope();
     private final NativeOpponentSideProvenance.BattleScope phase631Scope =
             new NativeOpponentSideProvenance.BattleScope();
+    private final NativeOpponentRevealRecipientEvidence.BattleScope phase634Scope =
+            new NativeOpponentRevealRecipientEvidence.BattleScope();
 
     /**
      * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
@@ -4730,6 +4739,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             if(ended!=null) System.out.println("[MaestroAI] Phase 6.24 "+ended);
         }
         if (PHASE631_OBSERVE) phase631Scope.end(battle);
+        if (PHASE634_OBSERVE) phase634Scope.end(battle);
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
         if (PHASE621_OBSERVE) {
@@ -4778,11 +4788,18 @@ public class MaestroBattleAI extends RCTBattleAI {
                     var side=phase631Scope.forBattle(battle)
                             .observeFromNativeCallback(battle,own,sourceActor,receipt);
                     System.out.println("[MaestroAI] Phase 6.31 "+side);
+                    if (PHASE634_OBSERVE) {
+                        var publicBranch=phase634Scope.forBattle(battle)
+                                .observeNativeReturn(battle,own,sourceActor,
+                                        allyPacket,opponentPacket,receipt);
+                        System.out.println("[MaestroAI] Phase 6.34 "+publicBranch);
+                    }
                 }
             }
         } catch(RuntimeException unavailable) {
             phase624Scope.withdraw();
             if(PHASE631_OBSERVE) phase631Scope.withdraw();
+            if(PHASE634_OBSERVE) phase634Scope.withdraw();
             System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
         }
     }

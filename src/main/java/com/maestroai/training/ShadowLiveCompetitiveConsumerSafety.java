@@ -156,6 +156,14 @@ public final class ShadowLiveCompetitiveConsumerSafety {
                         && nativeSide.sharesOriginalRouting(physicalBattle,original);
             }
         }
+        /** 6.34: exact original Phase 6.31 side report, never an actor ID. */
+        boolean sharesOriginalOpponentSide(Object physicalBattle,
+                NativeOpponentSideProvenance.Report side){
+            synchronized(owner){
+                return physicalBattle!=null && owner.battle==physicalBattle
+                        && nativeSide!=null && nativeSide==side && current();
+            }
+        }
         /** Source-owned p1/p2 ONLY, never a team/party-slot identity. */
         public NativeOpponentSideProvenance.Side sourceBoundOpponentSide(){
             return current()?nativeSide.opponentPublicSide():

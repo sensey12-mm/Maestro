@@ -453,6 +453,7 @@ public final class StandaloneRegression {
         NativeOpponentSideProvenanceRegression.run();
         ShadowLiveCompetitiveConsumerSafetyRegression.run();
         NativeOpponentPokemonContinuityRegression.run();
+        NativeOpponentRevealRecipientEvidenceRegression.run();
         OfflineShadowTacticalAdapterRegression.run();
         OfflineShadowProvenanceGateRegression.run();
         OfflineShadowResponseScenariosRegression.run();

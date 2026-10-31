@@ -119,6 +119,19 @@ public final class NativeOpponentSideProvenance {
                         && bridge.publicContinuitySourceAligned();
             }
         }
+        /**
+         * 6.34: EXACT same original Phase 6.24 native method-return receipt
+         * and physical battle. Neither similar metadata nor an actor ID
+         * supplied later can substitute this in-process source receipt.
+         */
+        boolean sharesOriginalSidedReturn(Object physicalBattle,
+                NativeSidedDispatchReachability.Report candidate){
+            synchronized(owner){
+                return physicalBattle!=null && owner.battle==physicalBattle
+                        && nativeReturn!=null && nativeReturn==candidate
+                        && current() && candidate.fromBattle(physicalBattle);
+            }
+        }
         /** Same original native actor/topology observed, no Pokemon proof. */
         public boolean nativeSideMembershipObserved(){return current();}
         /** True ONLY for original 6.24/6.29/6.30 current receipt linkage. */

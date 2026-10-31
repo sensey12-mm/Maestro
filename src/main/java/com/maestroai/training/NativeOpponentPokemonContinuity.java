@@ -200,6 +200,18 @@ public final class NativeOpponentPokemonContinuity {
                         && scan!=null && scan.unambiguousPositionOnly();
             }
         }
+        /**
+         * 6.34 exact original 6.31 side receipt via Phase 6.32 consumer.
+         * No public Pokémon identity is inferred from this linkage.
+         */
+        boolean sharesOriginalSide(Object physicalBattle,
+                NativeOpponentSideProvenance.Report source){
+            synchronized(owner){
+                return physicalBattle!=null && owner.battle==physicalBattle
+                        && consumer!=null && current()
+                        && consumer.sharesOriginalOpponentSide(physicalBattle,source);
+            }
+        }
         public boolean sourceBoundPublicAppearanceOnly(){return current();}
         public boolean publicOpponentPokemonIdentityProven(){return false;}
         public boolean samePokemonAcrossSwitchesProven(){return false;}
