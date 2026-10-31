@@ -123,6 +123,18 @@ public final class PublicOpponentIdentityContinuity {
                         && turn==runtime.observedTurn();
             }
         }
+        /**
+         * True only for the exact original Phase 6.16 report already admitted
+         * by this continuity observer. Metadata equality is not enough.
+         */
+        boolean sharesOriginalRouting(Object originalBattle,
+                PublicSplitRoutingGate.Report candidate){
+            synchronized(owner){
+                return candidate!=null && source==candidate && current()
+                        && samePhysicalBattle(originalBattle)
+                        && candidate.sameBattle(originalBattle);
+            }
+        }
         /** Public side labels are NOT authenticated opponent-side selection. */
         public boolean opponentSideAuthenticated(){return false;}
         public boolean nativeActorIdentityAuthenticated(){return false;}

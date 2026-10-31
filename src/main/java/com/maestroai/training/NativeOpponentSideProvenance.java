@@ -107,6 +107,18 @@ public final class NativeOpponentSideProvenance {
                         && !candidate.shadowSearchAuthorized();
             }
         }
+        /** Phase 6.33: independent exact original 6.16 history custody. */
+        boolean sharesOriginalRouting(Object physicalBattle,
+                PublicSplitRoutingGate.Report original){
+            synchronized(owner){
+                return physicalBattle!=null && owner.battle==physicalBattle
+                        && runtime!=null && identity!=null && bridge!=null
+                        && current()
+                        && runtime.sharesOriginalRouting(original)
+                        && identity.sharesOriginalRouting(physicalBattle,original)
+                        && bridge.publicContinuitySourceAligned();
+            }
+        }
         /** Same original native actor/topology observed, no Pokemon proof. */
         public boolean nativeSideMembershipObserved(){return current();}
         /** True ONLY for original 6.24/6.29/6.30 current receipt linkage. */

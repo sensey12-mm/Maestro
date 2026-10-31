@@ -142,6 +142,20 @@ public final class ShadowLiveCompetitiveConsumerSafety {
                         && turn==owner.lastTurn && chunks==owner.lastChunks;
             }
         }
+        /**
+         * 6.33 must use the exact original history source already accepted
+         * in Phase 6.29–6.32; matching battle/turn/digest metadata alone
+         * cannot certify a foreign or caller-constructed appearance.
+         */
+        boolean sharesOriginalRouting(Object physicalBattle,
+                PublicSplitRoutingGate.Report original){
+            synchronized(owner){
+                return original!=null && current()
+                        && owner.battle==physicalBattle
+                        && nativeSide!=null
+                        && nativeSide.sharesOriginalRouting(physicalBattle,original);
+            }
+        }
         /** Source-owned p1/p2 ONLY, never a team/party-slot identity. */
         public NativeOpponentSideProvenance.Side sourceBoundOpponentSide(){
             return current()?nativeSide.opponentPublicSide():
