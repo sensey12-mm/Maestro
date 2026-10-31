@@ -109,8 +109,9 @@ final class Integration457Regression {
         // into live decisions during manual source reconciliation.
         var ai = Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choose(")
-                && ai.contains("null, null, false);"),
+        check(ai.contains("LivePromotionGate.choosePrepared(")
+                && ai.contains("ShadowPromotionPreparation.inspect(")
+                && ai.contains("false); // Owner has NOT authorized live Shadow selection."),
                 "Legacy still solely selects live actions");
         check(ai.contains("ownZChoice(ShowdownMoveset moveset)")
                 && ai.contains("withOwnZMove(ownZ)"),
