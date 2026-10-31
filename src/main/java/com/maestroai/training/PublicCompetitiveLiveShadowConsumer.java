@@ -119,6 +119,10 @@ public final class PublicCompetitiveLiveShadowConsumer {
         public String schema(){return SCHEMA;}
         public String source(){return SOURCE;}
         public Verdict verdict(){return verdict;}
+        /** Exact source-owned live battle identity; not a Pokemon ID. */
+        boolean fromBattle(Object original){
+            return original!=null && physicalBattle==original && current();
+        }
         public boolean current(){
             synchronized(owner){
                 return !owner.withdrawn && owner.battle==physicalBattle

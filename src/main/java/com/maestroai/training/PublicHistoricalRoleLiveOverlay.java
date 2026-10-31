@@ -147,7 +147,7 @@ public final class PublicHistoricalRoleLiveOverlay {
         public Verdict verdict(){return verdict;}
         public boolean current(){
             synchronized(owner){
-                return !owner.withdrawn && live!=null && live.current()
+                return !owner.withdrawn && live!=null && live.fromBattle(battle)
                         && archive!=null && battle!=null && owner.battle==battle
                         && owner.archive==archive && owner.callbackOrdinal==callbackOrdinal
                         && owner.checkedCurrentCustody();
@@ -266,7 +266,7 @@ public final class PublicHistoricalRoleLiveOverlay {
             if(live==null)
                 return battle==null?reply(Verdict.NO_LIVE_SOURCE)
                         :fail(Verdict.NO_LIVE_SOURCE);
-            if(!live.current() || live.publicOpponentSide()
+            if(!live.fromBattle(physicalBattle) || live.publicOpponentSide()
                     ==NativeOpponentSideProvenance.Side.UNKNOWN)
                 return fail(Verdict.SOURCE_MISMATCH);
             if(battle!=null && (archive!=originalArchive || trusted!=source))
