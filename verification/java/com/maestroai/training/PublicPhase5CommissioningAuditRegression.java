@@ -181,6 +181,10 @@ final class PublicPhase5CommissioningAuditRegression {
     }
     static void revoked(Path parent,Path state,Path root,Path independentCheckpoint,
                         Path replay,Properties installed,long now)throws Exception{
+        // After the append-only signed revocation the launcher and external
+        // pin must BOTH be updated; otherwise a stale checkpoint is rejected
+        // before the genuine replay-revocation reason can be inspected.
+        settings(parent,installed);
         expect(inspect(parent.resolve("maestroai-"+VERSION+".jar"),
                         parent.resolve("ci-jar-pin.properties"),
                         parent.resolve("operator.properties"),root,
