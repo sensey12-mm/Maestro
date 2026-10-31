@@ -334,7 +334,7 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                 && ai.contains("installPhase5HistoricalRoles(")
                 && ai.contains("Phase 5 historical Shadow")
                 && !ai.substring(begin,end).contains("PublicHistoricalRoleLiveOverlay")
-                && ai.substring(begin,end).contains("null, null, false);"),
+                && ai.substring(begin,end).contains("false); // Owner has NOT authorized live Shadow selection."),
                 "operator only installs a source; Legacy chooser is isolated");
         int ambiguous=ai.indexOf("if (duplicateOwn || own==null)");
         int repaired=ai.indexOf("} else {",ambiguous);

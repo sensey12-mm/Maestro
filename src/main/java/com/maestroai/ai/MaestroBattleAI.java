@@ -27,6 +27,7 @@ import com.maestroai.training.NativeOpponentSideProvenance;
 import com.maestroai.training.NativeOpponentRevealRecipientEvidence;
 import com.maestroai.training.PublicCompetitiveLiveShadowConsumer;
 import com.maestroai.training.PublicHistoricalRoleLiveOverlay;
+import com.maestroai.training.ShadowPromotionPreparation;
 import com.maestroai.training.PublicOpponentIdentityContinuity;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
@@ -338,6 +339,9 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase634Scope.withdraw();
         phase5LiveScope.withdraw();
         phase5HistoricalScope.withdraw();
+        phaseShadowPrepared=null;
+        phaseShadowBattle=null;
+        phaseShadowRequest=null;
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -418,9 +422,24 @@ public class MaestroBattleAI extends RCTBattleAI {
             } catch (RuntimeException unavailable) {
                 ownTransportUnavailable(); ownChoiceLease = null;
             }
-            ShowdownActionResponse response = LivePromotionGate.choose(
-                () -> chooseLegacy(activePokemon, battle, side, moveset, forceSwitch),
-                null, null, false);
+            // Evaluate Legacy exactly once, unchanged. The separately
+            // constructed Shadow proposal is conditional/advisory and has
+            // NO production owner approval to replace this response.
+            phaseShadowPrepared=null;
+            phaseShadowBattle=battle;
+            phaseShadowRequest=activePokemon==null || activePokemon.getActor()==null
+                    ?null:activePokemon.getActor().getRequest();
+            ShowdownActionResponse legacy=chooseLegacy(
+                    activePokemon,battle,side,moveset,forceSwitch);
+            var prepared=phaseShadowPrepared;
+            var proposal=prepared==null?null:prepared.proposal();
+            ShowdownActionResponse response=LivePromotionGate.choosePrepared(
+                ()->legacy,proposal,battle,phaseShadowRequest,battle.getTurn(),
+                action->materializePreparedShadowAction(action,activePokemon,battle,
+                        moveset,forceSwitch,proposal),
+                action->action!=null && proposal!=null
+                        && proposal.current(battle,phaseShadowRequest,battle.getTurn()),
+                false); // Owner has NOT authorized live Shadow selection.
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
             phase612Move=null;
             phase612Switch=null;
@@ -599,6 +618,55 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 && actor.getRequest().getActive().size() == 1
                                 && moveset != null && !moveset.getTrapped());
             }
+    }
+
+    /**
+     * Materializes only independently prepared, current-turn legal own actions.
+     * Never called in the current build: choosePrepared has ownerApproved=false.
+     * Future authorization must also independently attest the FULL native
+     * request/actor legality and Phase 7 performance before enabling this.
+     */
+    private ShowdownActionResponse materializePreparedShadowAction(
+            String action,ActiveBattlePokemon activePokemon,PokemonBattle battle,
+            ShowdownMoveset moveset,boolean forceSwitch,
+            ShadowPromotionPreparation.Proposal proposal){
+        if(action==null || proposal==null || battle==null
+                || activePokemon==null || activePokemon.getActor()==null
+                || activePokemon.getBattlePokemon()==null
+                || !proposal.current(battle,activePokemon.getActor().getRequest(),
+                        battle.getTurn()) || battle.getEnded())
+            return null;
+        if(action.startsWith("move:")){
+            if(forceSwitch || moveset==null || moveset.getMoves()==null)return null;
+            String id=action.substring(5);
+            int matches=0;
+            for(InBattleMove move:moveset.getMoves()){
+                if(move!=null && id.equals(move.getId()) && move.canBeUsed())
+                    matches++;
+            }
+            if(matches!=1)return null;
+            return createMoveResponse(activePokemon,moveset,id);
+        }
+        if(action.startsWith("switch:")){
+            if(!forceSwitch && (moveset==null
+                    || !LiveActionLegality.voluntarySwitchAllowed(false,
+                            moveset.getTrapped(),
+                            isContinuationLocked(moveset,
+                                    activePokemon.getBattlePokemon()))))
+                return null;
+            java.util.UUID id;
+            try {id=java.util.UUID.fromString(action.substring(7));}
+            catch(IllegalArgumentException invalid){return null;}
+            int matches=0;
+            for(BattlePokemon reserve:activePokemon.getActor().getPokemonList()){
+                if(reserve!=null && id.equals(reserve.getUuid())
+                        && !id.equals(activePokemon.getBattlePokemon().getUuid())
+                        && reserve.canBeSentOut() && !reserve.getGone()
+                        && reserve.getHealth()>0 && !reserve.isSentOut())matches++;
+            }
+            return matches==1?new SwitchActionResponse(id):null;
+        }
+        return null;
     }
 
     private ShowdownActionResponse chooseLegacy(
@@ -4756,6 +4824,10 @@ public class MaestroBattleAI extends RCTBattleAI {
             new NativeOpponentSideProvenance.BattleScope();
     private final NativeOpponentRevealRecipientEvidence.BattleScope phase634Scope =
             new NativeOpponentRevealRecipientEvidence.BattleScope();
+    // Phase 4/5/6/7 candidate transport is only a source-leased
+    // conditional Shadow proposal. Never a promotion certificate.
+    private volatile ShadowPromotionPreparation.Report phaseShadowPrepared;
+    private volatile Object phaseShadowBattle,phaseShadowRequest;
     private final PublicCompetitiveLiveShadowConsumer.BattleScope phase5LiveScope =
             new PublicCompetitiveLiveShadowConsumer.BattleScope();
     private PublicHistoricalRoleLiveOverlay.BattleScope phase5HistoricalScope =
@@ -6949,6 +7021,16 @@ public class MaestroBattleAI extends RCTBattleAI {
             var comparison = ShadowMechanicsEvaluation.compare(snapshot, mechanicsEvidence, profiles, plans,
                     mechanicsExecution == null ? PublicTransitionState.Known.unknown() : mechanicsExecution.field().trickRoom(),
                     CobblemonMechanics.Critical.BOTH, legacyAction, mechanicsExecution);
+            // Shadow's own bounded conditional move/switch preference is kept
+            // separate from Legacy and Phase 5 historical hypotheses. Runtime
+            // source/current-turn leases may prepare a candidate for future
+            // explicit promotion, but never authorize it now.
+            var currentRequest=phaseShadowRequest;
+            phaseShadowPrepared=ShadowPromotionPreparation.inspect(
+                    phaseShadowBattle,currentRequest,snapshot,comparison,
+                    runtimeDomain,ownChoiceLease,mechanicsExecution,
+                    publicProtocolEvidence);
+            System.out.println("[MaestroAI] "+phaseShadowPrepared.safeLine());
             // Fixed vocabulary only: no private request fields, opponent UUID,
             // registry callback bodies or hidden opponent modifiers in telemetry.
             System.out.println("[MaestroAI] " + com.maestroai.training.ShadowPrerequisiteDiagnostics.inspect(

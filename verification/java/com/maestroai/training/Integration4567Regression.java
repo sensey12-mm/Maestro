@@ -143,7 +143,9 @@ final class Integration4567Regression {
         }
         var ai = Files.readString(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         check(ai.contains("LivePromotionGate.choose(")
-                        && ai.contains("null, null, false);")
+                        && ai.contains("LivePromotionGate.choosePrepared(")
+                && ai.contains("ShadowPromotionPreparation.inspect(")
+                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
                         && !ai.contains("OfflineShadowTacticalAdapter.inspect(")
                         && !ai.contains("OfflineShadowResponseScenarios.construct(")
                         && !ai.contains("PublicShadowBuildHandoff.prepare("),
