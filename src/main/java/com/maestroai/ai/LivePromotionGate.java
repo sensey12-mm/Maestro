@@ -8,7 +8,8 @@ import com.maestroai.training.ShadowPromotionPreparation;
 /**
  * Fail-closed live promotion boundary. A flag alone never authorizes a
  * shadow experiment: a candidate must also be independently promoted and
- * validated as a legal action. No candidate is registered in Phase 3.25.
+ * validated against the current owning action. Phase 4/5/6/7 now prepares
+ * conditional candidates only; no live promotion is approved.
  */
 public final class LivePromotionGate {
     public static final String PROPERTY = "maestroai.livePromotion.enabled";

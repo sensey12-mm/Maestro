@@ -36,3 +36,7 @@ CI checks the dedicated branch's repository safeguards, full Java 21 build, stan
 **GO for source integration** requires successful exact-head public GitHub Actions, all Phase 4/5/6/7 synthetic suites, native source oracle, and a separate, truthful list of unresolved runtime gates. A missing or failed CI conclusion means **PENDING/NO-GO** rather than assumed success.
 
 **NO-GO for gameplay acceptance and Shadow promotion** until separately authorized and independently verified runtime evidence, public-origin/current-turn binding, legal-action coverage, supported mechanics and Phase 7 real-evidence evaluation exist.
+
+## Shadow promotion preparation source update (v1.0.97)
+
+The Phase 4 mechanics conditional comparison now has a source-leased `ShadowPromotionPreparation` adapter into a dormant `LivePromotionGate.choosePrepared` at the real `MaestroBattleAI.choose` boundary. The proposal can be strictly bounded while remaining non-authoritative. The production approval argument is literally `false`, so the existing Legacy selection always wins, including when promotion property is set. See `verification/SHADOW_PROMOTION_PREPARATION.md`. This new capability does **not** retroactively confer native recipient proof, Phase 7 tactical advantage, or Minecraft acceptance.
