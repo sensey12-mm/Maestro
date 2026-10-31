@@ -167,7 +167,7 @@ class EvidenceGuards(unittest.TestCase):
                 ' PRIVATE_PLAYER',
         ):
             lines = self.reports()
-            lines[-1] = lines[-1].rstrip('\\n') + payload + '\\n'
+            lines[-1] = lines[-1].rstrip('\n') + payload + '\n'
             result = inspect_lines(lines)
             self.assertEqual(result['verdict'],
                              'CONTRADICTORY_OR_UNSAFE_DIAGNOSTIC')
