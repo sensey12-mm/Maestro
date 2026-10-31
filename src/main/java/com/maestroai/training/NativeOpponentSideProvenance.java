@@ -92,6 +92,21 @@ public final class NativeOpponentSideProvenance {
                                     runtime,identity)));
             }
         }
+        /**
+         * Phase 6.32 original receipt custody: the *same* original 6.30
+         * source-owned report must reach the consumer. A matching battle,
+         * turn, revision, or public-side value is not enough.
+         */
+        boolean sharesOriginalBridge(Object physicalBattle,
+                ShadowCompetitiveRuntimeBridge.Report candidate){
+            synchronized(owner){
+                return physicalBattle!=null && owner.battle==physicalBattle
+                        && bridge!=null && bridge==candidate && current()
+                        && candidate.publicContinuitySourceAligned()
+                        && !candidate.phase5OnlineAuthorized()
+                        && !candidate.shadowSearchAuthorized();
+            }
+        }
         /** Same original native actor/topology observed, no Pokemon proof. */
         public boolean nativeSideMembershipObserved(){return current();}
         /** True ONLY for original 6.24/6.29/6.30 current receipt linkage. */
