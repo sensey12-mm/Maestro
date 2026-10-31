@@ -129,6 +129,51 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
         return new SyntheticLiveFixture(live,f.routingOwner(),f.battle(),original);
     }
 
+    /** Real synthetic native 6.24 / 6.31 callback progression on ONE battle,
+     * with fresh routing and appearance proofs at each native return. */
+    static final class SourceEpochs {
+        private Fixture source;
+        private final PublicCompetitiveLiveShadowConsumer.Session observer=
+                new PublicCompetitiveLiveShadowConsumer.Session();
+        SourceEpochs(){
+            source=fixture(new Object(),false,
+                    history("update\n|move|p2a: "+SECRET+"|Stealth Rock|p1a: Own"));
+        }
+        Object physicalBattle(){return source.battle();}
+        PublicCompetitiveLiveShadowConsumer.Report initial(){
+            return evaluate(observer,source);
+        }
+        PublicCompetitiveLiveShadowConsumer.Report next(boolean newEvidence){
+            var old=source;
+            var original=new ArrayList<>(old.history());
+            if(newEvidence)
+                original.add("update\n|move|p2a: "+SECRET+"|Recover|p1a: Own");
+            var nextHistory=List.copyOf(original);
+            var nativeReturn=old.nativeOwner().nativeReturn(
+                    old.battle(),old.actors(),old.own(),
+                    new Object(),new Object(),false,1,nextHistory.size(),true,false);
+            var nativeSide=old.sideOwner().observeSyntheticNativeReturn(
+                    old.battle(),old.actors(),old.own(),old.opposite(),old.own(),
+                    "p1","p2",new Object(),new Object(),nativeReturn);
+            var routing=new PublicSplitRoutingGate.Session();
+            var routed=routing.inspect(old.battle(),nextHistory,true);
+            var identity=new PublicOpponentIdentityContinuity.Session();
+            var appearance=identity.inspect(old.battle(),routed,nextHistory);
+            check(nativeReturn.current() && nativeSide.current()
+                    && routed.current() && appearance.current(),
+                    "new native/public callback epoch independently source-proven");
+            source=new Fixture(old.battle(),old.own(),old.opposite(),old.actors(),
+                    old.nativeOwner(),nativeReturn,old.sideOwner(),nativeSide,
+                    routing,routed,identity,appearance,nextHistory);
+            return evaluate(observer,source);
+        }
+        void end(){
+            check(observer.battleEnded(source.battle()),
+                    "same-battle source epochs withdrawn at native termination");
+        }
+    }
+    static SourceEpochs sourceEpochs(){return new SourceEpochs();}
+
     static void run() throws Exception {
         var pin=PublicCompetitiveLiveShadowConsumer.Request.pinned();
         check(pin.version()==2
@@ -184,6 +229,28 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
                 && positive.conditionalPublicRoleHypotheses().isEmpty(),
                 "duplicate original native epoch revokes previous public capability");
         bounded(positive);
+
+        // Duplicate native callback without a new public move is a fresh
+        // source epoch but MUST NOT reuse the earlier positive capability.
+        var epochs=sourceEpochs();
+        var firstEpoch=epochs.initial();
+        check(firstEpoch.current(),"fresh epoch #1 accepted");
+        var noNew=epochs.next(false);
+        check(noNew.verdict()==PublicCompetitiveLiveShadowConsumer.Verdict.NO_NEW_PUBLIC_EVIDENCE
+                && !noNew.current() && noNew.attestedNoNew(epochs.physicalBattle())
+                && !noNew.attestedNoNew(new Object())
+                && noNew.observedCapabilities().isEmpty()
+                && !firstEpoch.current(),
+                "fresh source epoch with identical public history abstains without reviving old move evidence");
+        var nextEpoch=epochs.next(true);
+        check(nextEpoch.current()
+                && nextEpoch.observedCapabilities().contains(
+                        PublicCompetitiveLiveShadowConsumer.Capability.RECOVERY_OBSERVED)
+                && !noNew.attestedNoNew(epochs.physicalBattle())
+                && !firstEpoch.current(),
+                "new witnessed public move in later native epoch resumes bounded diagnostics");
+        epochs.end();
+        check(!nextEpoch.current(),"native battle termination revokes recovered public receipt");
 
         var reverse=fixture(new Object(),true,
                 history("update\n|move|p1a: Own|Recover|p2a: "+SECRET));

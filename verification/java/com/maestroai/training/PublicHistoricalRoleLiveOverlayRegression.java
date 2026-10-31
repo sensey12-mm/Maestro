@@ -140,6 +140,35 @@ final class PublicHistoricalRoleLiveOverlayRegression {
             noAuthority(denied);
         }
 
+        var lease=PublicCompetitiveLiveShadowConsumerRegression.sourceEpochs();
+        var sequenceSession=new PublicHistoricalRoleLiveOverlay.Session();
+        var positiveSource=lease.initial();
+        var firstRole=sequenceSession.inspect(lease.physicalBattle(),
+                positiveSource,history.archive(),refreshed);
+        check(firstRole.current(),
+                "fresh native epoch #1 admitted historical unbound roles");
+        var noNewSource=lease.next(false);
+        var paused=sequenceSession.inspect(lease.physicalBattle(),
+                noNewSource,history.archive(),refreshed);
+        check(paused.verdict()==PublicHistoricalRoleLiveOverlay.Verdict.NO_LIVE_SOURCE
+                && !paused.current() && !sequenceSession.withdrawn()
+                && !firstRole.current()
+                && firstRole.unboundHistoricalRolePossibilities().isEmpty(),
+                "source-attested no-new callback pauses and invalidates previous role");
+        var futureSource=lease.next(true);
+        var resumed=sequenceSession.inspect(lease.physicalBattle(),
+                futureSource,history.archive(),refreshed);
+        check(resumed.current() && !firstRole.current()
+                && resumed.currentPublicCapabilities().contains(
+                        PublicCompetitiveLiveShadowConsumer.Capability.RECOVERY_OBSERVED)
+                && !resumed.legacyChoiceAuthorized(),
+                "new valid public evidence resumes historical role without reviving old report");
+        noAuthority(resumed);
+        lease.end();
+        check(!resumed.current()
+                && resumed.unboundHistoricalRolePossibilities().isEmpty(),
+                "same-battle native end withdraws recovered public and historical roles");
+
         var foreign=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
         var different=new PublicHistoricalRoleLiveOverlay.Session();
         var mismatch=different.inspect(new Object(),source.live(),history.archive(),refreshed);
