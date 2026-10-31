@@ -20,9 +20,9 @@ final class NativeOpponentPokemonContinuityRegression {
     private static List<String> history(){
         return List.of(
                 split("p1","|switch|p1a: OWN_TRUE_PRIVATE_UUID|Genesect, L100|80/100",
-                        "|switch|p1a: Own|Genesect, L100|100/100"),
+                        "|switch|p1a: OWN_TRUE_PRIVATE_UUID|Genesect, L100|100/100"),
                 split("p2","|switch|p2a: "+PRIVATE+"|Greninja, L100|35/100",
-                        "|switch|p2a: PublicDisplay|Greninja, L100|100/100"),
+                        "|switch|p2a: "+PRIVATE+"|Greninja, L100|100/100"),
                 "update\n|turn|1");
     }
     private static List<String> append(List<String> previous,String chunk){
@@ -172,7 +172,7 @@ final class NativeOpponentPokemonContinuityRegression {
         var changed=new ArrayList<>(original);
         changed.set(1,split("p2",
                 "|switch|p2a: "+PRIVATE+"|Greninja, L100|25/100",
-                "|switch|p2a: PublicDisplay|Greninja, L100|100/100"));
+                "|switch|p2a: "+PRIVATE+"|Greninja, L100|100/100"));
         var altered=new NativeOpponentPokemonContinuity.Session();
         var tampered=altered.inspect(sourceOwner.battle(),sourceOwner.safety(),
                 sourceOwner.routing(),changed);
@@ -201,9 +201,9 @@ final class NativeOpponentPokemonContinuityRegression {
         String[] ambiguous={
                 "update\n|switch|p2a: PublicDisplay|Zoroark, L100|100/100",
                 split("p2","|switch|p2a: "+PRIVATE+"|Zoroark, L100|95/100",
-                        "|switch|p2a: PublicDisplay|Zoroark, L100|100/100"),
+                        "|switch|p2a: "+PRIVATE+"|Zoroark, L100|100/100"),
                 split("p2","|drag|p2a: "+PRIVATE+"|Ditto, L100|95/100",
-                        "|drag|p2a: PublicDisplay|Ditto, L100|100/100"),
+                        "|drag|p2a: "+PRIVATE+"|Ditto, L100|100/100"),
                 "update\n|replace|p2a: PublicDisplay|Zoroark, L100|100/100",
                 "update\n|-end|p2a: PublicDisplay|Illusion",
                 "update\n|-transform|p2a: PublicDisplay|p1a: Own",
