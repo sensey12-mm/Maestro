@@ -61,6 +61,8 @@ def check_workflow(source):
         raise ValueError('Maestro4567 requires SHA-isolated CI concurrency')
     if 'python3 verification/check_repository.py\n' not in source or 'python3 verification/check_repository.py --self-test\n' not in source:
         raise ValueError('Safeguards not executed')
+    if 'python3 verification/phase5_verify_download.py --self-test\n' not in source:
+        raise ValueError('Phase 5 installed artifact self-test missing')
     # An exact-source JAR cannot be installed from CI if the verified
     # artifact is omitted or uploaded before simulator verification.
     required_source = 'python3 verification/source_oracle.py\n'
@@ -131,6 +133,12 @@ class SafeguardRegression(unittest.TestCase):
                 ("&& github.sha || 'shared'", "&& 'shared'")):
             with self.subTest(before=before), self.assertRaisesRegex(ValueError, 'SHA-isolated'):
                 check_workflow(source.replace(before, after))
+
+    def test_installed_artifact_self_test_required(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        with self.assertRaisesRegex(ValueError, 'artifact self-test'):
+            check_workflow(source.replace(
+                'python3 verification/phase5_verify_download.py --self-test\n', '', 1))
 
     def test_exact_commit_jar_artifact_is_gated_by_simulator(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
