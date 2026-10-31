@@ -22,7 +22,7 @@ HISTORICAL_FORMAT = re.compile(
     r'verdict=[A-Z_]+;current=(true|false);'
     r'roles=\[(?:[A-Z_]+(?:, [A-Z_]+)*)?\];'
     r'presentPokemon=UNKNOWN;historicalJoin=UNBOUND;'
-    r'forecast=NONE;authority=NONE\]
+    r'forecast=NONE;authority=NONE\]$')
 
 
 def inspect_lines(lines):
