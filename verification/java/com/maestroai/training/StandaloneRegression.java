@@ -448,6 +448,7 @@ public final class StandaloneRegression {
         Integration4567Regression.run();
         IntegrationRuntimeReadinessGateRegression.run();
         ShadowCompetitiveRuntimeBridgeRegression.run();
+        PublicOpponentIdentityContinuityRegression.run();
         OfflineShadowTacticalAdapterRegression.run();
         OfflineShadowProvenanceGateRegression.run();
         OfflineShadowResponseScenariosRegression.run();

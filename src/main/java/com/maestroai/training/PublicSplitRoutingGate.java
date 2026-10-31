@@ -64,6 +64,25 @@ public final class PublicSplitRoutingGate {
         boolean sameBattle(Object battle){
             return current() && session.boundBattle==battle && battle!=null;
         }
+        /**
+         * Source-owned, fail-closed exact history custody for observational
+         * Phase 6 consumers. The salted digests are compared internally; no
+         * raw public/private content, salt, or digest can be returned.
+         */
+        boolean matchesOriginalHistory(Object battle,List<String> candidate){
+            synchronized(session){
+                if(!current() || !sameBattle(battle) || candidate==null
+                        || candidate.size()!=chunkCount || candidate.size()>MAX_CHUNKS
+                        || candidate.stream().anyMatch(Objects::isNull)
+                        || candidate.stream().mapToLong(String::length).sum()>MAX_CHARS)
+                    return false;
+                try{
+                    return session.digest(candidate).equals(session.acceptedDigests);
+                }catch(RuntimeException invalid){
+                    return false;
+                }
+            }
+        }
         public String schema(){return SCHEMA;}
         public String source(){return SOURCE;}
         public Verdict verdict(){return verdict;}
