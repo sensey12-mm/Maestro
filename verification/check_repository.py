@@ -63,6 +63,8 @@ def check_workflow(source):
         raise ValueError('Safeguards not executed')
     if 'python3 verification/phase5_verify_download.py --self-test\n' not in source:
         raise ValueError('Phase 5 installed artifact self-test missing')
+    if 'python3 verification/phase5_minecraft_log_gate.py --self-test\n' not in source:
+        raise ValueError('Phase 5 installed Minecraft log gate self-test missing')
     # An exact-source JAR cannot be installed from CI if the verified
     # artifact is omitted or uploaded before simulator verification.
     required_source = 'python3 verification/source_oracle.py\n'
@@ -139,6 +141,12 @@ class SafeguardRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact self-test'):
             check_workflow(source.replace(
                 'python3 verification/phase5_verify_download.py --self-test\n', '', 1))
+
+    def test_minecraft_log_evidence_gate_is_required(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        with self.assertRaisesRegex(ValueError, 'Minecraft log gate'):
+            check_workflow(source.replace(
+                'python3 verification/phase5_minecraft_log_gate.py --self-test\n', '', 1))
 
     def test_exact_commit_jar_artifact_is_gated_by_simulator(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()

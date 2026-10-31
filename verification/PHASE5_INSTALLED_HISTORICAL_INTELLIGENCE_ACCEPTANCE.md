@@ -1,13 +1,13 @@
 # Phase 5 — Installed Historical Intelligence Acceptance Matrix
 
-**Branch:** `Maestro4567` · **JAR:** 1.0.89 · **Evidence status:** pending independent operator provisioning, complete exact-commit CI and **actual Minecraft observation**. This matrix is an *owner-side execution plan*, not a test receipt. No raw owner logs are stored in public Maestro.
+**Branch:** `Maestro4567` · **JAR:** 1.0.90 · **Evidence status:** pending independent operator provisioning, complete exact-commit CI and **actual Minecraft observation**. This matrix is an *owner-side execution plan*, not a test receipt. No raw owner logs are stored in public Maestro.
 
 ## Obtain the exact verified JAR
 
 The public GitHub Actions run must finish **SUCCESS**, including the pinned
 simulator step. Then open that same run's **Artifacts** section and download
 `maestroai-verified-<exact 40-character commit SHA>` (a ZIP archive).
-Extract `maestroai-1.0.89.jar` and `sha256.txt`; compare the JAR's
+Extract `maestroai-1.0.90.jar` and `sha256.txt`; compare the JAR's
 SHA-256 against the exported checksum before installing. The archive name
 ties the build to the GitHub checkout commit, not the user's local file name.
 For a second, independent checksum comparison, read the JAR SHA-256 from that same
@@ -16,7 +16,7 @@ field `jar_sha256` printed by `verification/check_jar.py`). Download the ZIP
 and run from the Maestro source checkout:
 
 ```text
-python verification/phase5_verify_download.py path/to/downloaded-artifact.zip 1.0.89 <independently-copied-jar_sha256>
+python verification/phase5_verify_download.py path/to/downloaded-artifact.zip 1.0.90 <independently-copied-jar_sha256>
 ```
 
 The final argument is a placeholder, not a real digest. The checker reads the
@@ -33,7 +33,7 @@ or private operator inputs.
 
 ## Preconditions (all mandatory)
 
-- [ ] Exact 1.0.89 SHA and public GitHub Actions run have every required check marked **SUCCESS**. Reject a JAR from a different commit even if it has the same filename/version.
+- [ ] Exact 1.0.90 SHA and public GitHub Actions run have every required check marked **SUCCESS**. Reject a JAR from a different commit even if it has the same filename/version.
 - [ ] Singleplayer Minecraft Java 1.21.1, Fabric, Java 21, Cobblemon 1.7.3, RCT 0.15.2-beta and unchanged Cobbleverse mods are confirmed.
 - [ ] Operator has genuinely independently approved a public spectator replay for this specific use, with explicit permission, signer and unexpired ledger decision. Neither a source listing nor a JVM `true` flag grants rights.
 - [ ] Offline operator has prepared `custody-anchor.state` and stored the **exact** SHA-256 checkpoint, revision, keyring root, and clock floor independently from the replay/state directory.
@@ -91,3 +91,13 @@ The same four teams and known builds can be reused. No need to reissue unchanged
 Record the **exact JAR SHA, public Actions URL, observed native callback, categorical diagnostic verdict, withdrawal case and diagnostics-OFF comparison** in a sanitized owner-controlled acceptance note. Any raw battle logs, if needed, remain private with LAIr/Headquarters rather than public commits.
 
 **Current status:** Source-level Java, native ABI, JAR and simulator results must be recorded from *exact final commit* Actions; installed singleplayer observations are **NOT PERFORMED** here. Gate remains **NO-GO for full installed historical acceptance** until the real operator-approved archive and Minecraft evidence exist. Legacy remains authoritative. Shadow stays diagnostic-only.
+
+## Redacted owner log inspection (v1.0.90)
+
+After a **real** installed Minecraft session, the owner may run this local-only checker on an absolute private log path:
+
+```text
+python verification/phase5_minecraft_log_gate.py C:\path\to\private\latest.log
+```
+
+This reads at most 32 MiB, emits only bounded counts and categorical statuses (no raw player name, replay ID, key, UUID, or filesystem path), and requires a `PROVISIONED` startup, native Phase 6.24 diagnostic receipts, the live public Shadow diagnostic, and a *current unbound historical role* report. Contradictory identity/authority fields fail the report. The best result is `LOG_PATTERNS_OBSERVED`, **never** Minecraft acceptance: verify the signed archive and exact JAR provenance, all four teams, source validity, the owner-controlled battle context, and Legacy choice equivalence separately. Existing logs from a different JAR version are not acceptance evidence for 1.0.90. Keep original logs private with LAIr/Headquarters.
