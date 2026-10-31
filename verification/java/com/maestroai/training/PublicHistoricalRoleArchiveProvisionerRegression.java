@@ -285,6 +285,8 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
             var revokedPin=folder.resolve("latest-pin.properties");
             put(revokedPin,Map.of("checkpointStateSha256",rotated.stateSha256(),
                     "checkpointRevision","2","checkpointKeyringEpoch","2"));
+            PublicPhase5CommissioningAuditRegression.rotated(
+                    folder,root,revokedPin,settings,now);
             var revokeSecond=new PublicReplayCustody.Decision("gen9ou-99887767",
                     "gen9ou","c".repeat(64),PublicReplayCustody.Status.REVOKED,
                     now+1,0,"e".repeat(64));

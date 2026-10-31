@@ -179,6 +179,27 @@ final class PublicPhase5CommissioningAuditRegression {
                 "synthetic operator source restored, no success cached from failure");
         return r;
     }
+    static void rotated(Path parent,Path root,Path latestCheckpoint,
+                        Properties rotatedSettings,long now)throws Exception{
+        // Signed history: old signer revoked, independently signed successor
+        // uses the new signer; original bootstrap remains externally pinned.
+        Path jar=jar(parent);
+        Path ci=pin(parent,jar);
+        Path launch=settings(parent,rotatedSettings);
+        expect(inspect(jar,ci,launch,root,latestCheckpoint,now),
+                PublicPhase5CommissioningAudit.Verdict
+                        .LOCALLY_READY_FOR_MINECRAFT_TEST,
+                "rotated Ed25519 keyring with revoked old signer verifies end-to-end");
+        Properties old=new Properties();
+        old.putAll(rotatedSettings);
+        old.setProperty("maestroai.phase5Archive.checkpointRevision","1");
+        old.setProperty("maestroai.phase5Archive.checkpointKeyringEpoch","1");
+        settings(parent,old);
+        expect(inspect(jar,ci,launch,root,latestCheckpoint,now),
+                PublicPhase5CommissioningAudit.Verdict.TRUST_ANCHORS_MISMATCH,
+                "operator cannot silently reinstall a pre-rotation keyring pin");
+        settings(parent,rotatedSettings);
+    }
     static void revoked(Path parent,Path state,Path root,Path independentCheckpoint,
                         Path replay,Properties installed,long now)throws Exception{
         // After the append-only signed revocation the launcher and external
