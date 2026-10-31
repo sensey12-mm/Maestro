@@ -86,8 +86,19 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
             rootFields.put("bootstrapMinimumRevision","1");
             rootFields.put("bootstrapEarliestSignature",Long.toString(time-200));
             put(root,rootFields);
+            String spectator="|gen|9\n|gametype|singles\n|tier|[Gen 9] OU\n"
+                    +"|player|p1|SYNTHETIC\n|start\n"
+                    +"|switch|p1a: Ally|Pikachu, L100|100/100\n"
+                    +"|switch|p2a: Test|Zoroark, L100|100/100\n"
+                    +"|turn|1\n|move|p2a: Test|Nasty Plot|p1a: Ally\n|win|SYNTHETIC\n";
+            Path replay=Files.createFile(rootDirectory.resolve("reviewed-spectator.log"));
+            Files.writeString(replay,spectator);
+            var replaySource=new PublicReplayCorpus.Source("gen9ou-99887766",
+                    "gen9ou",true,PublicReplayCorpus.RightsBasis
+                            .EXPLICIT_REPLAY_USE_PERMISSION);
+            var evidence=PublicReplayCorpus.ingest(replaySource,spectator);
             var decision=new PublicReplayCustody.Decision("gen9ou-99887766","gen9ou",
-                    "a".repeat(64),PublicReplayCustody.Status.APPROVED,
+                    evidence.inputSha256(),PublicReplayCustody.Status.APPROVED,
                     time-60,time+500,"b".repeat(64));
             var first=new PublicReplayCustody.Ledger(1,1,List.of(decision));
             var signed=sign(signer,first,time-40,"0".repeat(64));
@@ -101,6 +112,31 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                             rootFields.get("bootstrapEd25519Spki"),time-200,0)));
             check(PublicCustodyTrustStore.recover(state,policy,provisioned,time)
                     .signedLedgerVerified(),"imported journal recoverable from external root");
+            // Real integration path with SYNTHETIC signers and replay only:
+            // importer -> independent pin -> unchanged runtime preflight.
+            var launcher=new Properties();
+            launcher.setProperty("maestroai.phase5HistoricalRolesObserve","true");
+            for(var entry:rootFields.entrySet())
+                launcher.setProperty("maestroai.phase5Archive."+entry.getKey(),
+                        entry.getValue());
+            String prefix="maestroai.phase5Archive.";
+            launcher.setProperty(prefix+"directory",state.toString());
+            launcher.setProperty(prefix+"replayLog",replay.toString());
+            launcher.setProperty(prefix+"replayId","gen9ou-99887766");
+            launcher.setProperty(prefix+"format","gen9ou");
+            launcher.setProperty(prefix+"roleQueries","2:zoroark:nastyplot");
+            launcher.setProperty(prefix+"replayRightsIndependentlyApproved","true");
+            launcher.setProperty(prefix+"operatorVerifiedHostClock","true");
+            launcher.setProperty(prefix+"operatorVerifiedTimeFloor",Long.toString(time-1));
+            launcher.setProperty(prefix+"checkpointStateSha256",provisioned.stateSha256());
+            launcher.setProperty(prefix+"checkpointRevision",
+                    Long.toString(provisioned.custodyRevision()));
+            launcher.setProperty(prefix+"checkpointKeyringEpoch",
+                    Long.toString(provisioned.keyringEpoch()));
+            check(PublicHistoricalRoleOperatorPreflight.inspect(launcher,()->time)
+                    .locallyProvisioned(),"imported synthetic archive reaches game preflight");
+            check(!PublicHistoricalRoleOperatorPreflight.inspect(launcher,()->time)
+                    .minecraftAccepted(),"source preflight does not claim Minecraft acceptance");
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
                     false,state,root,signedFile,null,time),"no overwrite on init");
             put(pinFile,Map.of("checkpointStateSha256",provisioned.stateSha256(),
@@ -146,6 +182,13 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     "signed append-only revocation imported");
             check(PublicCustodyTrustStore.recover(state,policy,current,time)
                     .custodyRevision()==2,"revocation journal validates");
+            launcher.setProperty(prefix+"checkpointStateSha256",current.stateSha256());
+            launcher.setProperty(prefix+"checkpointRevision",
+                    Long.toString(current.custodyRevision()));
+            check(PublicHistoricalRoleOperatorPreflight.inspect(launcher,()->time)
+                    .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
+                            .CUSTODY_OR_ARCHIVE_REJECTED,
+                    "signed revocation withdraws game-preflight historical source");
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
                     true,state,root,signedFile,pinFile,time),"stale pin replay fails");
             reject(()->PublicCustodyTrustStore.recover(state,policy,provisioned,time),
