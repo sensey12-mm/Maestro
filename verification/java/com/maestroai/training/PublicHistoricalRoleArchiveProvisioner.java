@@ -131,6 +131,44 @@ public final class PublicHistoricalRoleArchiveProvisioner {
                 required(fields,"previousManifestDigest"),ledger,
                 required(fields,"signatureBase64"));
     }
+    /**
+     * Transport-only externally signed keyring transition. The independent
+     * bootstrap trust root MUST NOT be reconstructed from this untrusted file.
+     * These are exact canonical policy fields; no signing happens here.
+     */
+    private static PublicCustodyTrustStore.KeyringUpdate rotation(
+            Map<String,String> fields){
+        int count=bounded(required(fields,"nextKeyCount"),32);
+        var allowed=new HashSet<>(Set.of("signerKeyId","signedAtEpochSecond",
+                "previousPolicyDigest","signatureBase64","nextKeyCount",
+                "nextKeyringEpoch","nextMinimumKeyringEpoch",
+                "nextMinimumRevision","nextEarliestSignature","nextManifestDigest"));
+        var keys=new ArrayList<PublicSignedCustody.TrustedKey>();
+        for(int i=0;i<count;i++){
+            String prefix="nextKey."+i+".";
+            for(String field:List.of("keyId","ed25519Spki","activeFrom",
+                    "revokedAt"))
+                allowed.add(prefix+field);
+            keys.add(new PublicSignedCustody.TrustedKey(
+                    required(fields,prefix+"keyId"),
+                    required(fields,prefix+"ed25519Spki"),
+                    positive(required(fields,prefix+"activeFrom")),
+                    zeroOrPositive(required(fields,prefix+"revokedAt"))));
+        }
+        exact(fields,allowed);
+        var policy=new PublicSignedCustody.TrustedPolicy(
+                positive(required(fields,"nextKeyringEpoch")),
+                positive(required(fields,"nextMinimumKeyringEpoch")),
+                positive(required(fields,"nextMinimumRevision")),
+                positive(required(fields,"nextEarliestSignature")),
+                optional(fields,"nextManifestDigest"),keys);
+        return new PublicCustodyTrustStore.KeyringUpdate(
+                required(fields,"signerKeyId"),
+                positive(required(fields,"signedAtEpochSecond")),
+                required(fields,"previousPolicyDigest"),policy,
+                required(fields,"signatureBase64"));
+    }
+
     private static long zeroOrPositive(String value){
         if("0".equals(value))return 0;
         return positive(value);
@@ -145,47 +183,87 @@ public final class PublicHistoricalRoleArchiveProvisioner {
     public static PublicCustodyTrustStore.Checkpoint importSigned(
             boolean advance,Path stateDirectory,Path independentRootFile,
             Path signedManifestFile,Path externalPriorCheckpoint,long trustedEpochSecond){
+        return importSigned(advance,stateDirectory,independentRootFile,
+                signedManifestFile,externalPriorCheckpoint,null,trustedEpochSecond);
+    }
+
+    /**
+     * A non-null signedKeyringUpdateFile enables exactly ONE authenticated
+     * keyring epoch transition, together with one appended signed ledger
+     * decision. It never imports trust anchors from the update's contents.
+     */
+    public static PublicCustodyTrustStore.Checkpoint importSigned(
+            boolean advance,Path stateDirectory,Path independentRootFile,
+            Path signedManifestFile,Path externalPriorCheckpoint,
+            Path signedKeyringUpdateFile,long trustedEpochSecond){
         try{
             if(trustedEpochSecond<1 || stateDirectory==null
                     || !stateDirectory.isAbsolute()
                     || Files.isSymbolicLink(stateDirectory)
                     || !Files.isDirectory(stateDirectory,LinkOption.NOFOLLOW_LINKS)
                     || advance!=(externalPriorCheckpoint!=null)
-                    || independentRootFile==null || signedManifestFile==null
-                    || independentRootFile.equals(signedManifestFile)
-                    || (externalPriorCheckpoint!=null
-                        && (externalPriorCheckpoint.equals(independentRootFile)
-                            || externalPriorCheckpoint.equals(signedManifestFile))))
+                    || !advance && signedKeyringUpdateFile!=null
+                    || independentRootFile==null || signedManifestFile==null)
                 throw denied();
-            var root=root(load(independentRootFile,stateDirectory));
+            // All input files must be independent and outside the journal.
+            var files=new ArrayList<Path>();
+            files.add(independentRootFile);
+            files.add(signedManifestFile);
+            if(externalPriorCheckpoint!=null)files.add(externalPriorCheckpoint);
+            if(signedKeyringUpdateFile!=null)files.add(signedKeyringUpdateFile);
+            var unique=new HashSet<Path>();
+            for(Path file:files){
+                if(!file.isAbsolute() || Files.isSymbolicLink(file)
+                        || !unique.add(file.toRealPath()))
+                    throw denied();
+            }
+            var bootstrap=root(load(independentRootFile,stateDirectory));
             var manifest=signed(load(signedManifestFile,stateDirectory));
             if(!advance)
-                return PublicCustodyTrustStore.initialize(stateDirectory,root,
+                return PublicCustodyTrustStore.initialize(stateDirectory,bootstrap,
                         manifest,trustedEpochSecond);
             var pinned=checkpoint(load(externalPriorCheckpoint,stateDirectory));
-            // No key rotation performed here: a rotated keyring requires a
-            // separate, explicitly authenticated update, never guessed.
-            return PublicCustodyTrustStore.advance(stateDirectory,root,pinned,
-                    List.of(),manifest,trustedEpochSecond);
-        }catch(RuntimeException ex){throw denied();}
+            var updates=signedKeyringUpdateFile==null?List
+                    .<PublicCustodyTrustStore.KeyringUpdate>of()
+                    :List.of(rotation(load(signedKeyringUpdateFile,stateDirectory)));
+            if(!updates.isEmpty()){
+                // The update must explicitly change the key inventory or an
+                // existing signer's revocation state, not merely bump an epoch.
+                var previous=PublicCustodyTrustStore.validatedPolicy(
+                        stateDirectory,bootstrap,pinned,trustedEpochSecond);
+                var next=updates.getFirst().nextPolicy();
+                boolean changed=next.keys().size()!=previous.keys().size();
+                for(var old:previous.keys()){
+                    var replacement=next.keys().stream()
+                            .filter(key->key.keyId().equals(old.keyId()))
+                            .findFirst().orElse(null);
+                    if(replacement==null || replacement.revokedAtEpochSecond()
+                            !=old.revokedAtEpochSecond())changed=true;
+                }
+                if(!changed)throw denied();
+            }
+            return PublicCustodyTrustStore.advance(stateDirectory,bootstrap,pinned,
+                    updates,manifest,trustedEpochSecond);
+        }catch(java.io.IOException | RuntimeException ex){throw denied();}
     }
 
     /**
      * Usage: init STATE_DIR ROOT_FILE SIGNED_MANIFEST TRUSTED_EPOCH
      *    or: advance STATE_DIR ROOT_FILE SIGNED_MANIFEST PRIOR_PIN TRUSTED_EPOCH
+     *    or: rotate STATE_DIR ROOT_FILE SIGNED_MANIFEST PRIOR_PIN SIGNED_UPDATE TRUSTED_EPOCH
      * No private information included in errors or the successful receipt.
      */
     public static void main(String[] args){
         try{
-            if(args.length!=5 && args.length!=6)throw denied();
-            boolean advance;
-            if("init".equals(args[0]))advance=false;
-            else if("advance".equals(args[0]))advance=true;
-            else throw denied();
-            if(advance!=(args.length==6))throw denied();
+            boolean rotate="rotate".equals(args.length>0?args[0]:"");
+            boolean advance="advance".equals(args.length>0?args[0]:"") || rotate;
+            boolean init="init".equals(args.length>0?args[0]:"");
+            if(!(init && args.length==5 || !rotate && advance && args.length==6
+                    || rotate && args.length==7))throw denied();
             var newPin=importSigned(advance,Path.of(args[1]),Path.of(args[2]),
                     Path.of(args[3]),advance?Path.of(args[4]):null,
-                    positive(args[advance?5:4]));
+                    rotate?Path.of(args[5]):null,
+                    positive(args[rotate?6:advance?5:4]));
             // Export ONLY the exact checkpoint to an independent secure
             // channel. Never write it beside the untrusted journal.
             System.out.println("checkpointStateSha256="+newPin.stateSha256());

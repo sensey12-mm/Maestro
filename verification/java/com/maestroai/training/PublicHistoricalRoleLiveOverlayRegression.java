@@ -141,6 +141,33 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                 "independently supplied wrong trusted keyring must fail closed");
         noAuthority(changedSigner);
 
+        // Even when the signed replay and role evidence are unchanged, a
+        // legitimately higher keyring epoch is a new trust generation.
+        // Existing battle leases must never bridge it.
+        var rotationLive=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+        var rotatedSession=new PublicHistoricalRoleLiveOverlay.Session();
+        var newTrusted=new AtomicReference<>(history.custody());
+        var underOldRoot=live(rotatedSession,rotationLive,history,newTrusted::get);
+        check(underOldRoot.current(),"original trust-epoch historical lease accepted");
+        var oldPolicy=history.custody().policy();
+        var epochTwo=new PublicSignedCustody.TrustedPolicy(
+                oldPolicy.keyringEpoch()+1,oldPolicy.keyringEpoch()+1,
+                oldPolicy.minimumRevision(),oldPolicy.earliestSignatureEpochSecond(),
+                oldPolicy.requiredManifestDigest(),oldPolicy.keys());
+        newTrusted.set(new PublicHistoricalRoleLiveOverlay.CustodySnapshot(
+                history.custody().signed(),epochTwo,
+                history.custody().currentEpochSecond()));
+        check(!underOldRoot.current() && rotatedSession.withdrawn()
+                && underOldRoot.unboundHistoricalRolePossibilities().isEmpty()
+                && underOldRoot.currentPublicCapabilities().isEmpty(),
+                "keyring epoch advance revokes all old live historical leases");
+        newTrusted.set(history.custody());
+        check(!underOldRoot.current()
+                && rotatedSession.inspect(rotationLive.physicalBattle(),
+                        rotationLive.live(),history.archive(),newTrusted::get).verdict()
+                        ==PublicHistoricalRoleLiveOverlay.Verdict.WITHDRAWN,
+                "returning to an older trusted keyring never resurrects reports");
+
         var noTrusted=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
         var absentSession=new PublicHistoricalRoleLiveOverlay.Session();
         check(absentSession.inspect(noTrusted.physicalBattle(),noTrusted.live(),

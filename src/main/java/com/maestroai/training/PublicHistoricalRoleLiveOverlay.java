@@ -236,6 +236,12 @@ public final class PublicHistoricalRoleLiveOverlay {
                 CustodySnapshot next=trusted.latest();
                 if(next==null || next.currentEpochSecond()<lastCheckedAt
                         || next.currentEpochSecond()<archive.originalEpoch
+                        // Key rotation/revocation invalidates ALL prior live
+                        // Shadow leases, even with a valid signed successor.
+                        // Only a fresh externally pinned installation can
+                        // admit reports from the new trust epoch.
+                        || lastKeyringEpoch>0
+                            && next.policy().keyringEpoch()!=lastKeyringEpoch
                         || next.policy().minimumRevision()<lastMinimumRevision
                         || next.policy().keyringEpoch()<lastKeyringEpoch
                         || next.policy().minimumRevision()<archive.originalVerified.revision())
