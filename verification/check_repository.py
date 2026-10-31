@@ -199,7 +199,9 @@ class SafeguardRegression(unittest.TestCase):
         for extra in ('          run-id: 123456\n',
                       '          repository: attacker/other\n'):
             marker = '          name: maestroai-candidate-${{ github.sha }}\n'
-            broken = source.replace(marker, marker + extra, 1)
+            publish_at = source.index('  publish:\n')
+            broken = (source[:publish_at] +
+                      source[publish_at:].replace(marker, marker + extra, 1))
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, 'Verified JAR'):
                 check_workflow(broken)
 
