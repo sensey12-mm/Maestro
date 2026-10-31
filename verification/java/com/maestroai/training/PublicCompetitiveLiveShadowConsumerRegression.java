@@ -138,13 +138,17 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
                 && positive.observedCapabilities().equals(Set.of(
                     PublicCompetitiveLiveShadowConsumer.Capability.HAZARD_SET_OBSERVED,
                     PublicCompetitiveLiveShadowConsumer.Capability.SETUP_OBSERVED,
-                    PublicCompetitiveLiveShadowConsumer.Capability.PUBLIC_MOVE_EFFECT_UNKNOWN)),
+                    PublicCompetitiveLiveShadowConsumer.Capability.PUBLIC_MOVE_EFFECT_UNKNOWN))
+                && positive.conditionalPublicRoleHypotheses().equals(Set.of(
+                    PublicCompetitiveLiveShadowConsumer.RoleHypothesis.HAZARD_SETTER_POSSIBLE,
+                    PublicCompetitiveLiveShadowConsumer.RoleHypothesis.SETUP_USER_POSSIBLE)),
                 "witnessed hazard, setup and unsupported Toxic Spikes are distinct");
         bounded(positive);
         check(evaluate(c,f).verdict()
                     ==PublicCompetitiveLiveShadowConsumer.Verdict.REPLAY_OR_REGRESSION
                 && c.withdrawn() && !positive.current()
-                && positive.observedCapabilities().isEmpty(),
+                && positive.observedCapabilities().isEmpty()
+                && positive.conditionalPublicRoleHypotheses().isEmpty(),
                 "duplicate original native epoch revokes previous public capability");
         bounded(positive);
 
@@ -154,7 +158,9 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
         check(out.current() && out.publicOpponentSide()
                     ==NativeOpponentSideProvenance.Side.P1
                 && out.observedCapabilities().equals(Set.of(
-                    PublicCompetitiveLiveShadowConsumer.Capability.RECOVERY_OBSERVED)),
+                    PublicCompetitiveLiveShadowConsumer.Capability.RECOVERY_OBSERVED))
+                && out.conditionalPublicRoleHypotheses().equals(Set.of(
+                    PublicCompetitiveLiveShadowConsumer.RoleHypothesis.SUSTAIN_USER_POSSIBLE)),
                 "reverse p2-owned scenario never assumes opponent p2");
         bounded(out);
 

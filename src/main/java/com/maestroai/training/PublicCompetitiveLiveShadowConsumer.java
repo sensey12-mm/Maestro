@@ -40,6 +40,31 @@ public final class PublicCompetitiveLiveShadowConsumer {
         DEFENSE_OBSERVED, OTHER_VERIFIED_EFFECT_OBSERVED,
         PUBLIC_MOVE_EFFECT_UNKNOWN
     }
+    /**
+     * Conditional interpretation of an observed move on the current public
+     * side ONLY. Not a future response prediction or a historical build join.
+     */
+    public enum RoleHypothesis {
+        HAZARD_SETTER_POSSIBLE, HAZARD_REMOVER_POSSIBLE,
+        SETUP_USER_POSSIBLE, PIVOT_USER_POSSIBLE,
+        SUSTAIN_USER_POSSIBLE, CONTROL_USER_POSSIBLE
+    }
+    private static Set<RoleHypothesis> roles(Set<Capability> witnessed){
+        var roles=EnumSet.noneOf(RoleHypothesis.class);
+        if(witnessed.contains(Capability.HAZARD_SET_OBSERVED))
+            roles.add(RoleHypothesis.HAZARD_SETTER_POSSIBLE);
+        if(witnessed.contains(Capability.HAZARD_REMOVAL_OBSERVED))
+            roles.add(RoleHypothesis.HAZARD_REMOVER_POSSIBLE);
+        if(witnessed.contains(Capability.SETUP_OBSERVED))
+            roles.add(RoleHypothesis.SETUP_USER_POSSIBLE);
+        if(witnessed.contains(Capability.PIVOT_OBSERVED))
+            roles.add(RoleHypothesis.PIVOT_USER_POSSIBLE);
+        if(witnessed.contains(Capability.RECOVERY_OBSERVED))
+            roles.add(RoleHypothesis.SUSTAIN_USER_POSSIBLE);
+        if(witnessed.contains(Capability.MOVE_CONTROL_OBSERVED))
+            roles.add(RoleHypothesis.CONTROL_USER_POSSIBLE);
+        return Set.copyOf(roles);
+    }
     public record Request(int version,String installedSource,
                           PublicCompetitiveConsumerContract.ContractPin offlinePin,
                           Purpose purpose,boolean useHiddenOpponentState,
@@ -116,6 +141,9 @@ public final class PublicCompetitiveLiveShadowConsumer {
         public Set<Capability> observedCapabilities(){
             return current()?capabilities:Set.of();
         }
+        public Set<RoleHypothesis> conditionalPublicRoleHypotheses(){
+            return current()?roles(capabilities):Set.of();
+        }
         public NativeOpponentSideProvenance.Side publicOpponentSide(){
             return current()?opponentSide:NativeOpponentSideProvenance.Side.UNKNOWN;
         }
@@ -136,6 +164,7 @@ public final class PublicCompetitiveLiveShadowConsumer {
                     +";turn="+turn+";chunks="+historyChunks
                     +";publicMoveEvents="+publiclyObservedMoveEvents()
                     +";capabilities="+observedCapabilities()
+                    +";conditionalRoles="+conditionalPublicRoleHypotheses()
                     +";opponentSide="+publicOpponentSide()
                     +";identity=UNKNOWN;historicalBuild=UNBOUND"
                     +";probabilities=NONE;authority=NONE]";
