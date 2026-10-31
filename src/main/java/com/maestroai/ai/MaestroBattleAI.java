@@ -25,6 +25,8 @@ import com.maestroai.training.RuntimeObservationAcceptanceHarness;
 import com.maestroai.training.NativeSidedDispatchReachability;
 import com.maestroai.training.NativeOpponentSideProvenance;
 import com.maestroai.training.NativeOpponentRevealRecipientEvidence;
+import com.maestroai.training.PublicCompetitiveLiveShadowConsumer;
+import com.maestroai.training.PublicOpponentIdentityContinuity;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -333,6 +335,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase624Scope.withdraw();
         phase631Scope.withdraw();
         phase634Scope.withdraw();
+        phase5LiveScope.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4652,6 +4655,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (PHASE624_OBSERVE) phase624Scope.forBattle(battle);
         if (PHASE631_OBSERVE) phase631Scope.forBattle(battle);
         if (PHASE634_OBSERVE) phase634Scope.forBattle(battle);
+        if (PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.forBattle(battle);
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4711,10 +4715,15 @@ public class MaestroBattleAI extends RCTBattleAI {
     // It uses the already pinned 6.24 native callback as its source receipt.
     // Optional native public-branch RETURN evidence; no packet contents,
     // client-delivery claim, Phase 5 online consumer, or move authority.
+    // Phase 5 v2 is opt-in, categorizes ONLY witnessed PUBLIC opponent
+    // moves and never feeds tactical scores, actions or opponent predictions.
+    private static final boolean PHASE5_LIVE_SHADOW_OBSERVE =
+            Boolean.getBoolean("maestroai.phase5LiveShadowObserve");
     private static final boolean PHASE634_OBSERVE =
             Boolean.getBoolean("maestroai.phase634Observe");
     private static final boolean PHASE631_OBSERVE =
-            PHASE634_OBSERVE || Boolean.getBoolean("maestroai.phase631Observe");
+            PHASE5_LIVE_SHADOW_OBSERVE || PHASE634_OBSERVE
+            || Boolean.getBoolean("maestroai.phase631Observe");
     private static final boolean PHASE624_OBSERVE =
             PHASE631_OBSERVE || Boolean.getBoolean("maestroai.phase624Observe");
     private final NativeSidedDispatchReachability.BattleScope phase624Scope =
@@ -4723,6 +4732,8 @@ public class MaestroBattleAI extends RCTBattleAI {
             new NativeOpponentSideProvenance.BattleScope();
     private final NativeOpponentRevealRecipientEvidence.BattleScope phase634Scope =
             new NativeOpponentRevealRecipientEvidence.BattleScope();
+    private final PublicCompetitiveLiveShadowConsumer.BattleScope phase5LiveScope =
+            new PublicCompetitiveLiveShadowConsumer.BattleScope();
 
     /**
      * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
@@ -4740,6 +4751,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         }
         if (PHASE631_OBSERVE) phase631Scope.end(battle);
         if (PHASE634_OBSERVE) phase634Scope.end(battle);
+        if (PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.end(battle);
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
         if (PHASE621_OBSERVE) {
@@ -4788,6 +4800,28 @@ public class MaestroBattleAI extends RCTBattleAI {
                     var side=phase631Scope.forBattle(battle)
                             .observeFromNativeCallback(battle,own,sourceActor,receipt);
                     System.out.println("[MaestroAI] Phase 6.31 "+side);
+                    if (PHASE5_LIVE_SHADOW_OBSERVE) {
+                        // Source-owned public history only. Each callback
+                        // is checked against original salted Phase 6.16
+                        // custody, Phase 6.29 uncertainty and native Phase
+                        // 6.24/6.31 actor-side identities.
+                        try {
+                            var originalHistory=java.util.List.copyOf(
+                                    battle.getShowdownMessages());
+                            var routing=new PublicSplitRoutingGate.Session()
+                                    .inspect(battle,originalHistory,true);
+                            var continuity=new PublicOpponentIdentityContinuity.Session()
+                                    .inspect(battle,routing,originalHistory);
+                            var diagnostic=phase5LiveScope.forBattle(battle)
+                                    .inspect(battle,receipt,side,routing,continuity,
+                                            originalHistory,
+                                            PublicCompetitiveLiveShadowConsumer.Request.pinned());
+                            System.out.println("[MaestroAI] Phase 5 online Shadow "+diagnostic);
+                        } catch(RuntimeException unsupported) {
+                            phase5LiveScope.withdraw();
+                            System.out.println("[MaestroAI] Phase 5 online Shadow=UNKNOWN;authority=NONE");
+                        }
+                    }
                     if (PHASE634_OBSERVE) {
                         var publicBranch=phase634Scope.forBattle(battle)
                                 .observeNativeReturn(battle,own,sourceActor,
@@ -4800,6 +4834,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             phase624Scope.withdraw();
             if(PHASE631_OBSERVE) phase631Scope.withdraw();
             if(PHASE634_OBSERVE) phase634Scope.withdraw();
+            if(PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.withdraw();
             System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
         }
     }

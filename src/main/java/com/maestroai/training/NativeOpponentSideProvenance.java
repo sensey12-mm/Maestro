@@ -132,6 +132,22 @@ public final class NativeOpponentSideProvenance {
                         && current() && candidate.fromBattle(physicalBattle);
             }
         }
+        /**
+         * Phase 5 live diagnostics: a native-only report can establish WHICH
+         * Showdown SIDE is opposite the owning AI, not Pokémon identity.
+         * Never export native actor references or treat this as a 6.32 receipt.
+         */
+        Side nativeOnlyOpponentPublicSide(Object physicalBattle,
+                NativeSidedDispatchReachability.Report exactNativeReturn){
+            synchronized(owner){
+                return verdict==Verdict.NATIVE_SIDE_OBSERVED_UNLINKED
+                        && nativeReturn==exactNativeReturn && current()
+                        && owner.battle==physicalBattle
+                        && exactNativeReturn!=null
+                        && exactNativeReturn.fromBattle(physicalBattle)
+                        ?opponentSide:Side.UNKNOWN;
+            }
+        }
         /** Same original native actor/topology observed, no Pokemon proof. */
         public boolean nativeSideMembershipObserved(){return current();}
         /** True ONLY for original 6.24/6.29/6.30 current receipt linkage. */
