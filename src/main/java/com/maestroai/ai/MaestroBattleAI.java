@@ -26,6 +26,7 @@ import com.maestroai.training.NativeSidedDispatchReachability;
 import com.maestroai.training.NativeOpponentSideProvenance;
 import com.maestroai.training.NativeOpponentRevealRecipientEvidence;
 import com.maestroai.training.PublicCompetitiveLiveShadowConsumer;
+import com.maestroai.training.PublicHistoricalRoleLiveOverlay;
 import com.maestroai.training.PublicOpponentIdentityContinuity;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
@@ -336,6 +337,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase631Scope.withdraw();
         phase634Scope.withdraw();
         phase5LiveScope.withdraw();
+        phase5HistoricalScope.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4656,6 +4658,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (PHASE631_OBSERVE) phase631Scope.forBattle(battle);
         if (PHASE634_OBSERVE) phase634Scope.forBattle(battle);
         if (PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.forBattle(battle);
+        if (PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.forBattle(battle);
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4717,8 +4720,11 @@ public class MaestroBattleAI extends RCTBattleAI {
     // client-delivery claim, Phase 5 online consumer, or move authority.
     // Phase 5 v2 is opt-in, categorizes ONLY witnessed PUBLIC opponent
     // moves and never feeds tactical scores, actions or opponent predictions.
+    private static final boolean PHASE5_HISTORICAL_OBSERVE =
+            Boolean.getBoolean("maestroai.phase5HistoricalRolesObserve");
     private static final boolean PHASE5_LIVE_SHADOW_OBSERVE =
-            Boolean.getBoolean("maestroai.phase5LiveShadowObserve");
+            PHASE5_HISTORICAL_OBSERVE
+            || Boolean.getBoolean("maestroai.phase5LiveShadowObserve");
     private static final boolean PHASE634_OBSERVE =
             Boolean.getBoolean("maestroai.phase634Observe");
     private static final boolean PHASE631_OBSERVE =
@@ -4734,6 +4740,33 @@ public class MaestroBattleAI extends RCTBattleAI {
             new NativeOpponentRevealRecipientEvidence.BattleScope();
     private final PublicCompetitiveLiveShadowConsumer.BattleScope phase5LiveScope =
             new PublicCompetitiveLiveShadowConsumer.BattleScope();
+    private PublicHistoricalRoleLiveOverlay.BattleScope phase5HistoricalScope =
+            new PublicHistoricalRoleLiveOverlay.BattleScope();
+    // An operator-owned, signed offline archive MUST be explicitly installed.
+    // Null by default. No replay files, keys or unverified snapshots are loaded.
+    private volatile PublicHistoricalRoleLiveOverlay.Archive phase5HistoricalArchive;
+    private volatile PublicHistoricalRoleLiveOverlay.TrustedSource phase5HistoricalTrustedSource;
+
+    /** Installation API, NOT a decision/promotion hook. Requires a verified
+     * offline archive and an independently refreshed custody/keyring/clock.
+     * The caller must provision trusted inputs; a raw replay is never loaded.
+     */
+    public synchronized void installPhase5HistoricalRoles(
+            PublicHistoricalRoleLiveOverlay.Archive archive,
+            PublicHistoricalRoleLiveOverlay.TrustedSource trusted){
+        if(!PHASE5_HISTORICAL_OBSERVE || archive==null || trusted==null)
+            throw new IllegalArgumentException("Phase 5 historical roles not enabled/provisioned");
+        phase5HistoricalScope.withdraw();
+        phase5HistoricalScope=new PublicHistoricalRoleLiveOverlay.BattleScope();
+        phase5HistoricalArchive=archive;
+        phase5HistoricalTrustedSource=trusted;
+    }
+    public synchronized void clearPhase5HistoricalRoles(){
+        phase5HistoricalScope.withdraw();
+        phase5HistoricalScope=new PublicHistoricalRoleLiveOverlay.BattleScope();
+        phase5HistoricalArchive=null;
+        phase5HistoricalTrustedSource=null;
+    }
 
     /**
      * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
@@ -4752,6 +4785,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (PHASE631_OBSERVE) phase631Scope.end(battle);
         if (PHASE634_OBSERVE) phase634Scope.end(battle);
         if (PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.end(battle);
+        if (PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.end(battle);
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
         if (PHASE621_OBSERVE) {
@@ -4817,8 +4851,17 @@ public class MaestroBattleAI extends RCTBattleAI {
                                             originalHistory,
                                             PublicCompetitiveLiveShadowConsumer.Request.pinned());
                             System.out.println("[MaestroAI] Phase 5 online Shadow "+diagnostic);
+                            if (PHASE5_HISTORICAL_OBSERVE
+                                    && phase5HistoricalArchive!=null
+                                    && phase5HistoricalTrustedSource!=null) {
+                                var roles=phase5HistoricalScope.forBattle(battle).inspect(
+                                        battle,diagnostic,phase5HistoricalArchive,
+                                        phase5HistoricalTrustedSource);
+                                System.out.println("[MaestroAI] Phase 5 historical Shadow "+roles);
+                            }
                         } catch(RuntimeException unsupported) {
                             phase5LiveScope.withdraw();
+                            if (PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.withdraw();
                             System.out.println("[MaestroAI] Phase 5 online Shadow=UNKNOWN;authority=NONE");
                         }
                     }
@@ -4835,6 +4878,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             if(PHASE631_OBSERVE) phase631Scope.withdraw();
             if(PHASE634_OBSERVE) phase634Scope.withdraw();
             if(PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.withdraw();
+            if(PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.withdraw();
             System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
         }
     }

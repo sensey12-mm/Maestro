@@ -456,6 +456,7 @@ public final class StandaloneRegression {
         NativeOpponentRevealRecipientEvidenceRegression.run();
         Phase6FinalClosureRegression.run();
         PublicCompetitiveLiveShadowConsumerRegression.run();
+        PublicHistoricalRoleLiveOverlayRegression.run();
         OfflineShadowTacticalAdapterRegression.run();
         OfflineShadowProvenanceGateRegression.run();
         OfflineShadowResponseScenariosRegression.run();

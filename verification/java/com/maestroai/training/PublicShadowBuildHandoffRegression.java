@@ -114,6 +114,21 @@ final class PublicShadowBuildHandoffRegression {
                 List.of(guessMove(2,"zoroark","nastyplot")),List.of());
     }
 
+    /** Synthetic-only signed historical role package. NEVER battle identity. */
+    record SyntheticRolePackage(PublicHistoricalRoleLiveOverlay.Archive archive,
+                                PublicHistoricalRoleLiveOverlay.CustodySnapshot custody) {}
+    static SyntheticRolePackage syntheticRoleArchive(){
+        String transcript=BEGIN+entry("Zoroark")+"|turn|1\n"
+                +move("Nasty Plot")+WIN;
+        var f=fixture(99887766,transcript);
+        var archive=PublicHistoricalRoleLiveOverlay.prepare(
+                f.source(),f.log(),List.of(guessMove(2,"zoroark","nastyplot")),
+                List.of(),Set.of(),f.signed(),f.trust(),NOW);
+        return new SyntheticRolePackage(archive,
+                new PublicHistoricalRoleLiveOverlay.CustodySnapshot(
+                        f.signed(),f.trust(),NOW));
+    }
+
     static void run(){
         var pin=PublicShadowBuildHandoff.Pin.pinned();
         check(pin.version()==1 && pin.schema().equals(PublicShadowBuildHandoff.SCHEMA));

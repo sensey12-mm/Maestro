@@ -96,6 +96,18 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
                 && safe.contains("authority=NONE"),
                 "only fixed capability labels and bounded counters leave diagnostic");
     }
+    /** Same synthetic source-owned Phase 6 native/public callback reports. */
+    record SyntheticLiveFixture(PublicCompetitiveLiveShadowConsumer.Report live,
+            PublicSplitRoutingGate.Session routing, Object physicalBattle,
+            List<String> original){}
+    static SyntheticLiveFixture syntheticLiveSource(){
+        var original=history("update\n|move|p2a: "+SECRET+"|Stealth Rock|p1a: Own");
+        var f=fixture(new Object(),false,original);
+        var live=evaluate(new PublicCompetitiveLiveShadowConsumer.Session(),f);
+        check(live.current(),"synthetic online source ready for historical role testing");
+        return new SyntheticLiveFixture(live,f.routingOwner(),f.battle(),original);
+    }
+
     static void run() throws Exception {
         var pin=PublicCompetitiveLiveShadowConsumer.Request.pinned();
         check(pin.version()==2
