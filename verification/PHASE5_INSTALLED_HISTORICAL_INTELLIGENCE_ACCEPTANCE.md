@@ -1,13 +1,12 @@
 # Phase 5 — Installed Historical Intelligence Acceptance Matrix
 
-**Branch:** `Maestro4567` · **JAR:** 1.0.93 · **Evidence status:** pending independent operator provisioning, complete exact-commit CI and **actual Minecraft observation**. This matrix is an *owner-side execution plan*, not a test receipt. No raw owner logs are stored in public Maestro.
+**Branch:** `Maestro4567` · **JAR:** 1.0.94 · **Evidence status:** pending independent operator provisioning, complete exact-commit CI and **actual Minecraft observation**. This matrix is an *owner-side execution plan*, not a test receipt. No raw owner logs are stored in public Maestro.
 
 ## Obtain the exact verified JAR
 
-The public GitHub Actions run must finish **SUCCESS**, including the pinned
-simulator step. Then open that same run's **Artifacts** section and download
+The public GitHub Actions run must finish **SUCCESS**, including **both parallel** pinned simulator profiles (`verify` original/native and `pack_source` modified pack) and the gated `publish` job. Then open that same run's **Artifacts** section and download
 `maestroai-verified-<exact 40-character commit SHA>` (a ZIP archive).
-Extract `maestroai-1.0.93.jar` and `sha256.txt`; compare the JAR's
+Extract `maestroai-1.0.94.jar` and `sha256.txt`; compare the JAR's
 SHA-256 against the exported checksum before installing. The archive name
 ties the build to the GitHub checkout commit, not the user's local file name.
 For a second, independent checksum comparison, read the JAR SHA-256 from that same
@@ -16,7 +15,7 @@ field `jar_sha256` printed by `verification/check_jar.py`). Download the ZIP
 and run from the Maestro source checkout:
 
 ```text
-python verification/phase5_verify_download.py path/to/downloaded-artifact.zip 1.0.93 <independently-copied-jar_sha256>
+python verification/phase5_verify_download.py path/to/downloaded-artifact.zip 1.0.94 <independently-copied-jar_sha256>
 ```
 
 The final argument is a placeholder, not a real digest. The checker reads the
@@ -33,7 +32,7 @@ or private operator inputs.
 
 ## Preconditions (all mandatory)
 
-- [ ] Exact 1.0.93 SHA and public GitHub Actions run have every required check marked **SUCCESS**. Reject a JAR from a different commit even if it has the same filename/version.
+- [ ] Exact 1.0.94 SHA and public GitHub Actions run have every required check marked **SUCCESS**. Reject a JAR from a different commit even if it has the same filename/version.
 - [ ] Singleplayer Minecraft Java 1.21.1, Fabric, Java 21, Cobblemon 1.7.3, RCT 0.15.2-beta and unchanged Cobbleverse mods are confirmed.
 - [ ] Operator has genuinely independently approved a public spectator replay for this specific use, with explicit permission, signer and unexpired ledger decision. Neither a source listing nor a JVM `true` flag grants rights.
 - [ ] Offline operator has prepared `custody-anchor.state` and stored the **exact** SHA-256 checkpoint, revision, keyring root, and clock floor independently from the replay/state directory.
@@ -92,7 +91,7 @@ Record the **exact JAR SHA, public Actions URL, observed native callback, catego
 
 **Current status:** Source-level Java, native ABI, JAR and simulator results must be recorded from *exact final commit* Actions; installed singleplayer observations are **NOT PERFORMED** here. Gate remains **NO-GO for full installed historical acceptance** until the real operator-approved archive and Minecraft evidence exist. Legacy remains authoritative. Shadow stays diagnostic-only.
 
-## Redacted owner log inspection (v1.0.93)
+## Redacted owner log inspection (v1.0.94)
 
 After a **real** installed Minecraft session, the owner may run this local-only checker on an absolute private log path:
 
@@ -100,14 +99,22 @@ After a **real** installed Minecraft session, the owner may run this local-only 
 python verification/phase5_minecraft_log_gate.py C:\path\to\private\latest.log
 ```
 
-This reads at most 32 MiB, emits only bounded counts and categorical statuses (no raw player name, replay ID, key, UUID, or filesystem path), and requires a `PROVISIONED` startup, native Phase 6.24 diagnostic receipts, the live public Shadow diagnostic, and a *current unbound historical role* report. Contradictory identity/authority fields fail the report. The best result is `LOG_PATTERNS_OBSERVED`, **never** Minecraft acceptance: verify the signed archive and exact JAR provenance, all four teams, source validity, the owner-controlled battle context, and Legacy choice equivalence separately. Existing logs from a different JAR version are not acceptance evidence for 1.0.93. Keep original logs private with LAIr/Headquarters.
+This reads at most 32 MiB, emits only bounded counts and categorical statuses (no raw player name, replay ID, key, UUID, or filesystem path), and requires a `PROVISIONED` startup, native Phase 6.24 diagnostic receipts, the live public Shadow diagnostic, and a *current unbound historical role* report. Contradictory identity/authority fields fail the report. The best result is `LOG_PATTERNS_OBSERVED`, **never** Minecraft acceptance: verify the signed archive and exact JAR provenance, all four teams, source validity, the owner-controlled battle context, and Legacy choice equivalence separately. Existing logs from a different JAR version are not acceptance evidence for 1.0.94. Keep original logs private with LAIr/Headquarters.
 
-## Authenticated keyring rotation / signer-revocation acceptance (v1.0.93)
+## Authenticated keyring rotation / signer-revocation acceptance (v1.0.94)
 
 Only after the operator independently verifies a new Ed25519-signed keyring update, its **old active signer**, its new signer, fresh append-only signed manifest and **prior external checkpoint**, use the new `rotate` command in [the activation guide](PHASE5_TRUSTED_HISTORICAL_ARCHIVE_ACTIVATION.md). Preserve the old bootstrap root as independent historical trust evidence; **do not** overwrite it with keys carried by the update. Copy the returned **new** state checksum/revision/keyring epoch into a distinct trusted checkpoint. After restart with the approved latest pin, preflight must be `SOURCE_READY_FOR_MINECRAFT_TEST` or fail closed; it never independently proves replay-use permission.
 
 On a test-only custody copy, exercise a revoked old signer, forged signature, altered/new-key SPKI, stale or incorrect external checkpoint, missed revision, and expired signer/approval. Expect categorical abstention and **no surviving historical-role report**. Check that a historical report issued under the old keyring is withdrawn immediately on trust-epoch change and never reappears from cached native callbacks; newly authorized evidence requires a fresh session/restart. Keep already approved archive files and raw logs private. Record observed source-run/JAR commit, redacted callback and withdrawal receipts, the diagnostic-OFF Legacy control, and the unchanged four-team/eight-battle matrix. These are *future Minecraft acceptance steps*: no installed tests are claimed from Java regressions.
 
-## Unified commissioning audit (v1.0.93)
+## Unified commissioning audit (v1.0.94)
 
 Before installing or running battles, run the local `phase5CommissionAudit` documented in [the trust activation guide](PHASE5_TRUSTED_HISTORICAL_ARCHIVE_ACTIVATION.md). Require the categorical `LOCALLY_READY_FOR_MINECRAFT_TEST` receipt plus independent verification that the exact source-commit CI **succeeded**, the replay was genuinely approved, and the clock/checkpoint trust roots are independently current. A ready receipt cannot replace an owner-side Minecraft test. Record only the categorical verdict and source-run SHA; keep all operator input files and original game logs private. In case of any other verdict, do not weaken the chain or silently use an old JAR; retain Legacy action control and Shadow abstention.
+
+## Parallel pinned simulator verification and release guard (v1.0.94)
+
+The public `Verify MaestroAI` workflow now has two independently pinned source-validation jobs in parallel. `verify` runs the original Cobblemon native/Graal source suite (historically 30m 41s in its nested Gradle run); `pack_source` separately runs the installed-pack/addon suite (historically 15m 36s). Both recheck pinned dependency and native-hook facts and fail closed on checksum mismatches or any failed assertion. Every spawned Node/Gradle process has a bounded timeout, and the outer process also has a 48-minute hard stop.
+
+The `verify` job may publish **only** an intermediate `maestroai-candidate-<commit SHA>` artifact. **Do not install this candidate.** The final artifact `maestroai-verified-<commit SHA>` is published only by `publish`, whose required dependencies are `[verify, pack_source]` and whose candidate checker re-verifies exact JAR/receipt bytes and Fabric mod metadata. A failed, cancelled, timed-out or skipped source job blocks the verified JAR automatically. The candidate's 1-day lifetime is just workflow transport; final downloads retain the existing 7-day policy.
+
+Do not infer faster or fully successful CI from the code change alone. Check the **exact-commit public run's** three job results and the final artifact before installing, and verify the JAR's SHA-256 against the independent workflow-log receipt. This procedure never changes Shadow authority or constitutes Minecraft acceptance.

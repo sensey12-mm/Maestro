@@ -114,14 +114,14 @@ gradlew.bat --no-daemon -I verification/verification.init.gradle phase5ArchiveIm
 
 Files must be absolute, distinct and outside the journal; the prior checkpoint and bootstrap public key must remain independently authenticated. The importer verifies the signed update using the **old** root/policy, the successor manifest using the **new** policy, and atomically writes an append-only journal. Copy the returned new checkpoint to a separate trusted location before trusting/restarting the new runtime. A successful import does not establish replay-use rights. Any live historical Shadow report is withdrawn if its observed trusted keyring epoch changes, even with a valid new signer; **restart with the independently pinned latest checkpoint** to admit newly scoped reports. Never reuse an old keyring lease or downgrade the root. Minecraft runtime acceptance remains unperformed.
 
-## Unified read-only operator commissioning audit (v1.0.93)
+## Unified read-only operator commissioning audit (v1.0.94)
 
 This offline command checks the **exact JAR bytes** against a separately obtained CI JAR SHA-256 and 40-character source commit, its embedded Fabric mod ID/version, the operator launch configuration, independently pinned bootstrap public key and latest state checkpoint, complete signed keyring/manifest chain (including active signer/revocations), replay integrity and the original source-level preflight. It **does not sign anything, modify trust state, install a mod, write files, grant replay rights, validate GitHub Actions status online or run Minecraft**.
 
 Prepare separate **absolute paths**, none beneath the mutable custody directory:
 
-- `maestroai-1.0.93.jar`: the exact downloaded verified mod JAR, not the ZIP or an arbitrary rebuild.
-- `ci-jar-pin.properties`: exactly `sourceCommitSha=<40 lowercase GitHub commit hex>`, `jarSha256=<64 lowercase SHA-256 hex>`, and `jarVersion=1.0.93`. Acquire the checksum from the **successful matching source-commit** GitHub Actions JAR-check log independently of the ZIP; the file itself does not establish CI status.
+- `maestroai-1.0.94.jar`: the exact downloaded verified mod JAR, not the ZIP or an arbitrary rebuild.
+- `ci-jar-pin.properties`: exactly `sourceCommitSha=<40 lowercase GitHub commit hex>`, `jarSha256=<64 lowercase SHA-256 hex>`, and `jarVersion=1.0.94`. Acquire the checksum from the **successful matching source-commit** GitHub Actions JAR-check log independently of the ZIP; the file itself does not establish CI status.
 - `operator.properties`: explicit `maestroai.phase5HistoricalRolesObserve=true` and the exact existing `maestroai.phase5Archive.*` JVM properties, using literal `key=value` lines with no escaping or duplicate keys. Keep this **local**; it contains replay and state paths, never private signing keys.
 - `root.properties`: original independent public bootstrap policy as used by `phase5ArchiveImport` (not an update-supplied public key).
 - `latest-pin.properties`: exactly `checkpointStateSha256`, `checkpointRevision`, and `checkpointKeyringEpoch` copied from the *independently stored latest checkpoint*, not the mutable journal.
@@ -129,7 +129,7 @@ Prepare separate **absolute paths**, none beneath the mutable custody directory:
 From the public Maestro checkout, in Windows CMD:
 
 ```text
-gradlew.bat --no-daemon -I verification/verification.init.gradle phase5CommissionAudit "-Pphase5AuditArgs=C:\MaestroVerified\maestroai-1.0.93.jar|C:\MaestroTrust\ci-jar-pin.properties|C:\MaestroTrust\operator.properties|C:\MaestroTrust\root.properties|C:\MaestroTrust\latest-pin.properties"
+gradlew.bat --no-daemon -I verification/verification.init.gradle phase5CommissionAudit "-Pphase5AuditArgs=C:\MaestroVerified\maestroai-1.0.94.jar|C:\MaestroTrust\ci-jar-pin.properties|C:\MaestroTrust\operator.properties|C:\MaestroTrust\root.properties|C:\MaestroTrust\latest-pin.properties"
 ```
 
 The tool reports one redacted categorical `Phase5Commissioning[verdict=...]` receipt:
@@ -141,3 +141,9 @@ The tool reports one redacted categorical `Phase5Commissioning[verdict=...]` rec
 It never includes paths, replay IDs, key strings, secrets or battle records. The good verdict **only certifies local source-level consistency**. Its receipt always marks CI success, replay rights and clock trust as `EXTERNALLY_VERIFY`, Minecraft as `UNTESTED`, and Shadow authority as `NONE`.
 
 Independent operator verification of CI success, signer/replay-use rights, time/anti-rollback custody and the original four-team/eight-battle Minecraft acceptance procedure remain mandatory. Do not put any operator files or private battle captures in GitHub.
+
+## CI simulator bottleneck and JAR promotion (v1.0.94)
+
+The public workflow now runs the **original/native** and **modified pack** simulator proofs in separate parallel jobs, each with the unchanged exact external source pins, native ABI checks and fail-closed regression requirements. The original source suite's nested Gradle task required about **30m 41s** and the pack suite **15m 36s** in one successful 2026-10-31 run; scheduling them in parallel is intended to reduce release latency but does **not** shorten or skip either test. The workflow applies a bounded subprocess and outer deadline. A failure/timeout blocks release; the pipeline cannot report a successful verified artifact by ignoring a failed child.
+
+`maestroai-candidate-<SHA>` is a **temporary unapproved CI transfer artifact**, not an installable release. Install only `maestroai-verified-<SHA>` from the successfully completed `publish` job, which explicitly depends on successful `verify` **and** `pack_source` jobs, and rechecks the JAR and checksum after downloading the candidate. Version `1.0.94` replaces older installed MaestroAI versions, never co-installs. Real signed spectator approval, independent operator commissioning and the eight Minecraft battles remain separate acceptance requirements.
