@@ -104,6 +104,16 @@ final class PublicShadowBuildHandoffRegression {
     private static final PublicShadowBuildHandoff.Limit NO_NATIVE=
             PublicShadowBuildHandoff.Limit.NATIVE_BUILD_NOT_PROVEN;
 
+    /** Genuine synthetic signed-custody Phase 5 handoff for cross-phase
+     * interface tests. No Minecraft data; private fixture names are fake.
+     * This fixture stays OFFLINE and cannot grant current-battle rights. */
+    static PublicShadowBuildHandoff.Report syntheticOfflineBridgeReport(){
+        String transcript=BEGIN+entry("Zoroark")+"|turn|1\n"
+                +move("Nasty Plot")+WIN;
+        return fixture(99887766,transcript).build(
+                List.of(guessMove(2,"zoroark","nastyplot")),List.of());
+    }
+
     static void run(){
         var pin=PublicShadowBuildHandoff.Pin.pinned();
         check(pin.version()==1 && pin.schema().equals(PublicShadowBuildHandoff.SCHEMA));

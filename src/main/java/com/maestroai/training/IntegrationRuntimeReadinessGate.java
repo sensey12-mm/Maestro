@@ -63,6 +63,12 @@ public final class IntegrationRuntimeReadinessGate {
                         && routing.splitPublicExtractionStructurallyMatched();
             }
         }
+        /** Exact original in-process battle, not a public actor join. */
+        boolean fromBattle(Object originalBattle){
+            synchronized(owner){
+                return originalBattle!=null && owner.battle==originalBattle && current();
+            }
+        }
         /** Source-side actor membership only, not public actor authentication. */
         public boolean nativeActorMembershipObserved(){return current();}
         /** Structural private-first/public-second parsing only. */
