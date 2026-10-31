@@ -12,6 +12,26 @@
 
 **If any item is missing:** test only ordinary live public Shadow diagnostics, report **historical source UNPROVISIONED**, and **do not claim installed historical acceptance**. Never install a synthetic signed regression fixture as if it were an independently approved real archive.
 
+## Required startup verdict before any battle
+
+With historical observation enabled, read one **redacted** startup status from
+the new trainer constructor. These statuses do not themselves establish
+real replay-use permission or Minecraft acceptance:
+
+- `Phase 5 historical operator=PROVISIONED;authority=NONE`: the local signed
+  archive passed initial checks; verify actual live historical reports and
+  native callbacks separately.
+- `Phase 5 historical operator=UNPROVISIONED;authority=NONE`: no external
+  archive is configured; do **not** treat later ordinary live-Shadow diagnostics
+  as historical intelligence.
+- `Phase 5 historical operator=ABSTAIN;authority=NONE`: missing/invalid partial
+  provisioning, signature, approval, checkpoint, clock or archive; never
+  bypass this gate by weakening or fabricating evidence.
+
+For all three, **Legacy still chooses every action**. The archive status
+must never print replay IDs, filesystem paths, signing keys or raw logs.
+No successful status has been observed in an installed game in this batch.
+
 ## Existing BrAI team reuse, no new builds
 
 The same four teams and known builds can be reused. No need to reissue unchanged `/pokegive` commands. Begin with diagnostics enabled except the specified OFF control. The following are objectives, not fabricated native results.

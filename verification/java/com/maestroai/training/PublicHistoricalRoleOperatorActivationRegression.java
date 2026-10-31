@@ -125,6 +125,12 @@ final class PublicHistoricalRoleOperatorActivationRegression {
             int chooser=ai.indexOf("public ShowdownActionResponse choose(",constructor);
             check(constructor>0 && chooser>constructor
                     && ai.substring(constructor,chooser).contains(
+                            "operator=UNPROVISIONED;authority=NONE")
+                    && ai.substring(constructor,chooser).contains(
+                            "operator=PROVISIONED;authority=NONE")
+                    && ai.substring(constructor,chooser).contains(
+                            "operator=ABSTAIN;authority=NONE")
+                    && ai.substring(constructor,chooser).contains(
                             "maestroai.phase5HistoricalRolesObserve")
                     && ai.substring(constructor,chooser).contains("fromJvmProperties()")
                     && ai.substring(constructor,chooser).contains(

@@ -381,6 +381,11 @@ public class MaestroBattleAI extends RCTBattleAI {
                 if (activation != null) {
                     installPhase5HistoricalRoles(activation.archive(),activation.trusted());
                     System.out.println("[MaestroAI] Phase 5 historical operator=PROVISIONED;authority=NONE");
+                } else {
+                    // Explicitly distinguish missing external operator evidence
+                    // from a successful archive lease. Never imply online
+                    // history was loaded merely because observation is enabled.
+                    System.out.println("[MaestroAI] Phase 5 historical operator=UNPROVISIONED;authority=NONE");
                 }
             } catch (RuntimeException unavailable) {
                 clearPhase5HistoricalRoles();
