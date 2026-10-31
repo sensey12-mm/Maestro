@@ -51,15 +51,14 @@ jobs:
           test -n "$VERSION"
           test -f "build/libs/maestroai-$VERSION.jar"
           mkdir -p build/verified-artifact
-          cd build/libs
-          sha256sum "maestroai-$VERSION.jar" > ../verified-artifact/sha256.txt
+          cp "build/libs/maestroai-$VERSION.jar" build/verified-artifact/
+          cd build/verified-artifact
+          sha256sum "maestroai-$VERSION.jar" > sha256.txt
       - name: Upload verified Minecraft JAR
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, exact SHA
         with:
           name: maestroai-verified-${{ github.sha }}
-          path: |
-            build/libs/maestroai-*.jar
-            build/verified-artifact/sha256.txt
+          path: build/verified-artifact/
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

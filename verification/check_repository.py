@@ -74,6 +74,8 @@ def check_workflow(source):
                     not in source
             or 'name: maestroai-verified-${{ github.sha }}' not in source
             or 'if-no-files-found: error' not in source
+            or 'cp "build/libs/maestroai-$VERSION.jar" build/verified-artifact/' not in source
+            or 'path: build/verified-artifact/' not in source
             or 'sha256sum "maestroai-$VERSION.jar"' not in source):
         raise ValueError('Exact-commit verified JAR publication missing or unsafe')
 
@@ -141,6 +143,9 @@ class SafeguardRegression(unittest.TestCase):
                  'name: maestroai-unpinned'),
                 ('if-no-files-found: error','if-no-files-found: warn'),
                 ('sha256sum "maestroai-$VERSION.jar"','echo unverified'),
+                ('path: build/verified-artifact/','path: build/libs/'),
+                ('cp "build/libs/maestroai-$VERSION.jar" build/verified-artifact/',
+                 'echo no-copy'),
                 ('python3 verification/source_oracle.py\n','echo skip-simulator\n')):
             with self.subTest(old=old), self.assertRaisesRegex(ValueError,'verified JAR'):
                 check_workflow(source.replace(old,new,1))
