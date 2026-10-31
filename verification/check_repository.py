@@ -65,23 +65,55 @@ def check_workflow(source):
         raise ValueError('Phase 5 installed artifact self-test missing')
     if 'python3 verification/phase5_minecraft_log_gate.py --self-test\n' not in source:
         raise ValueError('Phase 5 installed Minecraft log gate self-test missing')
-    # An exact-source JAR cannot be installed from CI if the verified
-    # artifact is omitted or uploaded before simulator verification.
-    required_source = 'python3 verification/source_oracle.py\n'
-    required_hash = '      - name: Pin verified Minecraft JAR checksum\n'
-    required_upload = '      - name: Upload verified Minecraft JAR\n'
-    if (required_source not in source or required_hash not in source
-            or required_upload not in source
-            or not (source.index(required_source)<source.index(required_hash)
-                    <source.index(required_upload))
-            or 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02'
-                    not in source
-            or 'name: maestroai-verified-${{ github.sha }}' not in source
-            or 'if-no-files-found: error' not in source
-            or 'cp "build/libs/maestroai-$VERSION.jar" build/verified-artifact/' not in source
-            or 'path: build/verified-artifact/' not in source
-            or 'sha256sum "maestroai-$VERSION.jar"' not in source):
-        raise ValueError('Exact-commit verified JAR publication missing or unsafe')
+    # Two complete pinned-source profiles can run concurrently, but a
+    # release requires BOTH successful jobs and a verified intermediate JAR.
+    native_start = source.find('  verify:\n')
+    pack_start = source.find('  pack_source:\n')
+    publish_start = source.find('  publish:\n')
+    if not (0 <= native_start < pack_start < publish_start):
+        raise ValueError('Verified JAR requires separate native, pack and publish jobs')
+    native = source[native_start:pack_start]
+    pack = source[pack_start:publish_start]
+    publish = source[publish_start:]
+    pin = 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02'
+    download = 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093'
+    required_native = ('timeout --signal=TERM --kill-after=30s 48m '
+                       'python3 verification/source_oracle.py --native\n')
+    required_pack = ('timeout --signal=TERM --kill-after=30s 48m '
+                     'python3 verification/source_oracle.py --pack\n')
+    if (required_native not in native or required_pack not in pack
+            or 'python3 verification/source_oracle.py --self-test\n' not in native
+            or 'python3 verification/source_oracle.py --self-test\n' not in pack
+            or 'source_oracle.py --pack' in native
+            or 'source_oracle.py --native' in pack
+            or 'timeout-minutes: 65\n' not in pack
+            or 'remapJar verificationClasses --stacktrace\n' not in pack
+            or 'python3 verification/check_repository.py\n' not in pack):
+        raise ValueError('Verified JAR requires both full bounded source profiles')
+    if (native.count(pin)!=1 or 'name: maestroai-candidate-${{ github.sha }}' not in native
+            or '      - name: Upload intermediate JAR candidate (not release-approved)' not in native
+            or native.count('if-no-files-found: error') != 1
+            or native.count('path: build/verified-artifact/') != 1
+            or 'cp "build/libs/maestroai-$VERSION.jar" build/verified-artifact/' not in native
+            or 'sha256sum "maestroai-$VERSION.jar"' not in native
+            or native.find(required_native) > native.find('Upload intermediate JAR candidate')
+            or 'maestroai-verified-' in native or 'maestroai-verified-' in pack
+            or 'actions/upload-artifact@' in pack):
+        raise ValueError('Verified JAR candidate must be source-checked and non-release')
+    if (not publish.startswith('  publish:\n    needs: [verify, pack_source]\n')
+            or 'if: always()' in publish
+            or publish.count(download)!=1 or publish.count(pin)!=1
+            or 'name: maestroai-candidate-${{ github.sha }}' not in publish
+            or 'name: maestroai-verified-${{ github.sha }}' not in publish
+            or 'python3 verification/check_publish_artifact.py --self-test' not in publish
+            or 'python3 verification/check_publish_artifact.py build/verified-artifact/' not in publish
+            or publish.find('name: maestroai-candidate-${{ github.sha }}')
+                > publish.find('python3 verification/check_publish_artifact.py')
+            or publish.find('python3 verification/check_publish_artifact.py build/verified-artifact/')
+                > publish.find('      - name: Upload verified Minecraft JAR')
+            or 'if-no-files-found: error' not in publish
+            or 'path: build/verified-artifact/' not in publish):
+        raise ValueError('Verified JAR publication must depend on both full simulator jobs')
 
 
 def check_wrapper(root):
@@ -152,25 +184,40 @@ class SafeguardRegression(unittest.TestCase):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
         check_workflow(source)
         for old,new in (
-                ('      - name: Upload verified Minecraft JAR', '      - name: No artifact'),
+                ('    needs: [verify, pack_source]', '    needs: [verify]'),
+                ('  pack_source:', '  skipped_pack:'),
+                ('python3 verification/source_oracle.py --native',
+                 'python3 verification/source_oracle.py --skip'),
+                ('python3 verification/source_oracle.py --pack',
+                 'python3 verification/source_oracle.py --skip'),
+                ('timeout --signal=TERM --kill-after=30s 48m', 'python3'),
                 ('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
                  'actions/upload-artifact@v4'),
-                ('name: maestroai-verified-${{ github.sha }}',
-                 'name: maestroai-unpinned'),
+                ('actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+                 'actions/download-artifact@v4'),
+                ('name: maestroai-verified-${{ github.sha }}', 'name: unpinned'),
+                ('name: maestroai-candidate-${{ github.sha }}', 'name: unpinned'),
                 ('if-no-files-found: error','if-no-files-found: warn'),
-                ('sha256sum "maestroai-$VERSION.jar"','echo unverified'),
-                ('path: build/verified-artifact/','path: build/libs/'),
+                ('path: build/verified-artifact/', 'path: build/libs/'),
                 ('cp "build/libs/maestroai-$VERSION.jar" build/verified-artifact/',
-                 'echo no-copy'),
-                ('python3 verification/source_oracle.py\n','echo skip-simulator\n')):
-            with self.subTest(old=old), self.assertRaisesRegex(ValueError,'verified JAR'):
+                 'echo missing-jar'),
+                ('sha256sum "maestroai-$VERSION.jar"', 'echo missing-hash'),
+                ('python3 verification/check_publish_artifact.py build/verified-artifact/',
+                 'echo skip-verifier')):
+            with self.subTest(old=old), self.assertRaisesRegex(ValueError,'Verified JAR'):
                 check_workflow(source.replace(old,new,1))
-        upload = source.index('      - name: Pin verified Minecraft JAR checksum')
-        source_without_simulator_gate = (
-                source[:upload].replace('python3 verification/source_oracle.py\n','')
-                + source[upload:])
-        with self.assertRaisesRegex(ValueError,'verified JAR'):
-            check_workflow(source_without_simulator_gate)
+        with self.assertRaisesRegex(ValueError,'Verified JAR'):
+            check_workflow(source.replace(
+                '  publish:\n    needs: [verify, pack_source]\n',
+                '  publish:\n    if: always()\n    needs: [verify, pack_source]\n',1))
+        with self.assertRaisesRegex(ValueError,'Verified JAR'):
+            check_workflow(source.replace(
+                '      - name: Upload verified Minecraft JAR',
+                '      - name: Upload verified Minecraft JAR',1).replace(
+                '      - name: Verify candidate integrity after both simulator profiles pass',
+                '      - name: Skip candidate verification',1).replace(
+                'python3 verification/check_publish_artifact.py build/verified-artifact/',
+                'echo skip',1))
 
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)
