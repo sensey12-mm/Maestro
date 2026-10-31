@@ -492,6 +492,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             catch (RuntimeException ignored) { /* observational capture unavailable */ }
             return response;
         } finally {
+            // Never retain cross-turn/battle request identities or a conditional
+            // Shadow proposal beyond the owning chooser invocation.
+            phaseShadowPrepared=null;
+            phaseShadowBattle=null;
+            phaseShadowRequest=null;
             ownTransport.endChoice(); ownChoiceLease = null;
         }
     }

@@ -173,6 +173,22 @@ final class ShadowPromotionPreparationRegression {
             if(original==null)System.clearProperty(LivePromotionGate.PROPERTY);
             else System.setProperty(LivePromotionGate.PROPERTY,original);
         }
+        // Both positive and rejected candidates must lose their source
+        // identity after the owning chooser returns, independent of flags.
+        // A changing source midway through materialization must fall back.
+        source.set(true);
+        var original2=System.getProperty(LivePromotionGate.PROPERTY);
+        try {
+            System.setProperty(LivePromotionGate.PROPERTY,"true");
+            check("LEGACY".equals(LivePromotionGate.choosePrepared(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->{source.set(false);return "PROMOTED";},
+                    action->true,true)),
+                    "in-flight source withdrawal uses Legacy immediately");
+        }finally{
+            if(original2==null)System.clearProperty(LivePromotionGate.PROPERTY);
+            else System.setProperty(LivePromotionGate.PROPERTY,original2);
+        }
         // Structural source guard: live chooser's approval stays literal
         // false; no publicly observed Phase 5 role controls any action.
         String ai=Files.readString(Path.of(
@@ -185,6 +201,8 @@ final class ShadowPromotionPreparationRegression {
                         "false); // Owner has NOT authorized live Shadow selection.")
                 && ai.contains("ShadowPromotionPreparation.inspect(")
                 && ai.contains("LivePromotionGate.choosePrepared(")
+                && ai.contains("phaseShadowPrepared=null;")
+                && ai.contains("phaseShadowRequest=null;")
                 && !ai.substring(choose,legacy).contains(
                         "PublicHistoricalRoleLiveOverlay.Session.choose("),
                 "production legacy-boundary has a real dormant choice materializer, no promotion");
