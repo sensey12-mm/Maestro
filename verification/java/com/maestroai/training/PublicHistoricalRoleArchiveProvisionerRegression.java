@@ -134,8 +134,22 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
             var previous=new PublicSignedCustody.TrustedPolicy(1,1,1,now-100,"",
                     List.of(new PublicSignedCustody.TrustedKey(
                             "reviewer-a",oldSpki,now-100,0)));
+            // The same synthetic replay is admitted through the actual
+            // runtime operator activation bridge, not only the trust store.
+            String spectator="|gen|9\n|gametype|singles\n|tier|[Gen 9] OU\n"
+                    +"|player|p1|SYNTHETIC\n|start\n"
+                    +"|switch|p1a: Ally|Pikachu, L100|100/100\n"
+                    +"|switch|p2a: Test|Zoroark, L100|100/100\n"
+                    +"|turn|1\n|move|p2a: Test|Nasty Plot|p1a: Ally\n|win|SYNTHETIC\n";
+            Path replay=folder.resolve("reviewed-synthetic-spectator.log");
+            Files.writeString(replay,spectator);
+            var replaySource=new PublicReplayCorpus.Source("gen9ou-99887766",
+                    "gen9ou",true,PublicReplayCorpus.RightsBasis
+                            .EXPLICIT_REPLAY_USE_PERMISSION);
+            String digest=PublicReplayCorpus.ingest(
+                    replaySource,spectator).inputSha256();
             var firstDecision=new PublicReplayCustody.Decision("gen9ou-99887766",
-                    "gen9ou","a".repeat(64),PublicReplayCustody.Status.APPROVED,
+                    "gen9ou",digest,PublicReplayCustody.Status.APPROVED,
                     now-80,now+800,"b".repeat(64));
             var firstLedger=new PublicReplayCustody.Ledger(1,1,List.of(firstDecision));
             var first=signAs("reviewer-a",alice,firstLedger,now-40,"0".repeat(64));
@@ -144,6 +158,37 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     false,directory,root,firstFile,null,now);
             put(pinFile,Map.of("checkpointStateSha256",pin.stateSha256(),
                     "checkpointRevision","1","checkpointKeyringEpoch","1"));
+            var settings=new Properties();
+            settings.setProperty("maestroai.phase5HistoricalRolesObserve","true");
+            String prefix="maestroai.phase5Archive.";
+            settings.setProperty(prefix+"directory",directory.toString());
+            settings.setProperty(prefix+"replayLog",replay.toString());
+            settings.setProperty(prefix+"replayId","gen9ou-99887766");
+            settings.setProperty(prefix+"format","gen9ou");
+            settings.setProperty(prefix+"roleQueries","2:zoroark:nastyplot");
+            settings.setProperty(prefix+"replayRightsIndependentlyApproved","true");
+            settings.setProperty(prefix+"operatorVerifiedHostClock","true");
+            settings.setProperty(prefix+"operatorVerifiedTimeFloor",Long.toString(now-1));
+            settings.setProperty(prefix+"bootstrapKeyId","reviewer-a");
+            settings.setProperty(prefix+"bootstrapEd25519Spki",oldSpki);
+            settings.setProperty(prefix+"bootstrapKeyActiveFrom",Long.toString(now-100));
+            settings.setProperty(prefix+"bootstrapKeyringEpoch","1");
+            settings.setProperty(prefix+"bootstrapMinimumRevision","1");
+            settings.setProperty(prefix+"bootstrapEarliestSignature",Long.toString(now-100));
+            settings.setProperty(prefix+"checkpointStateSha256",pin.stateSha256());
+            settings.setProperty(prefix+"checkpointRevision","1");
+            settings.setProperty(prefix+"checkpointKeyringEpoch","1");
+            var installed=PublicHistoricalRoleOperatorActivation.fromProperties(
+                    settings,()->now);
+            var syntheticBattle=PublicCompetitiveLiveShadowConsumerRegression
+                    .syntheticLiveSource();
+            var historicalSession=new PublicHistoricalRoleLiveOverlay.Session();
+            var oldReport=historicalSession.inspect(
+                    syntheticBattle.physicalBattle(),syntheticBattle.live(),
+                    installed.archive(),installed.trusted());
+            check(oldReport.current()
+                    && !oldReport.unboundHistoricalRolePossibilities().isEmpty(),
+                    "operator installation initially admits unbound synthetic roles");
             var secondDecision=new PublicReplayCustody.Decision("gen9ou-99887767",
                     "gen9ou","c".repeat(64),PublicReplayCustody.Status.APPROVED,
                     now-20,now+800,"d".repeat(64));
@@ -218,6 +263,20 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
                     && PublicCustodyTrustStore.recover(directory,previous,rotated,now)
                             .keyringEpoch()==2,
                     "signed old-to-new keyring and successor commit atomically");
+            check(!oldReport.current() && historicalSession.withdrawn()
+                    && oldReport.unboundHistoricalRolePossibilities().isEmpty(),
+                    "rotation of real imported journal withdraws preexisting native report");
+            settings.setProperty(prefix+"checkpointStateSha256",rotated.stateSha256());
+            settings.setProperty(prefix+"checkpointRevision","2");
+            settings.setProperty(prefix+"checkpointKeyringEpoch","2");
+            check(PublicHistoricalRoleOperatorPreflight.inspect(settings,()->now)
+                    .verdict()==PublicHistoricalRoleOperatorPreflight.Verdict
+                            .SOURCE_READY_FOR_MINECRAFT_TEST,
+                    "new externally pinned keyring reestablishes only source-level readiness");
+            check(historicalSession.inspect(syntheticBattle.physicalBattle(),
+                    syntheticBattle.live(),installed.archive(),installed.trusted())
+                    .verdict()==PublicHistoricalRoleLiveOverlay.Verdict.WITHDRAWN,
+                    "old native session cannot be resurrected after signer revocation");
             reject(()->PublicCustodyTrustStore.recover(directory,previous,pin,now),
                     "old state checkpoint cannot recover rotated journal");
             reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
