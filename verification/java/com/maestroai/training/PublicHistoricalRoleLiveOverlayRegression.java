@@ -168,6 +168,27 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                         ==PublicHistoricalRoleLiveOverlay.Verdict.WITHDRAWN,
                 "returning to an older trusted keyring never resurrects reports");
 
+        var beforeFirstCallback=PublicCompetitiveLiveShadowConsumerRegression
+                .syntheticLiveSource();
+        var notYetInspected=new PublicHistoricalRoleLiveOverlay.Session();
+        var alreadyRotated=new PublicSignedCustody.TrustedPolicy(
+                history.custody().policy().keyringEpoch()+1,
+                history.custody().policy().keyringEpoch()+1,
+                history.custody().policy().minimumRevision(),
+                history.custody().policy().earliestSignatureEpochSecond(),
+                history.custody().policy().requiredManifestDigest(),
+                history.custody().policy().keys());
+        var firstAfterRotation=notYetInspected.inspect(
+                beforeFirstCallback.physicalBattle(),beforeFirstCallback.live(),
+                history.archive(),()->new PublicHistoricalRoleLiveOverlay.CustodySnapshot(
+                        history.custody().signed(),alreadyRotated,
+                        history.custody().currentEpochSecond()));
+        check(firstAfterRotation.verdict()
+                    ==PublicHistoricalRoleLiveOverlay.Verdict.STALE_OR_REVOKED_CUSTODY
+                && notYetInspected.withdrawn()
+                && firstAfterRotation.unboundHistoricalRolePossibilities().isEmpty(),
+                "rotation before first native battle callback invalidates old archive");
+
         var noTrusted=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
         var absentSession=new PublicHistoricalRoleLiveOverlay.Session();
         check(absentSession.inspect(noTrusted.physicalBattle(),noTrusted.live(),

@@ -60,13 +60,14 @@ public final class PublicHistoricalRoleLiveOverlay {
     public static final class Archive {
         private final PublicReplayCustody.Reference originalReplay;
         private final PublicSignedCustody.Verified originalVerified;
-        private final long originalEpoch;
+        private final long originalEpoch,originalKeyringEpoch;
         private final Set<Role> roleLabels;
         private Archive(PublicReplayCustody.Reference reference,
                         PublicSignedCustody.Verified verified,
-                        long epoch,Set<Role> roles){
+                        long epoch,long keyringEpoch,Set<Role> roles){
             originalReplay=reference;originalVerified=verified;
-            originalEpoch=epoch;roleLabels=Set.copyOf(roles);
+            originalEpoch=epoch;originalKeyringEpoch=keyringEpoch;
+            roleLabels=Set.copyOf(roles);
         }
         Set<Role> sourceScopedUnboundRoles(){return roleLabels;}
         public boolean currentOpponentIdentified(){return false;}
@@ -120,7 +121,8 @@ public final class PublicHistoricalRoleLiveOverlay {
             }
         }
         if(roles.isEmpty())throw invalid();
-        return new Archive(reference,verified,trustedCurrentEpochSecond,roles);
+        return new Archive(reference,verified,trustedCurrentEpochSecond,
+                independentPolicy.keyringEpoch(),roles);
     }
     private static IllegalArgumentException invalid(){
         return new IllegalArgumentException("Phase 5 historical role custody or scope unsupported");
@@ -295,6 +297,9 @@ public final class PublicHistoricalRoleLiveOverlay {
                 lastVerified=originalArchive.originalVerified;
                 acceptedRevision=lastVerified.revision();
                 lastCheckedAt=originalArchive.originalEpoch;
+                // This matters when rotation happens after install but
+                // BEFORE the first battle callback/positive report.
+                lastKeyringEpoch=originalArchive.originalKeyringEpoch;
             }
             if(!checkedCurrentCustody())return reply(Verdict.STALE_OR_REVOKED_CUSTODY);
             callbackOrdinal++;
