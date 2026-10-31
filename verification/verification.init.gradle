@@ -42,6 +42,20 @@ allprojects {
                 args(p.property('phase5ImportArgs').toString().split('\\|', -1))
             }
         }
+        // Read-only unified Phase 5 operator commissioning audit. No
+        // archive write or game invocation; all inputs stay local.
+        p.tasks.register('phase5CommissionAudit', JavaExec) {
+            dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            classpath = p.sourceSets.verification.output +
+                    p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
+                    p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath
+            mainClass = 'com.maestroai.training.PublicPhase5CommissioningAudit'
+            doFirst {
+                if (!p.hasProperty('phase5AuditArgs'))
+                    throw new GradleException('Missing phase5AuditArgs: see Phase 5 operator guide')
+                args(p.property('phase5AuditArgs').toString().split('\\|', -1))
+            }
+        }
         p.tasks.register('phase7Benchmark', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
             classpath = p.sourceSets.verification.output +
