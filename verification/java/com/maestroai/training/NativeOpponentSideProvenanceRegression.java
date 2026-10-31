@@ -116,6 +116,31 @@ final class NativeOpponentSideProvenanceRegression {
                 && bound.publicHistoryRevision()==left.routing().revision(),
                 "native-owned p1 maps opponent public side p2 with original source");
         noAuthority(bound);
+
+        var dropped=setup(false,history(),true);
+        var previouslyLinked=dropped.sideSession().inspect(dropped.battle(),
+                dropped.readiness(),dropped.identity(),dropped.bridge());
+        check(previouslyLinked.current()
+                && dropped.sideSession().inspect(dropped.battle(),null,
+                        dropped.identity(),dropped.bridge()).verdict()
+                    ==NativeOpponentSideProvenance.Verdict.MISSING_CONTINUITY
+                && dropped.sideSession().withdrawn() && !previouslyLinked.current(),
+                "missing runtime witness revokes formerly linked 6.31 side");
+        noAuthority(previouslyLinked);
+
+        var droppedNative=setup(false,history(),false);
+        var firstCallback=droppedNative.nativeOnly();
+        check(firstCallback.current()
+                && droppedNative.sideSession().observeSyntheticNativeReturn(
+                        droppedNative.battle(),droppedNative.actors(),
+                        droppedNative.a(),droppedNative.b(),droppedNative.src(),
+                        "p1","p2",droppedNative.ownSide(),
+                        droppedNative.otherSide(),null).verdict()
+                    ==NativeOpponentSideProvenance.Verdict.MISSING_NATIVE_RETURN
+                && !firstCallback.current()
+                && droppedNative.sideSession().withdrawn(),
+                "missing later native callback revokes earlier 6.31 native-only receipt");
+
         check(left.nativeOnly().opponentPublicSide()
                     ==NativeOpponentSideProvenance.Side.UNKNOWN
                 && !left.nativeOnly().publicSideSourceAligned(),

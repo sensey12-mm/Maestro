@@ -255,7 +255,8 @@ public final class NativeOpponentSideProvenance {
             if(withdrawn)return reply(Verdict.WITHDRAWN);
             if(physicalBattle==null || battle!=null && battle!=physicalBattle)
                 return fail(Verdict.WRONG_BATTLE);
-            if(source==null)return reply(Verdict.MISSING_NATIVE_RETURN);
+            if(source==null)return lastNativeOrdinal>0
+                    ?fail(Verdict.MISSING_NATIVE_RETURN):reply(Verdict.MISSING_NATIVE_RETURN);
             if(!SOURCE.equals(source.source()) || !source.current()
                     || !source.matchesOriginalNativeActors(
                             physicalBattle,originalActors,callbackSource))
@@ -307,8 +308,10 @@ public final class NativeOpponentSideProvenance {
             if(nativeReturn==null || !nativeReturn.fromBattle(physicalBattle))
                 return fail(Verdict.SOURCE_STALE);
             if(runtime==null || continuity==null)
-                return reply(Verdict.MISSING_CONTINUITY);
-            if(bridge==null)return reply(Verdict.MISSING_BRIDGE);
+                return lastHistoryRevision>0
+                        ?fail(Verdict.MISSING_CONTINUITY):reply(Verdict.MISSING_CONTINUITY);
+            if(bridge==null)return lastHistoryRevision>0
+                    ?fail(Verdict.MISSING_BRIDGE):reply(Verdict.MISSING_BRIDGE);
             if(!runtime.fromBattle(physicalBattle)
                     || !continuity.samePhysicalBattle(physicalBattle)
                     || !bridge.current())

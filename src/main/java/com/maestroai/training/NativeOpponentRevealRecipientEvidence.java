@@ -224,7 +224,8 @@ public final class NativeOpponentRevealRecipientEvidence {
             if(withdrawn)return reply(Verdict.WITHDRAWN);
             if(physicalBattle==null || battle!=null && battle!=physicalBattle)
                 return fail(Verdict.WRONG_BATTLE);
-            if(original==null)return reply(Verdict.NO_NATIVE_RETURN);
+            if(original==null)return originalReturn!=null
+                    ?fail(Verdict.NO_NATIVE_RETURN):reply(Verdict.NO_NATIVE_RETURN);
             if(!SOURCE.equals(original.source()) || !original.current()
                     || !original.fromBattle(physicalBattle)
                     || !original.matchesOriginalNativeActors(
@@ -270,7 +271,8 @@ public final class NativeOpponentRevealRecipientEvidence {
             if(originalReturn==null || !originalReturn.fromBattle(physicalBattle))
                 return fail(Verdict.STALE_SOURCE);
             if(originalSide==null || appearance==null)
-                return reply(Verdict.MISSING_CONTINUITY);
+                return lastPublicRevision>0
+                        ?fail(Verdict.MISSING_CONTINUITY):reply(Verdict.MISSING_CONTINUITY);
             if(!originalSide.current() || !appearance.current())
                 return fail(Verdict.STALE_SOURCE);
             if(!originalSide.sharesOriginalSidedReturn(

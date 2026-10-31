@@ -107,6 +107,23 @@ final class ShadowOpponentIdentityIntegrationRegression {
                 && admitted.publicRevision()==originalSources.routing().revision(),
                 "only exact original source may prepare unbound Shadow bridge");
         noAuthority(admitted);
+
+        // Phase 6.35 closure: losing a required source AFTER successful
+        // acceptance must revoke the old positive report, not merely abstain.
+        // Use a single original battle object for the loss fixture.
+        Object lostBattle=new Object();
+        var lossSources=validSources(lostBattle,original);
+        var lossSession=new ShadowCompetitiveRuntimeBridge.Session();
+        var acceptedLoss=lossSession.inspectWithContinuity(lostBattle,descriptor,
+                lossSources.runtime(),lossSources.identity());
+        check(acceptedLoss.current()
+                && lossSession.inspectWithContinuity(lostBattle,descriptor,
+                    lossSources.runtime(),null).verdict()
+                    ==ShadowCompetitiveRuntimeBridge.Verdict.MISSING_CONTINUITY
+                && lossSession.withdrawn() && !acceptedLoss.current(),
+                "missing Phase 6.29 continuity revokes formerly positive 6.30 bridge");
+        noAuthority(acceptedLoss);
+
         check(admitted.toString().contains("continuity=SOURCE_ALIGNED_UNBOUND"),
                 "source agreement reported WITHOUT opponent authentication");
 

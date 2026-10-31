@@ -143,6 +143,33 @@ final class NativeOpponentRevealRecipientEvidenceRegression {
                 && accepted.publicHistoryRevision()==s.originalRouting().revision(),
                 "original source-linked public switch remains explicitly unverified delivery");
         noAuthority(accepted);
+
+        var absent=create(new Object(),false,history());
+        witnessed(absent,NativeOpponentRevealRecipientEvidence.Kind.SWITCH_PUBLIC_BRANCH);
+        var beforeMissing=absent.revealOwner().inspect(
+                absent.battle(),absent.side(),absent.appearance());
+        check(beforeMissing.current()
+                && absent.revealOwner().inspect(absent.battle(),
+                        absent.side(),null).verdict()
+                    ==NativeOpponentRevealRecipientEvidence.Verdict.MISSING_CONTINUITY
+                && absent.revealOwner().withdrawn() && !beforeMissing.current(),
+                "missing 6.33 source revokes 6.34 positive linked report");
+        noAuthority(beforeMissing);
+
+        var absentNative=create(new Object(),false,history());
+        var earlier=witnessed(absentNative,
+                NativeOpponentRevealRecipientEvidence.Kind.SWITCH_PUBLIC_BRANCH);
+        check(earlier.current()
+                && absentNative.revealOwner().observeSyntheticReturn(
+                        absentNative.battle(),absentNative.actors(),
+                        absentNative.own(),absentNative.opponent(),
+                        absentNative.opponent(),
+                        NativeOpponentRevealRecipientEvidence.Kind.SWITCH_PUBLIC_BRANCH,
+                        null).verdict()
+                    ==NativeOpponentRevealRecipientEvidence.Verdict.NO_NATIVE_RETURN
+                && absentNative.revealOwner().withdrawn() && !earlier.current(),
+                "missing next 6.24 original RETURN revokes prior native-only source");
+
         check(s.revealOwner().inspect(s.battle(),s.side(),s.appearance()).verdict()
                     ==NativeOpponentRevealRecipientEvidence.Verdict.REPLAYED_OR_REGRESSED
                 && s.revealOwner().withdrawn() && !accepted.current(),

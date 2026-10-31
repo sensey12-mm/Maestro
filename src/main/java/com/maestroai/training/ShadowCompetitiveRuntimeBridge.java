@@ -221,7 +221,8 @@ public final class ShadowCompetitiveRuntimeBridge {
             if(withdrawn)return verdict(Verdict.WITHDRAWN);
             if(physicalBattle==null || battle!=null && battle!=physicalBattle)
                 return fail(Verdict.WRONG_BATTLE);
-            if(identity==null)return verdict(Verdict.MISSING_CONTINUITY);
+            if(identity==null)return lastRevision>0
+                    ?fail(Verdict.MISSING_CONTINUITY):verdict(Verdict.MISSING_CONTINUITY);
             if(!PublicOpponentIdentityContinuity.SCHEMA.equals(identity.schema())
                     || !SOURCE.equals(identity.source())
                     || identity.phase5OnlineAuthorized()
@@ -233,7 +234,8 @@ public final class ShadowCompetitiveRuntimeBridge {
                 return fail(Verdict.SOURCE_STALE);
             if(!identity.samePhysicalBattle(physicalBattle))
                 return fail(Verdict.WRONG_BATTLE);
-            if(runtime==null)return verdict(Verdict.MISSING_RUNTIME_SOURCE);
+            if(runtime==null)return lastRevision>0
+                    ?fail(Verdict.MISSING_RUNTIME_SOURCE):verdict(Verdict.MISSING_RUNTIME_SOURCE);
             if(!runtime.current())
                 return fail(Verdict.SOURCE_STALE);
             if(!runtime.fromBattle(physicalBattle))
@@ -269,12 +271,14 @@ public final class ShadowCompetitiveRuntimeBridge {
             if(withdrawn)return verdict(Verdict.WITHDRAWN);
             if(physicalBattle==null || battle!=null && battle!=physicalBattle)
                 return fail(Verdict.WRONG_BATTLE);
-            if(offline==null)return verdict(Verdict.MISSING_OFFLINE_CONTRACT);
+            if(offline==null)return lastRevision>0
+                    ?fail(Verdict.MISSING_OFFLINE_CONTRACT):verdict(Verdict.MISSING_OFFLINE_CONTRACT);
             if(!offline.pinned())return fail(Verdict.INCOMPATIBLE_PIN);
             if(actorEvidence==IdentityEvidence.CALLER_ASSERTED_STABLE_OPPONENT)
                 return fail(Verdict.UNTRUSTED_ACTOR_ASSERTION);
             if(actorEvidence==null)return fail(Verdict.PUBLIC_ACTOR_NOT_AUTHENTICATED);
-            if(runtime==null)return verdict(Verdict.MISSING_RUNTIME_SOURCE);
+            if(runtime==null)return lastRevision>0
+                    ?fail(Verdict.MISSING_RUNTIME_SOURCE):verdict(Verdict.MISSING_RUNTIME_SOURCE);
             if(!IntegrationRuntimeReadinessGate.SCHEMA.equals(runtime.schema())
                     || !SOURCE.equals(runtime.source())
                     || runtime.phase5OnlineAuthorized() || runtime.shadowSearchAuthorized()
