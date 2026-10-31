@@ -62,6 +62,189 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
         return new PublicSignedCustody.SignedManifest(1,"reviewer-a",when,
                 prior,ledger,Base64.getEncoder().encodeToString(signature.sign()));
     }
+    private static PublicSignedCustody.SignedManifest signAs(
+            String signerId,KeyPair key,PublicReplayCustody.Ledger ledger,
+            long when,String previous)throws Exception{
+        byte[] bytes=PublicSignedCustody.canonicalBytes(1,signerId,when,previous,ledger);
+        var signature=Signature.getInstance("Ed25519");
+        signature.initSign(key.getPrivate());
+        signature.update(bytes);
+        return new PublicSignedCustody.SignedManifest(1,signerId,when,previous,
+                ledger,Base64.getEncoder().encodeToString(signature.sign()));
+    }
+    private static PublicCustodyTrustStore.KeyringUpdate signRotation(
+            KeyPair signer,long when,PublicSignedCustody.TrustedPolicy prior,
+            PublicSignedCustody.TrustedPolicy next)throws Exception{
+        String digest=PublicCustodyTrustStore.policyDigest(prior);
+        byte[] bytes=PublicCustodyTrustStore.updateBytes("reviewer-a",when,
+                digest,next);
+        var signature=Signature.getInstance("Ed25519");
+        signature.initSign(signer.getPrivate());
+        signature.update(bytes);
+        return new PublicCustodyTrustStore.KeyringUpdate("reviewer-a",when,
+                digest,next,Base64.getEncoder().encodeToString(signature.sign()));
+    }
+    private static String rotationText(PublicCustodyTrustStore.KeyringUpdate update){
+        var f=new HashMap<String,String>();
+        f.put("signerKeyId",update.signerKeyId());
+        f.put("signedAtEpochSecond",Long.toString(update.signedAtEpochSecond()));
+        f.put("previousPolicyDigest",update.previousPolicyDigest());
+        f.put("signatureBase64",update.signatureBase64());
+        var policy=update.nextPolicy();
+        f.put("nextKeyringEpoch",Long.toString(policy.keyringEpoch()));
+        f.put("nextMinimumKeyringEpoch",Long.toString(policy.minimumKeyringEpoch()));
+        f.put("nextMinimumRevision",Long.toString(policy.minimumRevision()));
+        f.put("nextEarliestSignature",Long.toString(policy.earliestSignatureEpochSecond()));
+        f.put("nextManifestDigest",policy.requiredManifestDigest());
+        f.put("nextKeyCount",Integer.toString(policy.keys().size()));
+        for(int i=0;i<policy.keys().size();i++){
+            var k=policy.keys().get(i);
+            String prefix="nextKey."+i+".";
+            f.put(prefix+"keyId",k.keyId());
+            f.put(prefix+"ed25519Spki",k.encodedPublicKey());
+            f.put(prefix+"activeFrom",Long.toString(k.activeFromEpochSecond()));
+            f.put(prefix+"revokedAt",Long.toString(k.revokedAtEpochSecond()));
+        }
+        return asText(f);
+    }
+    private static void rotationRegression()throws Exception{
+        Path folder=Files.createTempDirectory("phase5-signed-keyring-").toAbsolutePath();
+        try{
+            var directory=Files.createDirectory(folder.resolve("state"));
+            Path root=folder.resolve("independent-root.properties");
+            Path pinFile=folder.resolve("independent-checkpoint.properties");
+            Path firstFile=folder.resolve("first-signed.properties");
+            Path successor=folder.resolve("rotated-signed.properties");
+            Path rotation=folder.resolve("signed-keyring-update.properties");
+            Path poisoned=folder.resolve("poisoned-update.properties");
+            var alice=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            var bob=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            var imposter=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            long now=1_700_001_000L;
+            String oldSpki=Base64.getEncoder().encodeToString(
+                    alice.getPublic().getEncoded());
+            String newSpki=Base64.getEncoder().encodeToString(
+                    bob.getPublic().getEncoded());
+            put(root,Map.of("bootstrapKeyId","reviewer-a",
+                    "bootstrapEd25519Spki",oldSpki,
+                    "bootstrapKeyActiveFrom",Long.toString(now-100),
+                    "bootstrapKeyringEpoch","1",
+                    "bootstrapMinimumRevision","1",
+                    "bootstrapEarliestSignature",Long.toString(now-100)));
+            var previous=new PublicSignedCustody.TrustedPolicy(1,1,1,now-100,"",
+                    List.of(new PublicSignedCustody.TrustedKey(
+                            "reviewer-a",oldSpki,now-100,0)));
+            var firstDecision=new PublicReplayCustody.Decision("gen9ou-99887766",
+                    "gen9ou","a".repeat(64),PublicReplayCustody.Status.APPROVED,
+                    now-80,now+800,"b".repeat(64));
+            var firstLedger=new PublicReplayCustody.Ledger(1,1,List.of(firstDecision));
+            var first=signAs("reviewer-a",alice,firstLedger,now-40,"0".repeat(64));
+            Files.writeString(firstFile,signedText(first));
+            var pin=PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    false,directory,root,firstFile,null,now);
+            put(pinFile,Map.of("checkpointStateSha256",pin.stateSha256(),
+                    "checkpointRevision","1","checkpointKeyringEpoch","1"));
+            var secondDecision=new PublicReplayCustody.Decision("gen9ou-99887767",
+                    "gen9ou","c".repeat(64),PublicReplayCustody.Status.APPROVED,
+                    now-20,now+800,"d".repeat(64));
+            var nextLedger=new PublicReplayCustody.Ledger(1,2,
+                    List.of(firstDecision,secondDecision));
+            // Sign the KEYRING UPDATE with the prior active reviewer and
+            // the SUCCESSOR MANIFEST with the new independent reviewer.
+            var nextPolicy=new PublicSignedCustody.TrustedPolicy(2,2,2,now-100,"",
+                    List.of(new PublicSignedCustody.TrustedKey(
+                                    "reviewer-a",oldSpki,now-100,now-10),
+                            new PublicSignedCustody.TrustedKey(
+                                    "reviewer-b",newSpki,now-70,0)));
+            var validUpdate=signRotation(alice,now-10,previous,nextPolicy);
+            var nextManifest=signAs("reviewer-b",bob,nextLedger,now-5,
+                    PublicSignedCustody.manifestDigest(first));
+            Files.writeString(rotation,rotationText(validUpdate));
+            Files.writeString(successor,signedText(nextManifest));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,now),
+                    "keyring successor cannot import without signed update");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,null,now),
+                    "explicitly missing signed update always fails closed");
+            var tampered=rotationText(validUpdate).replace("nextKeyringEpoch=2",
+                    "nextKeyringEpoch=3");
+            Files.writeString(poisoned,tampered);
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,poisoned,now),
+                    "changed signed policy epoch cannot forge reviewer authority");
+            Files.writeString(poisoned,rotationText(signRotation(
+                    imposter,now-10,previous,nextPolicy)));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,poisoned,now),
+                    "foreign key cannot authorize keyring rotation");
+            Files.writeString(poisoned,rotationText(validUpdate)+
+                    "nextKey.0.keyId=reviewer-b\n");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,poisoned,now),
+                    "duplicate policy fields fail parser");
+            Files.writeString(poisoned,rotationText(validUpdate)
+                    .replace("nextKey.0.revokedAt="+(now-10),
+                            "nextKey.0.revokedAt="+(now-30)));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,poisoned,now),
+                    "backdated signer revocation must fail");
+            Files.writeString(poisoned,rotationText(validUpdate)
+                    .replace("nextKeyringEpoch=2","nextKeyringEpoch=1"));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,poisoned,now),
+                    "keyring epochs cannot be replayed");
+            var oldSigned=signAs("reviewer-a",alice,nextLedger,now-5,
+                    PublicSignedCustody.manifestDigest(first));
+            Files.writeString(poisoned,signedText(oldSigned));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,poisoned,pinFile,rotation,now),
+                    "revoked old signer cannot authorize successor manifest");
+            var wrongPin=folder.resolve("wrong-prior-pin.properties");
+            put(wrongPin,Map.of("checkpointStateSha256","f".repeat(64),
+                    "checkpointRevision","1","checkpointKeyringEpoch","1"));
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,wrongPin,rotation,now),
+                    "external checkpoint mismatch rejects rotation");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,rotation,now-20),
+                    "future-dated keyring/manifest cannot be imported");
+            check(PublicCustodyTrustStore.recover(directory,previous,pin,now)
+                    .custodyRevision()==1,
+                    "rejected rotations leave original independently pinned state");
+            var rotated=PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,rotation,now);
+            check(rotated.custodyRevision()==2 && rotated.keyringEpoch()==2
+                    && PublicCustodyTrustStore.recover(directory,previous,rotated,now)
+                            .keyringEpoch()==2,
+                    "signed old-to-new keyring and successor commit atomically");
+            reject(()->PublicCustodyTrustStore.recover(directory,previous,pin,now),
+                    "old state checkpoint cannot recover rotated journal");
+            reject(()->PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,pinFile,rotation,now),
+                    "replaying same signed rotation cannot roll keyring backwards");
+            var revokedPin=folder.resolve("latest-pin.properties");
+            put(revokedPin,Map.of("checkpointStateSha256",rotated.stateSha256(),
+                    "checkpointRevision","2","checkpointKeyringEpoch","2"));
+            var revokeSecond=new PublicReplayCustody.Decision("gen9ou-99887767",
+                    "gen9ou","c".repeat(64),PublicReplayCustody.Status.REVOKED,
+                    now+1,0,"e".repeat(64));
+            var thirdLedger=new PublicReplayCustody.Ledger(1,3,
+                    List.of(firstDecision,secondDecision,revokeSecond));
+            var third=signAs("reviewer-b",bob,thirdLedger,now+2,
+                    PublicSignedCustody.manifestDigest(nextManifest));
+            Files.writeString(successor,signedText(third));
+            var thirdPin=PublicHistoricalRoleArchiveProvisioner.importSigned(
+                    true,directory,root,successor,revokedPin,now+3);
+            check(thirdPin.custodyRevision()==3 && thirdPin.keyringEpoch()==2,
+                    "new active signer can append revocation without replaying rotation");
+            reject(()->PublicCustodyTrustStore.recover(directory,previous,rotated,now+3),
+                    "later signed revocation invalidates prior checkpoint");
+            System.out.println("Phase 5 signed keyring rotation PASS: "+checks
+                    +" adversarial bootstrap/signature/revocation tests; Minecraft UNTESTED");
+        }finally{delete(folder);}
+    }
+
     private static void delete(Path dir)throws Exception{
         try(var stream=Files.walk(dir)){
             for(Path path:stream.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);
@@ -219,5 +402,6 @@ final class PublicHistoricalRoleArchiveProvisionerRegression {
             System.out.println("Phase 5 offline signed import PASS: "+checks
                     +" bootstrap/revocation/rollback cases; Minecraft UNTESTED");
         }finally{delete(rootDirectory);}
+        rotationRegression();
     }
 }
