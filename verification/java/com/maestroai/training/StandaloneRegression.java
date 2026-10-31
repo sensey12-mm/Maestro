@@ -457,6 +457,7 @@ public final class StandaloneRegression {
         Phase6FinalClosureRegression.run();
         PublicCompetitiveLiveShadowConsumerRegression.run();
         PublicHistoricalRoleLiveOverlayRegression.run();
+        PublicHistoricalRoleOperatorActivationRegression.run();
         OfflineShadowTacticalAdapterRegression.run();
         OfflineShadowProvenanceGateRegression.run();
         OfflineShadowResponseScenariosRegression.run();
