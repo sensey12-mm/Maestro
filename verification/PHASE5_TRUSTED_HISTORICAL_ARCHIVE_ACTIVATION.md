@@ -97,3 +97,7 @@ The tool verifies the external Ed25519 root, signature, prior signed digest, app
 5. Use the existing 4 BrAI teams/8 battles and the [installed acceptance matrix](PHASE5_INSTALLED_HISTORICAL_INTELLIGENCE_ACCEPTANCE.md); verify actual callbacks, historical/live separation, identity abstention and Legacy chooser isolation. No game acceptance is claimed until that evidence exists.
 
 **Do not** put private signing keys, private gameplay logs, unreviewed replays or local operator trust files in GitHub. The tool's successful local signature check does not itself establish independent rights or latest-keyring custody.
+
+## Public CI JAR installation handoff (v1.0.88)
+
+After **all** exact-commit public GitHub Actions checks succeed, the workflow publishes one short-lived `maestroai-verified-<commit SHA>` artifact with the compiled JAR plus its SHA-256 checksum. Download from that workflow run's **Artifacts** section, extract the JAR and compare the SHA-256 locally (Windows: `certutil -hashfile maestroai-1.0.88.jar SHA256`). The workflow publishes nothing if the build, native ABI or simulator check fails. No operator configuration, public replay, private key or historical custody state is uploaded. The ZIP artifact expires after seven days. This proves the public build's provenance, **not** Minecraft runtime acceptance or permission to use a replay.

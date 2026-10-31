@@ -1,10 +1,23 @@
 # Phase 5 — Installed Historical Intelligence Acceptance Matrix
 
-**Branch:** `Maestro4567` · **JAR:** 1.0.84 · **Evidence status:** pending independent operator provisioning, complete exact-commit CI and **actual Minecraft observation**. This matrix is an *owner-side execution plan*, not a test receipt. No raw owner logs are stored in public Maestro.
+**Branch:** `Maestro4567` · **JAR:** 1.0.88 · **Evidence status:** pending independent operator provisioning, complete exact-commit CI and **actual Minecraft observation**. This matrix is an *owner-side execution plan*, not a test receipt. No raw owner logs are stored in public Maestro.
+
+## Obtain the exact verified JAR
+
+The public GitHub Actions run must finish **SUCCESS**, including the pinned
+simulator step. Then open that same run's **Artifacts** section and download
+`maestroai-verified-<exact 40-character commit SHA>` (a ZIP archive).
+Extract `maestroai-1.0.88.jar` and `sha256.txt`; compare the JAR's
+SHA-256 against the exported checksum before installing. The archive name
+ties the build to the GitHub checkout commit, not the user's local file name.
+Do not treat an artifact from a different commit, failed workflow or
+unverified local rebuild as acceptance evidence. The artifact contains
+the compiled mod and checksum only, never the historical replay, keyring
+or private operator inputs.
 
 ## Preconditions (all mandatory)
 
-- [ ] Exact 1.0.84 SHA and public GitHub Actions run have every required check marked **SUCCESS**. Reject a JAR from a different commit even if it has the same filename/version.
+- [ ] Exact 1.0.88 SHA and public GitHub Actions run have every required check marked **SUCCESS**. Reject a JAR from a different commit even if it has the same filename/version.
 - [ ] Singleplayer Minecraft Java 1.21.1, Fabric, Java 21, Cobblemon 1.7.3, RCT 0.15.2-beta and unchanged Cobbleverse mods are confirmed.
 - [ ] Operator has genuinely independently approved a public spectator replay for this specific use, with explicit permission, signer and unexpired ledger decision. Neither a source listing nor a JVM `true` flag grants rights.
 - [ ] Offline operator has prepared `custody-anchor.state` and stored the **exact** SHA-256 checkpoint, revision, keyring root, and clock floor independently from the replay/state directory.

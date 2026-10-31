@@ -61,6 +61,21 @@ def check_workflow(source):
         raise ValueError('Maestro4567 requires SHA-isolated CI concurrency')
     if 'python3 verification/check_repository.py\n' not in source or 'python3 verification/check_repository.py --self-test\n' not in source:
         raise ValueError('Safeguards not executed')
+    # An exact-source JAR cannot be installed from CI if the verified
+    # artifact is omitted or uploaded before simulator verification.
+    required_source = 'python3 verification/source_oracle.py\n'
+    required_hash = '      - name: Pin verified Minecraft JAR checksum\n'
+    required_upload = '      - name: Upload verified Minecraft JAR\n'
+    if (required_source not in source or required_hash not in source
+            or required_upload not in source
+            or not (source.index(required_source)<source.index(required_hash)
+                    <source.index(required_upload))
+            or 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02'
+                    not in source
+            or 'name: maestroai-verified-${{ github.sha }}' not in source
+            or 'if-no-files-found: error' not in source
+            or 'sha256sum "maestroai-$VERSION.jar"' not in source):
+        raise ValueError('Exact-commit verified JAR publication missing or unsafe')
 
 
 def check_wrapper(root):
@@ -114,6 +129,27 @@ class SafeguardRegression(unittest.TestCase):
                 ("&& github.sha || 'shared'", "&& 'shared'")):
             with self.subTest(before=before), self.assertRaisesRegex(ValueError, 'SHA-isolated'):
                 check_workflow(source.replace(before, after))
+
+    def test_exact_commit_jar_artifact_is_gated_by_simulator(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        check_workflow(source)
+        for old,new in (
+                ('      - name: Upload verified Minecraft JAR', '      - name: No artifact'),
+                ('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+                 'actions/upload-artifact@v4'),
+                ('name: maestroai-verified-${{ github.sha }}',
+                 'name: maestroai-unpinned'),
+                ('if-no-files-found: error','if-no-files-found: warn'),
+                ('sha256sum "maestroai-$VERSION.jar"','echo unverified'),
+                ('python3 verification/source_oracle.py\n','echo skip-simulator\n')):
+            with self.subTest(old=old), self.assertRaisesRegex(ValueError,'verified JAR'):
+                check_workflow(source.replace(old,new,1))
+        upload = source.index('      - name: Pin verified Minecraft JAR checksum')
+        source_without_simulator_gate = (
+                source[:upload].replace('python3 verification/source_oracle.py\n','')
+                + source[upload:])
+        with self.assertRaisesRegex(ValueError,'verified JAR'):
+            check_workflow(source_without_simulator_gate)
 
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)
