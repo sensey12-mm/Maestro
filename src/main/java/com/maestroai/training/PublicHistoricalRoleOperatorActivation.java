@@ -6,9 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Properties;
@@ -48,6 +48,22 @@ public final class PublicHistoricalRoleOperatorActivation {
             if(!value.matches("[1-9][0-9]{0,17}"))throw invalid();
             return Long.parseLong(value);
         }catch(NumberFormatException ex){throw invalid();}
+    }
+    /** Reject post-install mutation/removal/symlink substitution of the exact
+     * rights-reviewed spectator file, not just the signed permission ledger.
+     * Bounded on every inspection; file contents never enter diagnostics. */
+    private static String approvedReplayDigest(Path file){
+        try{
+            if(!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS)
+                    || Files.size(file)<1 || Files.size(file)>2_000_000)
+                throw invalid();
+            byte[] bytes=Files.readAllBytes(file);
+            if(bytes.length<1 || bytes.length>2_000_000)throw invalid();
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(bytes));
+        }catch(IOException | NoSuchAlgorithmException | RuntimeException ex){
+            throw invalid();
+        }
     }
     private static Path absolute(Properties p,String key){
         Path path=Path.of(required(p,key));
@@ -92,6 +108,10 @@ public final class PublicHistoricalRoleOperatorActivation {
                     || Files.size(replay)>2_000_000 || Files.size(replay)<1)
                 throw invalid();
             String spectatorLog=Files.readString(replay,StandardCharsets.UTF_8);
+            String replayDigest=HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(spectatorLog.getBytes(StandardCharsets.UTF_8)));
+            if(!replayDigest.equals(approvedReplayDigest(replay)))throw invalid();
             String replayId=required(p,"replayId");
             String format=required(p,"format");
             var source=new PublicReplayCorpus.Source(replayId,format,true,
@@ -118,6 +138,11 @@ public final class PublicHistoricalRoleOperatorActivation {
                     long now=operatorClock.getAsLong();
                     if(now<operatorNotBefore || now<lastEpoch.get())
                         throw invalid();
+                    // The original replay remains part of the custody lease.
+                    // A later file replacement must NOT outlive a verified
+                    // signed ledger or masquerade as an approved archive.
+                    if(!replayDigest.equals(approvedReplayDigest(replay)))
+                        throw invalid();
                     var resolved=PublicCustodyTrustStore.resolve(
                             directory,bootstrap,pinned,now);
                     PublicSignedCustody.verify(resolved.manifest(),resolved.policy(),now);
@@ -131,7 +156,7 @@ public final class PublicHistoricalRoleOperatorActivation {
                     source,spectatorLog,proposals,List.of(),Set.of(),
                     initial.signed(),initial.policy(),initial.currentEpochSecond());
             return new Installed(archive,refreshed);
-        }catch(IOException | RuntimeException ex){throw invalid();}
+        }catch(IOException | NoSuchAlgorithmException | RuntimeException ex){throw invalid();}
     }
 
     /**

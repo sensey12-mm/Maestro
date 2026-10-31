@@ -146,6 +146,61 @@ final class PublicHistoricalRoleOperatorActivationRegression {
             var report2=session2.inspect(live2.physicalBattle(),live2.live(),
                     installed2.archive(),installed2.trusted());
             check(report2.current(),"independent installation valid before tamper");
+
+            // The signed approval alone must not keep a replaced spectator
+            // input alive. The previous installer revalidated only the journal.
+            var replayInstalled=PublicHistoricalRoleOperatorActivation.fromProperties(
+                    options,clock::get);
+            var replayLive=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+            var replaySession=new PublicHistoricalRoleLiveOverlay.Session();
+            var replayReport=replaySession.inspect(replayLive.physicalBattle(),replayLive.live(),
+                    replayInstalled.archive(),replayInstalled.trusted());
+            check(replayReport.current(),"replay-backed receipt initially current");
+            Files.writeString(log,replay+"|turn|2\n");
+            check(!replayReport.current() && replaySession.withdrawn()
+                    && replayReport.unboundHistoricalRolePossibilities().isEmpty(),
+                    "post-install replay alteration revokes live historical roles");
+            rejected(()->PublicHistoricalRoleOperatorActivation.fromProperties(
+                    options,clock::get),"altered replay rejected on a new boot");
+            Files.writeString(log,replay);
+            check(!replayReport.current(),"restored replay cannot resurrect withdrawn report");
+
+            var absentInstalled=PublicHistoricalRoleOperatorActivation.fromProperties(
+                    options,clock::get);
+            var absentLive=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+            var absentSession=new PublicHistoricalRoleLiveOverlay.Session();
+            var absentReport=absentSession.inspect(absentLive.physicalBattle(),absentLive.live(),
+                    absentInstalled.archive(),absentInstalled.trusted());
+            check(absentReport.current(),"file-removal case initially current");
+            Files.delete(log);
+            check(!absentReport.current() && absentSession.withdrawn(),
+                    "missing spectator file withdraws prior positive result");
+            rejected(()->PublicHistoricalRoleOperatorActivation.fromProperties(
+                    options,clock::get),"missing reviewed replay rejected on boot");
+            Files.writeString(log,replay);
+            check(!absentReport.current(),"restoring removed file cannot resurrect");
+
+            var expirationInstalled=PublicHistoricalRoleOperatorActivation.fromProperties(
+                    options,clock::get);
+            var expirationLive=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+            var expirationSession=new PublicHistoricalRoleLiveOverlay.Session();
+            var expirationReport=expirationSession.inspect(
+                    expirationLive.physicalBattle(),expirationLive.live(),
+                    expirationInstalled.archive(),expirationInstalled.trusted());
+            check(expirationReport.current()
+                    && expirationReport.currentPublicCapabilities().contains(
+                            PublicCompetitiveLiveShadowConsumer.Capability.HAZARD_SET_OBSERVED)
+                    && !expirationReport.matchedHistoricalRoleToCurrentPokemon(),
+                    "public witnessed hazard remains separate from unbound history");
+            clock.set(NOW+1001);
+            check(!expirationReport.current() && expirationSession.withdrawn()
+                    && expirationReport.unboundHistoricalRolePossibilities().isEmpty(),
+                    "signed replay approval expiry withdraws historical roles");
+            clock.set(NOW);
+            check(!expirationReport.current(),"clock recovery cannot resurrect expired report");
+
+            // The pinned signed state is checked independently of the replay.
+            check(report2.current(),"untouched trusted report remains valid until journal tamper");
             Files.writeString(directory.resolve("custody-anchor.state"),"tamper");
             check(!report2.current() && session2.withdrawn()
                     && report2.unboundHistoricalRolePossibilities().isEmpty(),
