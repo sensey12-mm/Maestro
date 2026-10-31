@@ -23,6 +23,7 @@ import com.maestroai.training.NativeDispatchHistoryCorrelation;
 import com.maestroai.training.NativeEvidenceEndToEndGate;
 import com.maestroai.training.RuntimeObservationAcceptanceHarness;
 import com.maestroai.training.NativeSidedDispatchReachability;
+import com.maestroai.training.NativeOpponentSideProvenance;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
 import com.maestroai.training.ShadowSwitchingEvaluator;
@@ -329,6 +330,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase621Gate.withdraw();
         phase622Harness.withdraw();
         phase624Scope.withdraw();
+        phase631Scope.withdraw();
     }
 
     /** Error-return is a second readiness notification, never a payload source.
@@ -4646,6 +4648,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         // Native sided callbacks at turn 0 can precede the first AI
         // choice. Preserve the existing same-battle witness.
         if (PHASE624_OBSERVE) phase624Scope.forBattle(battle);
+        if (PHASE631_OBSERVE) phase631Scope.forBattle(battle);
         opponentObservedMoves.clear();
         lastObservedMajorMove.clear();
         actionCounts.clear();
@@ -4701,10 +4704,16 @@ public class MaestroBattleAI extends RCTBattleAI {
     private NativeSplitDispatchObservation.Session phase618Dispatch =
             new NativeSplitDispatchObservation.Session();
     // Phase 6.24: sided-return is separate from Phase 6.18 split-return.
+    // Phase 6.31 is opt-in, read-only and NEVER authorizes Shadow decisions.
+    // It uses the already pinned 6.24 native callback as its source receipt.
+    private static final boolean PHASE631_OBSERVE =
+            Boolean.getBoolean("maestroai.phase631Observe");
     private static final boolean PHASE624_OBSERVE =
-            Boolean.getBoolean("maestroai.phase624Observe");
+            PHASE631_OBSERVE || Boolean.getBoolean("maestroai.phase624Observe");
     private final NativeSidedDispatchReachability.BattleScope phase624Scope =
             new NativeSidedDispatchReachability.BattleScope();
+    private final NativeOpponentSideProvenance.BattleScope phase631Scope =
+            new NativeOpponentSideProvenance.BattleScope();
 
     /**
      * Phase 6.18: invoked exclusively by the pinned native sendSplitUpdate
@@ -4720,6 +4729,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             var ended=phase624Scope.end(battle);
             if(ended!=null) System.out.println("[MaestroAI] Phase 6.24 "+ended);
         }
+        if (PHASE631_OBSERVE) phase631Scope.end(battle);
         if (PHASE618_AUDIT) phase618Dispatch.battleEnded(battle);
         if (PHASE620_AUDIT) phase620Correlation.withdraw();
         if (PHASE621_OBSERVE) {
@@ -4749,8 +4759,30 @@ public class MaestroBattleAI extends RCTBattleAI {
                     battle.getTurn(),battle.getShowdownMessages().size(),
                     ownTransportVersionSupported(),battle.getEnded());
             System.out.println("[MaestroAI] Phase 6.24 "+receipt);
+            if (PHASE631_OBSERVE) {
+                com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor own = null;
+                boolean duplicateOwn=false;
+                for (var actor : battle.getActors()) {
+                    if (actor instanceof com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor aiActor
+                            && aiActor.getBattleAI()==this) {
+                        if (own!=null) { duplicateOwn=true; break; }
+                        own=aiActor;
+                    }
+                }
+                if (duplicateOwn || own==null) {
+                    phase631Scope.withdraw();
+                    System.out.println("[MaestroAI] Phase 6.31 nativeSide=UNKNOWN;authority=NONE");
+                } else {
+                    // Source-owned native BattleActor.getShowdownId and getSide,
+                    // never names, requests, party slots or historical builds.
+                    var side=phase631Scope.forBattle(battle)
+                            .observeFromNativeCallback(battle,own,sourceActor,receipt);
+                    System.out.println("[MaestroAI] Phase 6.31 "+side);
+                }
+            }
         } catch(RuntimeException unavailable) {
             phase624Scope.withdraw();
+            if(PHASE631_OBSERVE) phase631Scope.withdraw();
             System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
         }
     }

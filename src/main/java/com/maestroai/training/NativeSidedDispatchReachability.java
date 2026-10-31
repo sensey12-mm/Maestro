@@ -58,6 +58,28 @@ public final class NativeSidedDispatchReachability {
                         && owner.observedHistory==historyChunks;
             }
         }
+        /**
+         * Exact actor references from the original native RETURN and same
+         * callback source. Matching public nicknames or side labels alone
+         * cannot substitute another native actor set. Never exports actors.
+         */
+        boolean matchesOriginalNativeActors(Object physicalBattle,
+                List<?> candidateActors,Object callbackSourceActor){
+            synchronized(owner){
+                if(!fromBattle(physicalBattle) || candidateActors==null
+                        || callbackSourceActor==null || owner.boundActors==null
+                        || owner.sourceActor!=callbackSourceActor
+                        || candidateActors.size()!=owner.boundActors.size())
+                    return false;
+                Set<Object> seen=Collections.newSetFromMap(new IdentityHashMap<>());
+                Set<Object> admitted=Collections.newSetFromMap(new IdentityHashMap<>());
+                admitted.addAll(owner.boundActors);
+                for(Object actor:candidateActors)
+                    if(actor==null || !seen.add(actor)
+                            || !admitted.contains(actor))return false;
+                return seen.size()==admitted.size();
+            }
+        }
         /** Original in-process source identity only; not a public actor proof. */
         boolean fromBattle(Object originalBattle){
             synchronized(owner){
@@ -89,6 +111,7 @@ public final class NativeSidedDispatchReachability {
     public static final class Session {
         private Object battle;
         private List<Object> boundActors;
+        private Object sourceActor;
         private long ordinal;
         private int lastTurn=-1,lastHistory=-1,actorCount;
         // Most recent checked source epoch, including polls without a callback.
@@ -98,7 +121,7 @@ public final class NativeSidedDispatchReachability {
         private boolean withdrawn;
         public synchronized boolean withdrawn(){return withdrawn;}
         public synchronized void withdraw(){
-            withdrawn=true;battle=null;boundActors=null;
+            withdrawn=true;battle=null;boundActors=null;sourceActor=null;
         }
         private Report reply(Verdict verdict){return new Report(this,verdict);}
         private Report fail(Verdict verdict){
@@ -171,6 +194,7 @@ public final class NativeSidedDispatchReachability {
             lastTurn=turn;lastHistory=historyChunks;
             observedTurn=turn;observedHistory=historyChunks;
             actorCount=originalBattleActors.size();
+            this.sourceActor=sourceActor;
             spectatorRouting=spectatorsAsAlly
                     ?SpectatorRouting.ALLY_BRANCH
                     :SpectatorRouting.OPPONENT_BRANCH;

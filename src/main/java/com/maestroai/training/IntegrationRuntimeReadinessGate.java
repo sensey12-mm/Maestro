@@ -80,6 +80,13 @@ public final class IntegrationRuntimeReadinessGate {
                         && original.current();
             }
         }
+        /** Exact original Phase 6.24 source report, not same return ordinal. */
+        boolean sharesOriginalNativeReturn(NativeSidedDispatchReachability.Report source){
+            synchronized(owner){
+                return source!=null && sided==source && current()
+                        && source.current();
+            }
+        }
         /** Source-side actor membership only, not public actor authentication. */
         public boolean nativeActorMembershipObserved(){return current();}
         /** Structural private-first/public-second parsing only. */

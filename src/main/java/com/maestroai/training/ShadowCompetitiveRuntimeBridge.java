@@ -148,6 +148,21 @@ public final class ShadowCompetitiveRuntimeBridge {
          * Phase 6.28 runtime gate used the EXACT same original Phase 6.16
          * routing report. Still not an actor / Pokemon / historical identity.
          */
+        /**
+         * Only 6.30's receipt that contains the ORIGINAL 6.28 and 6.29
+         * reports qualifies; an older classification-only 6.28 report does
+         * not. Never means a historical opponent identity is authenticated.
+         */
+        boolean sharesOriginalSourceReceipts(Object battle,
+                IntegrationRuntimeReadinessGate.Report runtime,
+                PublicOpponentIdentityContinuity.Report identity){
+            synchronized(owner){
+                return battle!=null && owner.battle==battle
+                        && source==runtime && continuity==identity
+                        && continuity!=null && current()
+                        && identity.sharesRuntimeRouting(battle,runtime);
+            }
+        }
         public boolean publicContinuitySourceAligned(){
             return continuity!=null && current();
         }
