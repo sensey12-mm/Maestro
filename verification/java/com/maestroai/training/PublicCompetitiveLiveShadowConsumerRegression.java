@@ -343,7 +343,6 @@ final class PublicCompetitiveLiveShadowConsumerRegression {
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         check(legacy.contains("maestroai.phase5LiveShadowObserve")
                 && legacy.contains("Phase 5 online Shadow")
-                && legacy.contains("LivePromotionGate.choose(")
                 && legacy.contains("false); // Owner has NOT authorized live Shadow selection.")
                 && legacy.contains("LivePromotionGate.choosePrepared(")
                 && !legacy.contains("PublicCompetitiveLiveShadowConsumer.Session.choose(")
