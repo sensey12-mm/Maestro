@@ -208,14 +208,20 @@ final class ShadowOpponentIdentityIntegrationRegression {
         check(request.purpose()==PublicCompetitiveConsumerContract.Purpose.OFFLINE_SHADOW_REVIEW
                 && !descriptor.phase5OnlineAuthorized(),
                 "Phase 5 remains strictly offline");
-        String chooser=Files.readString(Path.of(
+        String ai=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+        int choiceStart=ai.indexOf("public ShowdownActionResponse choose(");
+        int choiceEnd=ai.indexOf("private ShowdownActionResponse chooseLegacy(");
+        check(choiceStart>=0 && choiceEnd>choiceStart,
+                "native live chooser source boundaries exist");
+        String chooser=ai.substring(choiceStart,choiceEnd);
         check(chooser.contains("LivePromotionGate.choose(")
                 && chooser.contains("null, null, false);")
                 && !chooser.contains("inspectWithContinuity(")
                 && !chooser.contains("ShadowCompetitiveRuntimeBridge.")
-                && !chooser.contains("PublicOpponentIdentityContinuity."),
-                "production Legacy choice does not invoke any Shadow runtime bridge");
+                && !chooser.contains("PublicOpponentIdentityContinuity.")
+                && !chooser.contains("PublicCompetitiveLiveShadowConsumer."),
+                "Legacy choice does not invoke any Shadow runtime bridge or Phase 5 v2");
         System.out.println("Phase 6.30 source-identity integration PASS: "
                 +checks+" synthetic/adversarial checks; Minecraft untested");
     }
