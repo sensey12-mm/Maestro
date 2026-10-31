@@ -147,10 +147,19 @@ public final class PublicHistoricalRoleLiveOverlay {
         public Verdict verdict(){return verdict;}
         public boolean current(){
             synchronized(owner){
-                return !owner.withdrawn && live!=null && live.fromBattle(battle)
-                        && archive!=null && battle!=null && owner.battle==battle
-                        && owner.archive==archive && owner.callbackOrdinal==callbackOrdinal
-                        && owner.checkedCurrentCustody();
+                if(owner.withdrawn || live==null || archive==null || battle==null
+                        || owner.battle!=battle || owner.archive!=archive
+                        || owner.callbackOrdinal!=callbackOrdinal)
+                    return false;
+                // A native callback lease or public-history/identity receipt can
+                // withdraw independently of the signed archive. Once that
+                // happens, permanently revoke this session's historical roles;
+                // a later callback may not resurrect a stale positive report.
+                if(!live.fromBattle(battle)){
+                    owner.withdraw();
+                    return false;
+                }
+                return owner.checkedCurrentCustody();
             }
         }
         /** Historical roles are SOURCE-SCOPED only, never a present battler. */
@@ -270,6 +279,8 @@ public final class PublicHistoricalRoleLiveOverlay {
                     ==NativeOpponentSideProvenance.Side.UNKNOWN)
                 return fail(Verdict.SOURCE_MISMATCH);
             if(battle!=null && (archive!=originalArchive || trusted!=source))
+                return fail(Verdict.SOURCE_MISMATCH);
+            if(battle!=null && lastLive!=null && !lastLive.fromBattle(battle))
                 return fail(Verdict.SOURCE_MISMATCH);
             if(battle!=null && live.equals(lastLive))
                 return fail(Verdict.REPLAY_OR_REGRESSION);

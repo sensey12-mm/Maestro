@@ -137,9 +137,28 @@ final class PublicHistoricalRoleLiveOverlayRegression {
         advanced.add("update\n|move|p2a: OPPONENT_PRIVATE_UUID_SECRET_521|Recover|p1a: Own");
         fresh.routing().inspect(fresh.physicalBattle(),advanced,true);
         check(!before.current() && before.unboundHistoricalRolePossibilities().isEmpty()
-                && before.currentPublicCapabilities().isEmpty(),
-                "original public history withdrawal immediately removes historical overlay");
+                && before.currentPublicCapabilities().isEmpty() && withdrawal.withdrawn(),
+                "original public history withdrawal irreversibly revokes historical overlay");
+        check(withdrawal.inspect(fresh.physicalBattle(),fresh.live(),
+                    history.archive(),()->history.custody()).verdict()
+                    ==PublicHistoricalRoleLiveOverlay.Verdict.WITHDRAWN,
+                "stale native/public receipt cannot reactivate its old session");
         noAuthority(before);
+
+        // Even if an earlier positive report was not queried after its native
+        // lease expired, a subsequent callback cannot quietly reuse it.
+        var fresh2=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+        var abandoned=new PublicHistoricalRoleLiveOverlay.Session();
+        var prior=live(abandoned,fresh2,history,()->history.custody());
+        check(prior.current(),"second live native lease initially good");
+        var progressed=new ArrayList<>(fresh2.original());
+        progressed.add("update\n|turn|2");
+        fresh2.routing().inspect(fresh2.physicalBattle(),progressed,true);
+        check(abandoned.inspect(fresh2.physicalBattle(),fresh2.live(),
+                    history.archive(),()->history.custody()).verdict()
+                    ==PublicHistoricalRoleLiveOverlay.Verdict.SOURCE_MISMATCH
+                && abandoned.withdrawn() && !prior.current(),
+                "stale lease fails on next inspection even if prior report was not polled");
 
         var late=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
         var owner=new PublicHistoricalRoleLiveOverlay.Session();
@@ -148,6 +167,22 @@ final class PublicHistoricalRoleLiveOverlayRegression {
                 "foreign battle end cannot revoke a live source");
         check(owner.battleEnded(late.physicalBattle()) && !old.current()
                 && owner.withdrawn(),"real battle end irreversibly withdraws role data");
+        var scope=new PublicHistoricalRoleLiveOverlay.BattleScope();
+        var scopeSession=scope.forBattle(late.physicalBattle());
+        var scoped=live(scopeSession,late,history,()->history.custody());
+        check(scoped.current() && scope.end(late.physicalBattle())
+                && !scoped.current() && scopeSession.withdrawn(),
+                "battle scope end immediately withdraws active historical data");
+        check(scope.forBattle(late.physicalBattle())==scopeSession
+                && scopeSession.inspect(late.physicalBattle(),late.live(),
+                        history.archive(),()->history.custody()).verdict()
+                        ==PublicHistoricalRoleLiveOverlay.Verdict.WITHDRAWN,
+                "same physical battle cannot resurrect after end");
+        var nextBattle=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
+        var nextSession=scope.forBattle(nextBattle.physicalBattle());
+        check(nextSession!=scopeSession && live(nextSession,nextBattle,history,
+                    ()->history.custody()).current() && !scoped.current(),
+                "new physical battle gets distinct leases while ended report remains dead");
 
         var ai=Files.readString(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         int begin=ai.indexOf("public ShowdownActionResponse choose(");
