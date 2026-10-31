@@ -82,9 +82,9 @@ final class ShadowLiveCompetitiveConsumerSafetyRegression {
                 ownSide,otherSide,nativeReturn);
         var side=sideOwner.inspect(physicalBattle,runtime,identity,bridge);
         check(nativeReturn.current() && routing.current()
-                && nativeOnly.current()
                 && nativeOnly.verdict()==
-                    NativeOpponentSideProvenance.Verdict.NATIVE_SIDE_OBSERVED_UNLINKED,
+                    NativeOpponentSideProvenance.Verdict.NATIVE_SIDE_OBSERVED_UNLINKED
+                && (bridge.current()==nativeOnly.current()),
                 "unlinked native original return exists with original routing source");
         return new Fixture(physicalBattle,routingOwner,nativeOwner,
                 sideOwner,bridgeOwner,bridge,side,nativeOnly);
