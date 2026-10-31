@@ -251,8 +251,10 @@ final class NativeOpponentRevealRecipientEvidenceRegression {
                 changed.battle(),changed.side(),changed.appearance());
         changed.routingOwner().inspect(changed.battle(),
                 appended("update\n|move|p2a: "+PRIVATE+"|Scratch|p1a: Own"),true);
-        check(initial.current()==false && acceptedChanged.current()==false,
-                "public history advance invalidates linked 6.33 evidence");
+        check(initial.current() && !initial.publicAppearanceSourceAligned()
+                && !acceptedChanged.current()
+                && !acceptedChanged.publicAppearanceSourceAligned(),
+                "public history advance revokes linked appearance while native-only RETURN remains unlinked");
         noAuthority(acceptedChanged);
         var ended=create(new Object(),false,history());
         var beforeEnd=witnessed(ended,
