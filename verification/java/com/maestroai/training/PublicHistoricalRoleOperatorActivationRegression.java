@@ -90,6 +90,24 @@ final class PublicHistoricalRoleOperatorActivationRegression {
                     .sourceScopedUnboundRoles().contains(
                         PublicHistoricalRoleLiveOverlay.Role.SPECIAL_ATTACK_BOOST_SIGNAL_POSSIBLE),
                     "signed archived role activated through external pinned journal");
+            // This acceptance path must remain wired at real trainer startup,
+            // opt-in only; the Shadow role source must not enter choose().
+            var ai=Files.readString(Path.of(
+                    "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+            int constructor=ai.indexOf("public MaestroBattleAI()");
+            int chooser=ai.indexOf("public ShowdownActionResponse choose(",constructor);
+            check(constructor>0 && chooser>constructor
+                    && ai.substring(constructor,chooser).contains(
+                            "maestroai.phase5HistoricalRolesObserve")
+                    && ai.substring(constructor,chooser).contains("fromJvmProperties()")
+                    && ai.substring(constructor,chooser).contains(
+                            "installPhase5HistoricalRoles(")
+                    && ai.substring(constructor,chooser).contains(
+                            "clearPhase5HistoricalRoles()")
+                    && !ai.substring(chooser,ai.indexOf(
+                            "private ShowdownActionResponse chooseLegacy(",chooser))
+                            .contains("PublicHistoricalRoleOperatorActivation"),
+                    "installed entrypoint checks operator custody without changing chooser");
             var live=PublicCompetitiveLiveShadowConsumerRegression.syntheticLiveSource();
             var session=new PublicHistoricalRoleLiveOverlay.Session();
             var report=session.inspect(live.physicalBattle(),live.live(),
