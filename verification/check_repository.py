@@ -65,6 +65,9 @@ def check_workflow(source):
         raise ValueError('Phase 5 installed artifact self-test missing')
     if 'python3 verification/phase5_minecraft_log_gate.py --self-test\n' not in source:
         raise ValueError('Phase 5 installed Minecraft log gate self-test missing')
+    if (re.search(r'(?m)^\s*continue-on-error\s*:\s*true\s*$', source)
+            or re.search(r'(?m)^\s*if\s*:\s*(?:always\(\)|failure\(\))', source)):
+        raise ValueError('Verified JAR cannot bypass failed simulator job')
     # Two complete pinned-source profiles can run concurrently, but a
     # release requires BOTH successful jobs and a verified intermediate JAR.
     native_start = source.find('  verify:\n')
@@ -112,7 +115,11 @@ def check_workflow(source):
             or publish.find('python3 verification/check_publish_artifact.py build/verified-artifact/')
                 > publish.find('      - name: Upload verified Minecraft JAR')
             or 'if-no-files-found: error' not in publish
-            or 'path: build/verified-artifact/' not in publish):
+            or 'path: build/verified-artifact/' not in publish
+            or re.search(r'(?m)^\s*run-id\s*:', publish)
+            or re.search(r'(?m)^\s*repository\s*:', publish)
+            or 'if: ' in publish
+            or publish.count('      - name: Upload verified Minecraft JAR') != 1):
         raise ValueError('Verified JAR publication must depend on both full simulator jobs')
 
 
@@ -179,6 +186,22 @@ class SafeguardRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Minecraft log gate'):
             check_workflow(source.replace(
                 'python3 verification/phase5_minecraft_log_gate.py --self-test\n', '', 1))
+
+    def test_failed_jobs_and_other_run_artifacts_cannot_publish(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        check_workflow(source)
+        for extra in ('    continue-on-error: true\n',
+                      '    if: always()\n',
+                      '    if: failure()\n'):
+            broken = source.replace('  publish:\n', '  publish:\n' + extra, 1)
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, 'Verified JAR'):
+                check_workflow(broken)
+        for extra in ('          run-id: 123456\n',
+                      '          repository: attacker/other\n'):
+            marker = '          name: maestroai-candidate-${{ github.sha }}\n'
+            broken = source.replace(marker, marker + extra, 1)
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, 'Verified JAR'):
+                check_workflow(broken)
 
     def test_exact_commit_jar_artifact_is_gated_by_simulator(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
