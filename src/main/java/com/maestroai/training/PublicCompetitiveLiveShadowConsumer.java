@@ -103,7 +103,11 @@ public final class PublicCompetitiveLiveShadowConsumer {
                 NativeOpponentSideProvenance.Side opposite,
                 int moves,Set<Capability> observed){
             this.owner=owner;this.verdict=verdict;
-            boolean accept=verdict==Verdict.PUBLICLY_OBSERVED_CAPABILITY_ONLY;
+            // The no-new-evidence sentinel is source-attested too, but is
+            // NOT a positive capability report. It permits an explicitly
+            // bounded historical pause, never role exposure or action use.
+            boolean accept=verdict==Verdict.PUBLICLY_OBSERVED_CAPABILITY_ONLY
+                    || verdict==Verdict.NO_NEW_PUBLIC_EVIDENCE;
             this.physicalBattle=accept?battle:null;
             originalRouting=accept?routing:null;
             originalIdentity=accept?identity:null;
@@ -124,6 +128,17 @@ public final class PublicCompetitiveLiveShadowConsumer {
             return original!=null && physicalBattle==original && current();
         }
         public boolean current(){
+            return verdict==Verdict.PUBLICLY_OBSERVED_CAPABILITY_ONLY
+                    && attestedCurrent();
+        }
+        /** Only source-pinned, fresh no-new callbacks may pause historical
+         * diagnostics; old positive reports never become current again. */
+        boolean attestedNoNew(Object original){
+            return verdict==Verdict.NO_NEW_PUBLIC_EVIDENCE
+                    && original!=null && physicalBattle==original
+                    && attestedCurrent();
+        }
+        private boolean attestedCurrent(){
             synchronized(owner){
                 return !owner.withdrawn && owner.battle==physicalBattle
                         && physicalBattle!=null && originalRouting!=null
@@ -292,8 +307,15 @@ public final class PublicCompetitiveLiveShadowConsumer {
                     || originalRouting.chunkCount()<chunks)
                 return fail(Verdict.REPLAY_OR_REGRESSION);
             if(battle!=null && originalRouting.chunkCount()==chunks
-                    && originalRouting.publicTurn()==turn)
-                return reply(Verdict.NO_NEW_PUBLIC_EVIDENCE);
+                    && originalRouting.publicTurn()==turn){
+                // Valid fresh native callback with unchanged public history.
+                // Supersede the previous positive receipt by native ordinal,
+                // without permanently disabling later fresh public evidence.
+                ordinal=originalNative.observedSidedReturnOrdinal();
+                return new Report(this,Verdict.NO_NEW_PUBLIC_EVIDENCE,
+                        physicalBattle,originalRouting,originalIdentity,
+                        originalNative,originalSide,opposite,0,Set.of());
+            }
             try{
                 var scan=scan(List.copyOf(originalFullHistory),opposite);
                 if(!originalRouting.matchesOriginalHistory(

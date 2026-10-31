@@ -291,6 +291,21 @@ public final class PublicHistoricalRoleLiveOverlay {
             if(live==null)
                 return battle==null?reply(Verdict.NO_LIVE_SOURCE)
                         :fail(Verdict.NO_LIVE_SOURCE);
+            if(live.attestedNoNew(physicalBattle)){
+                // A new authenticated native epoch may have the same original
+                // public history. Explicitly clear the old positive lease,
+                // abstain now, and allow ONLY a future newly proven callback.
+                // A revoked signer, stale clock or changed replay still fails
+                // closed through the original independent-custody checks.
+                if(battle==null || archive!=originalArchive || trusted!=source
+                        || lastVerified==null || lastLive==null)
+                    return fail(Verdict.SOURCE_MISMATCH);
+                if(!checkedCurrentCustody())
+                    return reply(Verdict.STALE_OR_REVOKED_CUSTODY);
+                callbackOrdinal++;
+                lastLive=null;
+                return reply(Verdict.NO_LIVE_SOURCE);
+            }
             if(!live.fromBattle(physicalBattle) || live.publicOpponentSide()
                     ==NativeOpponentSideProvenance.Side.UNKNOWN)
                 return fail(Verdict.SOURCE_MISMATCH);
