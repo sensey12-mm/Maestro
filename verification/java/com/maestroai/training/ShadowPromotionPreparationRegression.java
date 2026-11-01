@@ -121,7 +121,7 @@ final class ShadowPromotionPreparationRegression {
                 ==ShadowPromotionPreparation.Verdict.INCOMPLETE_OR_UNBOUNDED_ACTIONS,
                 "incomplete Phase 6 candidate coverage forces abstention");
         check(ShadowPromotionPreparation.inspect(battle,request,snap,
-                example(),null,null,null,null,null).verdict()
+                example(),null,null,null,null,null,null).verdict()
                 ==ShadowPromotionPreparation.Verdict.MISSING_CURRENT_OWN_SOURCE,
                 "offline fixture cannot fabricate a native owning lease");
 
@@ -181,7 +181,10 @@ final class ShadowPromotionPreparationRegression {
         check(actualAI.contains("captureShadowNativeLegalWindow(")
                 && actualAI.contains("phaseShadowLegalWindow.exactlyCovers(")
                 && actualAI.contains("phaseShadowControl.revoke()")
-                && actualAI.contains("phaseShadowLegalWindow=null;"),
+                && actualAI.contains("phaseShadowLegalWindow=null;")
+                && actualAI.contains("envelopedAudit.replies().result()")
+                && actualAI.contains("phaseShadowLegalWindow,")
+                && actualAI.contains("envelopedAudit);"),
                 "actual chooser independently captures, rechecks and releases native action roots");
 
         // Only synthetic unit tests exercise ownerApproved=true. The real AI

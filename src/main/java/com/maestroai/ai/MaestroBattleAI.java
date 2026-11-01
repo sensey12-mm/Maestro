@@ -7113,9 +7113,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             // explicit promotion, but never authorize it now.
             var currentRequest=phaseShadowRequest;
             phaseShadowPrepared=ShadowPromotionPreparation.inspect(
-                    phaseShadowBattle,currentRequest,snapshot,comparison,
+                    phaseShadowBattle,currentRequest,snapshot,
+                    envelopedAudit.replies().result(),
                     runtimeDomain,ownChoiceLease,mechanicsExecution,
-                    publicProtocolEvidence,phaseShadowLegalWindow);
+                    publicProtocolEvidence,phaseShadowLegalWindow,
+                    envelopedAudit);
             System.out.println("[MaestroAI] "+phaseShadowPrepared.safeLine());
             // Fixed vocabulary only: no private request fields, opponent UUID,
             // registry callback bodies or hidden opponent modifiers in telemetry.

@@ -24,6 +24,7 @@ public final class ShadowPromotionPreparation {
         MISSING_CURRENT_OWN_SOURCE,
         MISSING_PUBLIC_OR_MECHANICS_SOURCE,
         MISSING_OR_STALE_NATIVE_LEGAL_WINDOW,
+        INSUFFICIENT_PUBLIC_REPLY_OR_MODIFIER_COVERAGE,
         INCOMPLETE_OR_UNBOUNDED_ACTIONS,
         NO_STRICT_INDEPENDENT_PREFERENCE,
         CONDITIONAL_PROPOSAL_NONAUTHORITATIVE
@@ -150,7 +151,8 @@ public final class ShadowPromotionPreparation {
                                  RuntimeDomain domain,OwnRequestTransport.Lease lease,
                                  ScopedExecution execution,
                                  PublicProtocolEvidence publicEvidence,
-                                 ShadowNativeLegalWindow.Proof legalWindow) {
+                                 ShadowNativeLegalWindow.Proof legalWindow,
+                                 PublicReplyCoverage.Enveloped envelope) {
         if(physicalBattle==null || ownRequest==null || lease==null || snapshot==null
                 || !lease.current() || lease.turn()!=snapshot.turn())
             return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
@@ -159,6 +161,24 @@ public final class ShadowPromotionPreparation {
         if(legalWindow==null || !legalWindow.exactlyCovers(
                 physicalBattle,ownRequest,snapshot))
             return abstain(Verdict.MISSING_OR_STALE_NATIVE_LEGAL_WINDOW);
+        // This separate Phase 4/6 comparison covers ALL currently witnessed
+        // public replies and the certified current modifier envelope.
+        // It never pretends unseen opponent replies have probability zero.
+        if(envelope==null || envelope.replies()==null
+                || !envelope.replies().compared()
+                || !envelope.replies().allCandidates()
+                || !envelope.replies().reasons().isEmpty()
+                || envelope.replies().result()!=comparison
+                || envelope.replies().replyCount()<1
+                || envelope.modifiers()==null
+                || !envelope.modifiers().complete()
+                || envelope.modifiers().preferredConditional()==null
+                || !envelope.modifiers().preferredConditional().equals(
+                        comparison.preferredConditional())
+                || envelope.pairwise()==null
+                || !envelope.pairwise().fullRootBounded()
+                || !envelope.pairwise().reasons().isEmpty())
+            return abstain(Verdict.INSUFFICIENT_PUBLIC_REPLY_OR_MODIFIER_COVERAGE);
         BooleanSupplier receipt=()->{
             if(!legalWindow.exactlyCovers(physicalBattle,ownRequest,snapshot))
                 return false;
