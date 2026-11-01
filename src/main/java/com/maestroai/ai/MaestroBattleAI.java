@@ -425,6 +425,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     && battle.getActor(activePokemon.getActor().getShowdownId())
                         ==activePokemon.getActor())
                 promotionControl=phaseShadowControls.forBattle(battle.getBattleId());
+            // Shadow-led battles may never execute Legacy. Reset the shared
+            // observer/diagnostic caches on their own fresh battle identity.
+            if(promotionControl!=null)resetMemoryForNewBattle(battle);
             try {
             if (activePokemon != null && activePokemon.getBattlePokemon() != null && activePokemon.getActor() != null) {
                 var actor = activePokemon.getActor(); var request = actor.getRequest();
