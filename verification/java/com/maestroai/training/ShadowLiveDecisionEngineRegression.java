@@ -299,6 +299,12 @@ final class ShadowLiveDecisionEngineRegression {
                     "prepareShadowForcedReplacement(")
                 && ai.substring(choose,legacyStart).contains(
                     "currentNativeGimmickAllowed(")
+                && ai.substring(choose,legacyStart).contains(
+                    "selected.authority()==LivePromotionGate.Authority.SHADOW")
+                && ai.substring(choose,legacyStart).contains(
+                    "rememberMove(activePokemon.getBattlePokemon(),")
+                && ai.substring(choose,legacyStart).contains(
+                    "clearRememberedMove(activePokemon.getBattlePokemon());")
                 && ai.contains("moveset.getCanZMove()")
                 && ai.contains("moveset.getCanDynamax()")
                 && ai.contains("moveset.getCanTerastallize()")
