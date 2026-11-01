@@ -28,6 +28,7 @@ import com.maestroai.training.NativeOpponentRevealRecipientEvidence;
 import com.maestroai.training.PublicCompetitiveLiveShadowConsumer;
 import com.maestroai.training.PublicHistoricalRoleLiveOverlay;
 import com.maestroai.training.ShadowPromotionPreparation;
+import com.maestroai.training.ShadowNativeLegalWindow;
 import com.maestroai.training.PublicOpponentIdentityContinuity;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
 import com.maestroai.training.ShadowSwitchTelemetry;
@@ -429,6 +430,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             phaseShadowBattle=battle;
             phaseShadowRequest=activePokemon==null || activePokemon.getActor()==null
                     ?null:activePokemon.getActor().getRequest();
+            // Independently read the installed own request/usable moves/party,
+            // before constructing the advisory tactical snapshot. Missing,
+            // forced, ambiguous and incompatible requests fail closed.
+            phaseShadowLegalWindow=captureShadowNativeLegalWindow(
+                    activePokemon,battle,moveset,forceSwitch);
             ShowdownActionResponse legacy=chooseLegacy(
                     activePokemon,battle,side,moveset,forceSwitch);
             var prepared=phaseShadowPrepared;
@@ -497,6 +503,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             phaseShadowPrepared=null;
             phaseShadowBattle=null;
             phaseShadowRequest=null;
+            phaseShadowLegalWindow=null;
             ownTransport.endChoice(); ownChoiceLease = null;
         }
     }
@@ -623,6 +630,72 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 && actor.getRequest().getActive().size() == 1
                                 && moveset != null && !moveset.getTrapped());
             }
+    }
+
+    /**
+     * A separate read of installed Cobblemon's *own* request, move options and
+     * eligible bench. The Shadow snapshot is deliberately not an input.
+     * Never infer hidden opponent actions or complete gimmick legality.
+     */
+    private ShadowNativeLegalWindow.Proof captureShadowNativeLegalWindow(
+            ActiveBattlePokemon active,PokemonBattle battle,
+            ShowdownMoveset moveset,boolean forceSwitch){
+        try {
+            if(battle==null || battle.getEnded() || active==null
+                    || active.getBattlePokemon()==null || active.getActor()==null
+                    || moveset==null || moveset.getMoves()==null
+                    || !ownTransportVersionSupported()
+                    || !RuntimeBattleMode.ordinary(battle)
+                    || ownChoiceLease==null || !ownChoiceLease.current())
+                return null;
+            var actor=active.getActor();
+            var request=actor.getRequest();
+            if(request==null || request!=phaseShadowRequest
+                    || actor.getBattle()!=battle
+                    || !actor.getMustChoose() || !actor.getResponses().isEmpty()
+                    || actor.getActivePokemon().size()!=1
+                    || !actor.getActivePokemon().contains(active)
+                    || request.getWait() || request.getForceSwitch()==null
+                    || request.getForceSwitch().contains(true)
+                    || request.getActive()==null || request.getActive().size()!=1
+                    || request.getActive().getFirst()==null
+                    || request.getActive().getFirst().getTrapped()!=moveset.getTrapped()
+                    || forceSwitch)return null;
+            var activeId=active.getBattlePokemon().getUuid();
+            if(activeId==null)return null;
+            var nativeMoves=new java.util.ArrayList<String>();
+            for(InBattleMove move:moveset.getMoves()){
+                if(move==null || move.getId()==null || move.getId().isBlank())
+                    return null;
+                if(move.canBeUsed())nativeMoves.add(move.getId());
+            }
+            boolean continuation=isContinuationLocked(moveset,active.getBattlePokemon());
+            var switches=new java.util.ArrayList<String>();
+            if(!moveset.getTrapped() && !continuation) {
+                if(actor.getPokemonList()==null)return null;
+                for(BattlePokemon candidate:actor.getPokemonList()){
+                    if(candidate==null || candidate.getUuid()==null
+                            || candidate.getUuid().equals(activeId)
+                            || !candidate.canBeSentOut() || candidate.getGone()
+                            || candidate.getHealth()<=0 || candidate.isSentOut())
+                        continue;
+                    var pokemon=candidate.getEffectedPokemon();
+                    if(pokemon==null || pokemon.getCurrentHealth()<=0)continue;
+                    switches.add(candidate.getUuid().toString());
+                }
+            }
+            var lease=ownChoiceLease;
+            var originalRequest=request;
+            return ShadowNativeLegalWindow.capture(battle,request,battle.getTurn(),
+                    nativeMoves,switches,false,moveset.getTrapped(),continuation,
+                    true,()->lease.current() && actor.getBattle()==battle
+                        && actor.getRequest()==originalRequest && !battle.getEnded()
+                        && actor.getMustChoose() && actor.getResponses().isEmpty()
+                        && actor.getActivePokemon().size()==1
+                        && actor.getActivePokemon().contains(active)
+                        && active.getBattlePokemon()!=null
+                        && activeId.equals(active.getBattlePokemon().getUuid()));
+        } catch(RuntimeException unsupported){return null;}
     }
 
     /**
@@ -4833,6 +4906,7 @@ public class MaestroBattleAI extends RCTBattleAI {
     // conditional Shadow proposal. Never a promotion certificate.
     private volatile ShadowPromotionPreparation.Report phaseShadowPrepared;
     private volatile Object phaseShadowBattle,phaseShadowRequest;
+    private volatile ShadowNativeLegalWindow.Proof phaseShadowLegalWindow;
     private final PublicCompetitiveLiveShadowConsumer.BattleScope phase5LiveScope =
             new PublicCompetitiveLiveShadowConsumer.BattleScope();
     private PublicHistoricalRoleLiveOverlay.BattleScope phase5HistoricalScope =
@@ -7034,7 +7108,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             phaseShadowPrepared=ShadowPromotionPreparation.inspect(
                     phaseShadowBattle,currentRequest,snapshot,comparison,
                     runtimeDomain,ownChoiceLease,mechanicsExecution,
-                    publicProtocolEvidence);
+                    publicProtocolEvidence,phaseShadowLegalWindow);
             System.out.println("[MaestroAI] "+phaseShadowPrepared.safeLine());
             // Fixed vocabulary only: no private request fields, opponent UUID,
             // registry callback bodies or hidden opponent modifiers in telemetry.

@@ -121,7 +121,7 @@ final class ShadowPromotionPreparationRegression {
                 ==ShadowPromotionPreparation.Verdict.INCOMPLETE_OR_UNBOUNDED_ACTIONS,
                 "incomplete Phase 6 candidate coverage forces abstention");
         check(ShadowPromotionPreparation.inspect(battle,request,snap,
-                example(),null,null,null,null).verdict()
+                example(),null,null,null,null,null).verdict()
                 ==ShadowPromotionPreparation.Verdict.MISSING_CURRENT_OWN_SOURCE,
                 "offline fixture cannot fabricate a native owning lease");
 

@@ -23,6 +23,7 @@ public final class ShadowPromotionPreparation {
     public enum Verdict {
         MISSING_CURRENT_OWN_SOURCE,
         MISSING_PUBLIC_OR_MECHANICS_SOURCE,
+        MISSING_OR_STALE_NATIVE_LEGAL_WINDOW,
         INCOMPLETE_OR_UNBOUNDED_ACTIONS,
         NO_STRICT_INDEPENDENT_PREFERENCE,
         CONDITIONAL_PROPOSAL_NONAUTHORITATIVE
@@ -148,13 +149,19 @@ public final class ShadowPromotionPreparation {
                                  ShadowMechanicsEvaluation.Comparison comparison,
                                  RuntimeDomain domain,OwnRequestTransport.Lease lease,
                                  ScopedExecution execution,
-                                 PublicProtocolEvidence publicEvidence) {
+                                 PublicProtocolEvidence publicEvidence,
+                                 ShadowNativeLegalWindow.Proof legalWindow) {
         if(physicalBattle==null || ownRequest==null || lease==null || snapshot==null
                 || !lease.current() || lease.turn()!=snapshot.turn())
             return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
         if(domain==null || execution==null || publicEvidence==null)
             return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
+        if(legalWindow==null || !legalWindow.exactlyCovers(
+                physicalBattle,ownRequest,snapshot))
+            return abstain(Verdict.MISSING_OR_STALE_NATIVE_LEGAL_WINDOW);
         BooleanSupplier receipt=()->{
+            if(!legalWindow.exactlyCovers(physicalBattle,ownRequest,snapshot))
+                return false;
             if(!lease.current() || lease.turn()!=snapshot.turn()
                     || !domain.current() || !domain.effectiveState().known()
                     || !execution.sourceCurrent() || !execution.unresolved().isEmpty()
@@ -162,7 +169,8 @@ public final class ShadowPromotionPreparation {
                     || publicEvidence.corrupted() || !publicEvidence.coverageUnknown().isEmpty())
                 return false;
             execution.requireCurrent(snapshot.turn());
-            return lease.current() && domain.current() && execution.sourceCurrent();
+            return lease.current() && domain.current() && execution.sourceCurrent()
+                    && legalWindow.exactlyCovers(physicalBattle,ownRequest,snapshot);
         };
         try {
             if(!receipt.getAsBoolean())
