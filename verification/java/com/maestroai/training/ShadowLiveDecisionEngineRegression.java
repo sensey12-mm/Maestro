@@ -178,6 +178,26 @@ final class ShadowLiveDecisionEngineRegression {
                 ShadowLiveDecisionEngine.ordinary(nativePriority,false,false,true,
                         Map.of("newphysicalattack",ownAttack)).action()),
                 "source-backed noncatalogue move is independently ranked");
+        var ownHazard=ShadowLiveDecisionEngine.ordinary(
+                snapshot(.85,List.of("stealthrock"),List.of(),List.of(),
+                    Map.of(),List.of()),false,false,true);
+        check(ownHazard!=null
+                && ownHazard.reason()==ShadowLiveDecisionEngine.Reason.STATUS
+                && ShadowPromotionPreparation.sourceIndependentStatus(ownHazard),
+                "source-verified non-opponent status can be Shadow selected");
+        var ownProtect=ShadowLiveDecisionEngine.ordinary(
+                snapshot(.3,List.of("protect"),List.of(),List.of(),
+                    Map.of(),List.of()),false,false,true);
+        check(ownProtect!=null
+                && ShadowPromotionPreparation.sourceIndependentStatus(ownProtect),
+                "low-HP first-party protect can be selected without opponent secrets");
+        check(!ShadowPromotionPreparation.sourceIndependentStatus(
+                new ShadowLiveDecisionEngine.Choice(
+                    "move:encore",ShadowLiveDecisionEngine.Reason.STATUS,1))
+                && !ShadowPromotionPreparation.sourceIndependentStatus(
+                    new ShadowLiveDecisionEngine.Choice(
+                        "move:tackle",ShadowLiveDecisionEngine.Reason.STATUS,1)),
+                "Encore and falsely labeled status cannot bypass public evidence");
         // Exact native-gimmick eligibility is independent of Legacy and
         // never inferred from opponent private data or an attractive score.
         var absent=new ShadowNativeGimmickPolicy.Options(
