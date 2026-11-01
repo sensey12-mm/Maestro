@@ -171,6 +171,8 @@ public final class DispatchIntegrationRegression {
             TurnInstruction.invoke$lambda$0(battle,12);
             check(actor.ai.decisionTurn==11,"native choice must precede Java turn write");
             check(battle.turn==12,"native turn must finish at 12");
+            check(actor.ai.phaseShadowControls.forBattle(battle.getBattleId()).current(),
+                    "native owning turn preserves its current-battle safety control");
             battle.flush();
             check(battle.wire.equals(List.of(">p2 switch 2")),"native switch serialization");
             check(actor.request==null&&actor.responses.isEmpty(),"native submission clears request/responses");
@@ -201,6 +203,8 @@ public final class DispatchIntegrationRegression {
         }
         public static final class Battle {
             int turn=11;Actor actor;boolean ended;boolean pending;final List<String> wire=new ArrayList<>();
+            final UUID battleId=UUID.fromString("11111111-2222-3333-4444-555555555555");
+            public UUID getBattleId(){return battleId;}
             public Iterable<Actor> getActors(){return List.of(actor);} public Iterable<Side> getSides(){return List.of();}
             public Actor getActor(String id){return id.equals("p2")?actor:null;} public int getTurn(){return turn;}
             public boolean getEnded(){return ended;}public void turn(int n){throw new AssertionError("unwoven native turn");}
@@ -230,7 +234,10 @@ public final class DispatchIntegrationRegression {
         public interface AI { Response choose(Active a,Battle b,Side s,Moves m,boolean forced); }
         public static final class Controller implements AI {
             final OwnChoiceRecovery choiceRecovery=new OwnChoiceRecovery();
-            final OwnRequestTransport ownTransport=new OwnRequestTransport();int decisionTurn=-1,choices;
+            final OwnRequestTransport ownTransport=new OwnRequestTransport();
+            final com.maestroai.ai.LivePromotionGate.BattleControls phaseShadowControls=
+                    new com.maestroai.ai.LivePromotionGate.BattleControls();
+            int decisionTurn=-1,choices;
             static boolean supported=true;private static boolean ownTransportVersionSupported(){return supported;}
             public Response choose(Active a,Battle b,Side s,Moves m,boolean forced){
                 choices++;decisionTurn=b.getTurn();Response response=m.trapped?new Response():new Switch();
