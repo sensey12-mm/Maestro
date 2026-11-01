@@ -1,6 +1,8 @@
 package com.maestroai.training;
 
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** Phase 6.22 synthetic safety matrix: NOT installed Minecraft acceptance. */
 final class RuntimeObservationAcceptanceHarnessRegression {
@@ -33,7 +35,7 @@ final class RuntimeObservationAcceptanceHarnessRegression {
                 && !r.toString().contains("Tackle"),
                 "private source messages never enter diagnostics");
     }
-    static void run(){
+    static void run()throws Exception{
         Object battle=new Object(),own=new Object(),foe=new Object();
         var fresh=new RuntimeObservationAcceptanceHarness.Session();
         var before=fresh.publicHistory(battle,1,frames(),true);
@@ -151,6 +153,37 @@ final class RuntimeObservationAcceptanceHarnessRegression {
         check(next.publicHistory(new Object(),1,frames(),true).verdict()
                 ==RuntimeObservationAcceptanceHarness.Verdict.WRONG_BATTLE,
                 "new battle identity cannot be replaced");
+
+        // A Shadow-only live choice must be permitted to advance source
+        // history independently of Legacy's tactical evaluation. The native
+        // split method remains unobserved unless its own callback fires.
+        var promoted=new RuntimeObservationAcceptanceHarness.Session();
+        var firstPromoted=promoted.publicHistory(battle,1,
+                List.of("update\\n|turn|1"),true);
+        var secondPromoted=promoted.publicHistory(battle,2,
+                List.of("update\\n|turn|1","update\\n|turn|2"),true);
+        check(firstPromoted.observedHistoryChunks()==1
+                && secondPromoted.observedHistoryChunks()==2
+                && secondPromoted.nativeReturnCallbacks()==0
+                && secondPromoted.verdict()
+                    ==RuntimeObservationAcceptanceHarness.Verdict.HOOK_UNOBSERVED,
+                "Shadow-only public history progresses without fabricating split callbacks");
+        noAuthority(secondPromoted);
+        var ai=Files.readString(Path.of(
+                "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+        int chooser=ai.indexOf("public ShowdownActionResponse choose(");
+        int selected=ai.indexOf("LivePromotionGate.choosePreparedWithSource(",chooser);
+        int refresh=ai.indexOf("phase622Harness.publicHistory(",selected);
+        int phase621=ai.indexOf("phase622Harness.observePhase621(",selected);
+        check(chooser>=0 && selected>chooser && refresh>selected
+                && phase621>refresh && ai.substring(selected,refresh)
+                    .contains("recordOwnChoice("),
+                "production refresh occurs after Shadow/Legacy selection, before Phase 6.21 diagnostic");
+        check(!ai.substring(selected,refresh).contains(
+                "phase622Harness.nativeReturnHook(")
+                && !ai.substring(selected,refresh).contains(
+                    "phase624Scope.nativeReturn("),
+                "public history never impersonates native return callbacks");
 
         var hookFirst=new RuntimeObservationAcceptanceHarness.Session();
         var hookSource=new NativeSplitDispatchObservation.Session();

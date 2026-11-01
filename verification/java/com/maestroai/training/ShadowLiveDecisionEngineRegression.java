@@ -292,6 +292,18 @@ final class ShadowLiveDecisionEngineRegression {
                 && !ai.substring(choose,deferredFallback).contains(
                         "ShowdownActionResponse legacy=chooseLegacy("),
                 "Legacy tactical evaluator is lazy, never a Shadow input");
+        int selection=ai.indexOf("LivePromotionGate.choosePreparedWithSource(",choose);
+        int historyAfterSelection=ai.indexOf("phase622Harness.publicHistory(",selection);
+        check(selection>choose && historyAfterSelection>selection
+                && historyAfterSelection<legacyStart
+                && ai.substring(selection,historyAfterSelection).contains(
+                    "selected.authority()==LivePromotionGate.Authority.LEGACY")
+                && ai.substring(choose,selection).contains(
+                    "forcedPreparationStage=\"NO_OWN_LEASE\"")
+                && ai.substring(choose,selection).contains(
+                    "forcedPreparationStage=\"NO_NATIVE_FORCED_PROPOSAL\""),
+                "source-independent forced fallback stages are captured before Legacy "
+                    +"and Phase 6.22 history is refreshed only after live choice");
         check(choose>=0 && legacyStart>choose
                 && ai.substring(choose,legacyStart).contains(
                     "ShadowLiveDecisionEngine.ordinary(")

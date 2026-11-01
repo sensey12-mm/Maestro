@@ -425,8 +425,8 @@ public class MaestroBattleAI extends RCTBattleAI {
                     && battle.getActor(activePokemon.getActor().getShowdownId())
                         ==activePokemon.getActor())
                 promotionControl=phaseShadowControls.forBattle(battle.getBattleId());
-            // Shadow-led battles may never execute Legacy. Reset the shared
-            // observer/diagnostic caches on their own fresh battle identity.
+            // Shadow-led battles normally bypass Legacy's tactical path.
+            // Reset observer/diagnostic caches on the fresh battle identity.
             if(promotionControl!=null)resetMemoryForNewBattle(battle);
             try {
             if(activePokemon!=null && activePokemon.getActor()!=null){
@@ -491,6 +491,22 @@ public class MaestroBattleAI extends RCTBattleAI {
                     }
                 }
             }
+            // Capture only source-readiness metadata BEFORE invoking the lazy
+            // Legacy fallback. Legacy can change the request/lease in its own
+            // chooser, so inspecting those objects afterwards misdiagnoses
+            // why an independently prepared forced replacement was unavailable.
+            String forcedPreparationStage=null;
+            if(forceSwitch){
+                if(ownChoiceLease==null)
+                    forcedPreparationStage="NO_OWN_LEASE";
+                else if(!ownChoiceLease.current())
+                    forcedPreparationStage="STALE_OWN_LEASE";
+                else if(phaseShadowPrepared==null
+                        || phaseShadowPrepared.proposal()==null)
+                    forcedPreparationStage="NO_NATIVE_FORCED_PROPOSAL";
+                else
+                    forcedPreparationStage="NATIVE_FORCED_PROPOSAL_READY";
+            }
             final var choiceSnapshot=liveShadowSnapshot;
             var prepared=phaseShadowPrepared;
             var proposal=prepared==null?null:prepared.proposal();
@@ -528,7 +544,26 @@ public class MaestroBattleAI extends RCTBattleAI {
             }
             System.out.println("[MaestroAI] Live decision authority="+selected.authority()
                     +";currentNativeLegalRequired=true;legacyFallbackAvailable=true");
+            if(forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY)
+                System.out.println("[MaestroAI] Shadow forced fallback stage="
+                        +forcedPreparationStage+";authority=LEGACY");
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            // Phase 6.22's historical source path used to run only inside
+            // chooseLegacy -> syncPublicProtocolObservation. Once Shadow
+            // leads, that path is absent and source counters remained zero
+            // despite a progressing real battle. Refresh from the original
+            // Cobblemon history AFTER live selection; it supplies NO tactical
+            // input, no synthetic native callback and no delivery proof.
+            if(PHASE622_OBSERVE && battle!=null && !battle.getEnded())try{
+                var observedHistory=phase622Harness.publicHistory(
+                        battle,battle.getTurn(),battle.getShowdownMessages(),
+                        ownTransportVersionSupported());
+                System.out.println("[MaestroAI] Phase 6.22 own-chooser-history "
+                        +observedHistory);
+            }catch(RuntimeException unavailable){
+                phase622Harness.withdraw();
+                System.out.println("[MaestroAI] Phase 6.22 own-chooser-history=UNKNOWN;authority=NONE");
+            }
             phase612Move=null;
             phase612Switch=null;
             try { observeNativeOwnMoves(battle, activePokemon, moveset, forceSwitch); }
