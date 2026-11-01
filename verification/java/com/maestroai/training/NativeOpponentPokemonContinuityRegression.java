@@ -248,8 +248,8 @@ final class NativeOpponentPokemonContinuityRegression {
                 "Phase 5 only offline: no current replay or candidate consumer");
         String chooser=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(chooser.contains("LivePromotionGate.choosePrepared(")
-                && chooser.contains("false); // Owner has NOT authorized live Shadow selection.")
+        check(chooser.contains("LivePromotionGate.choosePreparedWithSource(")
+                && chooser.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !chooser.contains("NativeOpponentPokemonContinuity.")
                 && !chooser.contains("NativeOpponentPokemonContinuity.Session"),
                 "production live chooser does not invoke Phase 6.33");
