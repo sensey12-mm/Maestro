@@ -463,7 +463,8 @@ public class MaestroBattleAI extends RCTBattleAI {
                 if(liveShadowSnapshot!=null){
                     var independent=ShadowLiveDecisionEngine.ordinary(
                             liveShadowSnapshot,false,moveset.getTrapped(),
-                            ownChoiceLease!=null && ownChoiceLease.current());
+                            ownChoiceLease!=null && ownChoiceLease.current(),
+                            captureIndependentOwnMoveFacts(activePokemon,moveset));
                     if(independent!=null){
                         var ownReport=ShadowPromotionPreparation.inspectOwnOnly(
                                 battle,phaseShadowRequest,liveShadowSnapshot,
@@ -685,6 +686,41 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 && actor.getRequest().getActive().size() == 1
                                 && moveset != null && !moveset.getTrapped());
             }
+    }
+
+    /**
+     * Read ONLY our currently installed move slots and our own Pokemon move
+     * templates. Unlike Legacy findAllMoves/evaluateMove, this never accepts an
+     * opposing Pokemon, an opponent move set, or a Legacy tactical score.
+     */
+    private java.util.Map<String,ShadowLiveDecisionEngine.OwnMoveFacts>
+            captureIndependentOwnMoveFacts(
+                    ActiveBattlePokemon active,ShowdownMoveset moveset) {
+        try{
+            if(active==null || active.getBattlePokemon()==null || moveset==null
+                    || moveset.getMoves()==null || ownChoiceLease==null
+                    || !ownChoiceLease.current())return java.util.Map.of();
+            var mine=active.getBattlePokemon().getEffectedPokemon();
+            if(mine==null)return java.util.Map.of();
+            var facts=new java.util.HashMap<String,ShadowLiveDecisionEngine.OwnMoveFacts>();
+            for(InBattleMove slot:moveset.getMoves()){
+                if(slot==null || slot.getId()==null || !slot.canBeUsed())continue;
+                var own=findMove(mine,slot.getId());
+                if(own==null && slot.getMove()!=null)
+                    own=findMove(mine,slot.getMove());
+                if(own==null || own.getTemplate()==null
+                        || own.getTemplate().getElementalType()==null)continue;
+                var template=own.getTemplate();
+                var data=new ShadowLiveDecisionEngine.OwnMoveFacts(
+                        slot.getId(),template.getElementalType().getName(),
+                        getCategory(template),Math.max(0,own.getPower()),
+                        Math.max(0,Math.min(100,template.getAccuracy())),
+                        template.getPriority());
+                if(facts.putIfAbsent(slot.getId(),data)!=null)
+                    return java.util.Map.of();
+            }
+            return java.util.Map.copyOf(facts);
+        }catch(RuntimeException unsupported){return java.util.Map.of();}
     }
 
     /**
@@ -954,6 +990,11 @@ public class MaestroBattleAI extends RCTBattleAI {
             var moveData=CobblemonMechanics.move(moveId);
             String type=moveData==null?null:moveData.type();
             int power=moveData==null?0:moveData.power();
+            var ownFacts=captureIndependentOwnMoveFacts(active,moveset).get(moveId);
+            if(ownFacts!=null){
+                type=ownFacts.type();
+                power=(int)Math.floor(ownFacts.power());
+            }
             var z=moveset.getCanZMove();
             var max=moveset.getMaxMoves();
             boolean zOk=z!=null && z.size()==moveset.getMoves().size()
