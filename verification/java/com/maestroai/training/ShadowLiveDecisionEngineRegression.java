@@ -138,6 +138,41 @@ final class ShadowLiveDecisionEngineRegression {
         check(ShadowLiveDecisionEngine.forcedReplacement(List.of(
                 new ShadowLiveDecisionEngine.Reserve("own",1,true)),false)==null,
                 "normal turn cannot forge a forced-replacement proposal");
+        // Exact native-gimmick eligibility is independent of Legacy and
+        // never inferred from opponent private data or an attractive score.
+        var absent=new ShadowNativeGimmickPolicy.Options(
+                false,false,false,false,false,false,false,false,null);
+        check(ShadowNativeGimmickPolicy.choose(absent,"ghost",90,.9)==null,
+                "no installed gimmick option never fabricates activation");
+        var mega=new ShadowNativeGimmickPolicy.Options(
+                true,false,false,false,false,false,false,false,null);
+        check("mega".equals(ShadowNativeGimmickPolicy.choose(mega,null,0,.9)),
+                "native Mega capability permits compatible setup turn");
+        var z=new ShadowNativeGimmickPolicy.Options(
+                false,false,true,false,false,false,true,false,null);
+        check("zmove".equals(ShadowNativeGimmickPolicy.choose(z,"ghost",90,.9))
+                && ShadowNativeGimmickPolicy.choose(z,"ghost",0,.9)==null,
+                "Z uses only current eligible damaging slot");
+        var blocked=new ShadowNativeGimmickPolicy.Options(
+                false,false,true,false,false,false,false,false,null);
+        check(ShadowNativeGimmickPolicy.choose(blocked,"ghost",90,.9)==null,
+                "disabled Z slot cannot authorize Z move");
+        var tera=new ShadowNativeGimmickPolicy.Options(
+                false,false,false,false,true,false,false,false,"ghost");
+        check("terastal".equals(ShadowNativeGimmickPolicy.choose(tera,"ghost",90,.9))
+                && ShadowNativeGimmickPolicy.choose(tera,"fairy",90,.9)==null
+                && ShadowNativeGimmickPolicy.choose(tera,"ghost",90,.2)==null,
+                "Tera requires exact known OWN type, damage and health");
+        var max=new ShadowNativeGimmickPolicy.Options(
+                false,false,false,true,false,false,false,true,null);
+        check("max".equals(ShadowNativeGimmickPolicy.choose(max,"ghost",90,.8)),
+                "Dynamax requires native maxMove availability");
+        var activeMax=new ShadowNativeGimmickPolicy.Options(
+                false,false,false,true,false,true,false,true,null);
+        check(ShadowNativeGimmickPolicy.choose(activeMax,"ghost",90,.8)==null,
+                "already dynamaxed never requests another activation");
+        check(ShadowNativeGimmickPolicy.choose(mega,"ghost",90,Double.NaN)==null,
+                "invalid first-party HP cannot authorize a gimmick");
         var ai=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         int choose=ai.indexOf("public ShowdownActionResponse choose(");
@@ -147,6 +182,12 @@ final class ShadowLiveDecisionEngineRegression {
                     "ShadowLiveDecisionEngine.ordinary(")
                 && ai.substring(choose,legacyStart).contains(
                     "prepareShadowForcedReplacement(")
+                && ai.substring(choose,legacyStart).contains(
+                    "currentNativeGimmickAllowed(")
+                && ai.contains("moveset.getCanZMove()")
+                && ai.contains("moveset.getCanDynamax()")
+                && ai.contains("moveset.getCanTerastallize()")
+                && ai.contains("moveset.getCanMegaEvo()")
                 && ai.substring(choose,legacyStart).contains(
                     "true); // Owner explicitly approved live Shadow primary selection.")
                 && !ai.substring(choose,legacyStart).contains(
