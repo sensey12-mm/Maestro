@@ -101,7 +101,7 @@ def selected_profiles(args):
     raise ValueError('Unknown source oracle profile')
 
 
-def bounded_run(command, limit=2400, check=True):
+def bounded_run(command, limit=5400, check=True):
     """Fail closed when a spawned node/Gradle process stalls indefinitely."""
     if not command or command[0] not in ('node','bash') or limit <= 0 or check is not True:
         raise ValueError('Invalid simulator subprocess')

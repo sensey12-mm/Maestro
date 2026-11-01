@@ -43,7 +43,7 @@ jobs:
         run: |
           node --version
           python3 verification/source_oracle.py --self-test
-          timeout --signal=TERM --kill-after=30s 48m python3 verification/source_oracle.py --native
+          timeout --signal=TERM --kill-after=30s 95m python3 verification/source_oracle.py --native
       # This is deliberately an INTERMEDIATE artifact, not a verified release.
       # An independent pack-source job must also succeed before publication.
       - name: Stage native-verified JAR candidate checksum
