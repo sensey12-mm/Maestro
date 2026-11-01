@@ -449,53 +449,41 @@ public class MaestroBattleAI extends RCTBattleAI {
             // forced, ambiguous and incompatible requests fail closed.
             phaseShadowLegalWindow=captureShadowNativeLegalWindow(
                     activePokemon,battle,moveset,forceSwitch);
-            ShowdownActionResponse legacy=chooseLegacy(
-                    activePokemon,battle,side,moveset,forceSwitch);
-            // Legacy is computed once as a safe fallback, never supplied
-            // to the independent Shadow policy as a tactical input.
-            // Use the owning dispatch lease's turn (the Java turn may lag).
+            // The primary decision starts here, from Shadow's OWN native
+            // owning-request snapshot. Legacy must not execute or populate
+            // any tactical input before an independent Shadow choice.
             int choiceTurn=ownChoiceLease==null?-1:ownChoiceLease.turn();
+            com.maestroai.training.BattleSnapshot liveShadowSnapshot=null;
             if(forceSwitch){
                 var forced=prepareShadowForcedReplacement(activePokemon,battle);
                 if(forced!=null && forced.proposal()!=null)phaseShadowPrepared=forced;
-            }else if(phaseShadowLegalWindow!=null && mechanicsSnapshot!=null
-                    && mechanicsSnapshot.turn()==choiceTurn){
-                var independent=ShadowLiveDecisionEngine.ordinary(
-                        mechanicsSnapshot,false,moveset!=null && moveset.getTrapped(),
-                        ownChoiceLease!=null && ownChoiceLease.current());
-                if(independent!=null){
-                    var report=ShadowPromotionPreparation.inspectIndependent(
-                            battle,phaseShadowRequest,mechanicsSnapshot,
-                            independent,ownChoiceLease,phaseShadowLegalWindow,
-                            publicProtocolEvidence,mechanicsOpponentSlot);
-                    if(report.proposal()!=null)phaseShadowPrepared=report;
-                    System.out.println("[MaestroAI] "+independent.safeLine());
-                }
-                // With uncertain public opponent identity, decide from owned
-                // HP, moves, boosts and eligible reserves only. Do not bind
-                // stale opponent typing or historical Phase 5 roles.
-                if(phaseShadowPrepared==null || phaseShadowPrepared.proposal()==null){
-                    var owned=ShadowPromotionPreparation.firstPartyOnly(mechanicsSnapshot);
-                    var ownChoice=ShadowLiveDecisionEngine.ordinary(
-                            owned,false,moveset!=null && moveset.getTrapped(),
+            }else{
+                liveShadowSnapshot=captureIndependentShadowSnapshot(
+                        activePokemon,battle,moveset);
+                if(liveShadowSnapshot!=null){
+                    var independent=ShadowLiveDecisionEngine.ordinary(
+                            liveShadowSnapshot,false,moveset.getTrapped(),
                             ownChoiceLease!=null && ownChoiceLease.current());
-                    if(ownChoice!=null){
+                    if(independent!=null){
                         var ownReport=ShadowPromotionPreparation.inspectOwnOnly(
-                                battle,phaseShadowRequest,owned,ownChoice,
-                                ownChoiceLease,phaseShadowLegalWindow);
+                                battle,phaseShadowRequest,liveShadowSnapshot,
+                                independent,ownChoiceLease,phaseShadowLegalWindow);
                         if(ownReport.proposal()!=null){
                             phaseShadowPrepared=ownReport;
-                            System.out.println("[MaestroAI] Shadow source=OWN_ONLY;opponent=UNKNOWN");
+                            System.out.println("[MaestroAI] "+independent.safeLine());
+                            System.out.println("[MaestroAI] Shadow source=NATIVE_OWN;opponent=UNKNOWN");
                         }
                     }
                 }
             }
+            final var choiceSnapshot=liveShadowSnapshot;
             var prepared=phaseShadowPrepared;
             var proposal=prepared==null?null:prepared.proposal();
             // Gimmicks are selected only from THIS owning native moveset,
             // never inferred from Legacy's choice or opponent hidden data.
             var selected=LivePromotionGate.choosePreparedWithSource(
-                ()->legacy,proposal,battle,phaseShadowRequest,choiceTurn,
+                ()->chooseLegacy(activePokemon,battle,side,moveset,forceSwitch),
+                proposal,battle,phaseShadowRequest,choiceTurn,
                 action->materializePreparedShadowAction(action,activePokemon,battle,
                         moveset,forceSwitch,proposal),
                 action->action!=null && proposal!=null
@@ -505,9 +493,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                         && currentNativeGimmickAllowed(action,activePokemon,
                                 battle,moveset,forceSwitch)
                         && (forceSwitch || phaseShadowLegalWindow!=null
-                            && mechanicsSnapshot!=null
+                            && choiceSnapshot!=null
                             && phaseShadowLegalWindow.exactlyCovers(
-                                    battle,phaseShadowRequest,mechanicsSnapshot)),
+                                    battle,phaseShadowRequest,choiceSnapshot)),
                 promotionControl,
                 true); // Owner explicitly approved live Shadow primary selection.
             ShowdownActionResponse response=selected.action();
@@ -697,6 +685,71 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 && actor.getRequest().getActive().size() == 1
                                 && moveset != null && !moveset.getTrapped());
             }
+    }
+
+    /**
+     * Only the actual owning native request and the trainer's own Pokemon
+     * supply live tactical input. This does not call Legacy, does not inspect
+     * opponent underlying Pokemon, and cannot silently substitute the
+     * observation snapshot assembled during Legacy's tactical evaluation.
+     *
+     * The native root witness is captured separately before this method and
+     * must prove exact agreement with the derived actionable roots.
+     */
+    private BattleSnapshot captureIndependentShadowSnapshot(
+            ActiveBattlePokemon active,PokemonBattle battle,ShowdownMoveset moveset) {
+        try {
+            if(active==null || battle==null || battle.getEnded()
+                    || active.getActor()==null || active.getBattlePokemon()==null
+                    || ownChoiceLease==null || !ownChoiceLease.current()
+                    || phaseShadowLegalWindow==null || moveset==null
+                    || moveset.getMoves()==null || moveset.getTrapped()
+                            && active.getActor().getPokemonList()==null)
+                return null;
+            var owner=active.getActor();
+            if(owner.getBattle()!=battle || owner.getRequest()!=phaseShadowRequest
+                    || owner.getPokemonList()==null)return null;
+            var selfPokemon=active.getBattlePokemon().getEffectedPokemon();
+            if(selfPokemon==null || selfPokemon.getCurrentHealth()<=0)return null;
+            var moves=new java.util.ArrayList<String>();
+            for(InBattleMove move:moveset.getMoves()) {
+                if(move==null || move.getId()==null || move.getId().isBlank())
+                    return null;
+                if(move.canBeUsed())moves.add(move.getId());
+            }
+            var bench=new java.util.ArrayList<BattleSnapshot.Combatant>();
+            var switches=new java.util.ArrayList<String>();
+            if(!moveset.getTrapped()) {
+                for(BattlePokemon reserve:owner.getPokemonList()){
+                    if(reserve==null || reserve.getUuid()==null)return null;
+                    if(reserve.getUuid().equals(active.getBattlePokemon().getUuid())
+                            || !reserve.canBeSentOut() || reserve.getGone()
+                            || reserve.getHealth()<=0 || reserve.isSentOut())continue;
+                    var owned=reserve.getEffectedPokemon();
+                    if(owned==null || owned.getCurrentHealth()<=0)continue;
+                    switches.add(reserve.getUuid().toString());
+                    bench.add(snapshotCombatant(owned));
+                }
+            }
+            var selfBase=snapshotCombatant(selfPokemon);
+            // First-party stat changes are authoritative. An absent entry is
+            // the ordinary unboosted stage 0, not an imagined opponent value.
+            var ownStages=new java.util.HashMap<String,Integer>();
+            for(var stat:com.cobblemon.mod.common.api.pokemon.stats.Stats.values())
+                ownStages.put(stat.getShowdownId(),active.getBattlePokemon()
+                        .getStatChanges().getOrDefault(stat,0));
+            var self=new BattleSnapshot.Combatant(selfBase.species(),
+                    selfBase.hpFraction(),selfBase.types(),ownStages,
+                    java.util.List.of(),null,null,false);
+            var unknown=new BattleSnapshot.Combatant("UNVERIFIED",
+                    BattleSnapshot.UNKNOWN_HP_FRACTION,java.util.List.of(),
+                    java.util.Map.of(),java.util.List.of(),null,null,false);
+            var result=new BattleSnapshot(ownChoiceLease.turn(),self,unknown,
+                    bench,java.util.List.of(),moves,switches,java.util.Map.of(),
+                    false,null);
+            return phaseShadowLegalWindow.exactlyCovers(
+                    battle,phaseShadowRequest,result)?result:null;
+        }catch(RuntimeException unsupported){return null;}
     }
 
     /**
