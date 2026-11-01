@@ -109,14 +109,14 @@ final class Integration457Regression {
         // into live decisions during manual source reconciliation.
         var ai = Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choosePrepared(")
+        check(ai.contains("LivePromotionGate.choosePreparedWithSource(")
                 && ai.contains("ShadowPromotionPreparation.inspect(")
-                && ai.contains("false); // Owner has NOT authorized live Shadow selection."),
-                "Legacy still solely selects live actions");
+                && ai.contains("true); // Owner explicitly approved live Shadow primary selection."),
+                "native-leased Shadow promotion is explicitly authorized with Legacy fallback");
         check(ai.contains("ownZChoice(ShowdownMoveset moveset)")
                 && ai.contains("withOwnZMove(ownZ)"),
                 "Phase 4 own Z mechanic still observable");
-        check(ai.contains("observeReturnedLegacyChoice(activePokemon, battle, moveset, forceSwitch, response)")
+        check(ai.contains("selected.authority()==LivePromotionGate.Authority.LEGACY")
                 && ai.contains("legacyChoiceCapture.enabled()"),
                 "Phase 7 optional capture present, never selection input");
         check(!ai.contains("PublicShadowBuildHandoff.prepare(")
