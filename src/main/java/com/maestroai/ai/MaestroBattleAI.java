@@ -514,6 +514,18 @@ public class MaestroBattleAI extends RCTBattleAI {
                 promotionControl,
                 true); // Owner explicitly approved live Shadow primary selection.
             ShowdownActionResponse response=selected.action();
+            // Shadow must maintain its OWN accepted choice memory. Otherwise
+            // Legacy's previously populated lastSelectedMoves accidentally
+            // controls continuation detection when Shadow leads every turn.
+            if(selected.authority()==LivePromotionGate.Authority.SHADOW
+                    && activePokemon!=null
+                    && activePokemon.getBattlePokemon()!=null){
+                if(response instanceof MoveActionResponse chosenMove)
+                    rememberMove(activePokemon.getBattlePokemon(),
+                            chosenMove.getMoveName());
+                else if(response instanceof SwitchActionResponse)
+                    clearRememberedMove(activePokemon.getBattlePokemon());
+            }
             System.out.println("[MaestroAI] Live decision authority="+selected.authority()
                     +";currentNativeLegalRequired=true;legacyFallbackAvailable=true");
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
