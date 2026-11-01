@@ -462,6 +462,24 @@ public class MaestroBattleAI extends RCTBattleAI {
                     if(report.proposal()!=null)phaseShadowPrepared=report;
                     System.out.println("[MaestroAI] "+independent.safeLine());
                 }
+                // With uncertain public opponent identity, decide from owned
+                // HP, moves, boosts and eligible reserves only. Do not bind
+                // stale opponent typing or historical Phase 5 roles.
+                if(phaseShadowPrepared==null || phaseShadowPrepared.proposal()==null){
+                    var owned=ShadowPromotionPreparation.firstPartyOnly(mechanicsSnapshot);
+                    var ownChoice=ShadowLiveDecisionEngine.ordinary(
+                            owned,false,moveset!=null && moveset.getTrapped(),
+                            ownChoiceLease!=null && ownChoiceLease.current());
+                    if(ownChoice!=null){
+                        var ownReport=ShadowPromotionPreparation.inspectOwnOnly(
+                                battle,phaseShadowRequest,owned,ownChoice,
+                                ownChoiceLease,phaseShadowLegalWindow);
+                        if(ownReport.proposal()!=null){
+                            phaseShadowPrepared=ownReport;
+                            System.out.println("[MaestroAI] Shadow source=OWN_ONLY;opponent=UNKNOWN");
+                        }
+                    }
+                }
             }
             var prepared=phaseShadowPrepared;
             var proposal=prepared==null?null:prepared.proposal();
