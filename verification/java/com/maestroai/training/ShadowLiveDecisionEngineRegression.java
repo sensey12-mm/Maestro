@@ -61,6 +61,21 @@ final class ShadowLiveDecisionEngineRegression {
         check(boost!=null && boost.reason()==ShadowLiveDecisionEngine.Reason.SETUP
                 && "move:swordsdance".equals(boost.action()),
                 "verified setup effect with current public boost stage");
+        var arceusSetup=snapshot(.9,List.of("extremespeed","swordsdance"),
+                List.of(),List.of(),Map.of("atk",0),List.of());
+        check("move:swordsdance".equals(ShadowLiveDecisionEngine.ordinary(
+                arceusSetup,false,false,true).action()),
+                "verified +2 attack setup can compete with strong immediate priority");
+        var arceusBoosted=snapshot(.9,List.of("extremespeed","swordsdance"),
+                List.of(),List.of(),Map.of("atk",2),List.of());
+        check("move:extremespeed".equals(ShadowLiveDecisionEngine.ordinary(
+                arceusBoosted,false,false,true).action()),
+                "boosted Shadow avoids repeating an already-applied +2 setup");
+        var xerneasSetup=snapshot(.9,List.of("moonblast","geomancy"),
+                List.of(),List.of(),Map.of("spa",0,"spd",0,"spe",0),List.of());
+        check("move:geomancy".equals(ShadowLiveDecisionEngine.ordinary(
+                xerneasSetup,false,false,true).action()),
+                "source-verified Geomancy gains multi-stat heuristic priority");
         var unknownBoost=snapshot(.90,List.of("tackle","swordsdance"),
                 List.of(),List.of(),Map.of(),List.of());
         check("move:tackle".equals(ShadowLiveDecisionEngine.ordinary(
