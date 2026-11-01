@@ -114,6 +114,24 @@ final class ShadowLiveDecisionEngineRegression {
                 List.of("tackle","tackle"),List.of(),List.of(),
                 Map.of(),List.of()),false,false,true)==null,
                 "duplicate request move ID cannot masquerade as legal coverage");
+        // When no native ordinary move is available, a legal current own
+        // switch still allows Shadow to decide without consulting Legacy.
+        var outOfMoves=snapshot(.6,List.of(),List.of("own-safe","own-low"),
+                List.of(reserve(.9),reserve(.3)),Map.of(),List.of());
+        var forcedVoluntary=ShadowLiveDecisionEngine.ordinary(
+                outOfMoves,false,false,true);
+        check(forcedVoluntary!=null
+                && "switch:own-safe".equals(forcedVoluntary.action())
+                && forcedVoluntary.reason()
+                    ==ShadowLiveDecisionEngine.Reason.VOLUNTARY_SWITCH,
+                "exhausted moves retain an independent native legal switch");
+        check(ShadowLiveDecisionEngine.ordinary(
+                outOfMoves,false,true,true)==null,
+                "a trapped no-move request cannot fabricate a switch");
+        check(ShadowLiveDecisionEngine.ordinary(
+                snapshot(.5,List.of(),List.of(),List.of(),Map.of(),List.of()),
+                false,false,true)==null,
+                "no legal moves and no switches abstains safely");
         var forced=ShadowLiveDecisionEngine.forcedReplacement(List.of(
                 new ShadowLiveDecisionEngine.Reserve("fainted",0,false),
                 new ShadowLiveDecisionEngine.Reserve("own-1",.45,true),
@@ -177,6 +195,12 @@ final class ShadowLiveDecisionEngineRegression {
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         int choose=ai.indexOf("public ShowdownActionResponse choose(");
         int legacyStart=ai.indexOf("private ShowdownActionResponse chooseLegacy(");
+        int nativeOwn=ai.indexOf("captureIndependentShadowSnapshot(");
+        int deferredFallback=ai.indexOf("()->chooseLegacy(",choose);
+        check(choose>=0 && nativeOwn>choose && deferredFallback>nativeOwn
+                && !ai.substring(choose,deferredFallback).contains(
+                        "ShowdownActionResponse legacy=chooseLegacy("),
+                "Legacy tactical evaluator is lazy, never a Shadow input");
         check(choose>=0 && legacyStart>choose
                 && ai.substring(choose,legacyStart).contains(
                     "ShadowLiveDecisionEngine.ordinary(")
