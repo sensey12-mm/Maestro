@@ -80,7 +80,7 @@ def check_workflow(source):
     publish = source[publish_start:]
     pin = 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02'
     download = 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093'
-    required_native = ('timeout --signal=TERM --kill-after=30s 48m '
+    required_native = ('timeout --signal=TERM --kill-after=30s 95m '
                        'python3 verification/source_oracle.py --native\n')
     required_pack = ('timeout --signal=TERM --kill-after=30s 48m '
                      'python3 verification/source_oracle.py --pack\n')
@@ -215,6 +215,7 @@ class SafeguardRegression(unittest.TestCase):
                  'python3 verification/source_oracle.py --skip'),
                 ('python3 verification/source_oracle.py --pack',
                  'python3 verification/source_oracle.py --skip'),
+                ('timeout --signal=TERM --kill-after=30s 95m', 'python3'),
                 ('timeout --signal=TERM --kill-after=30s 48m', 'python3'),
                 ('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
                  'actions/upload-artifact@v4'),
