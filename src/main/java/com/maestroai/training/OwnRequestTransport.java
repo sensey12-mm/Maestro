@@ -191,6 +191,29 @@ public final class OwnRequestTransport {
         }
         public String source() { return SOURCE + ":dispatch-" + generation + ":turn-" + turn(); }
     }
+    /**
+     * Native forced-switch request can refer to an empty ActiveBattlePokemon
+     * slot after a faint. The current owning dispatched FORCED DTO can still
+     * bind its unique former active UUID without reading an opponent source.
+     * No ordinary move or foreign request may use this path.
+     */
+    public UUID forcedActiveUuid(Object observedBattle,Object observedActor,
+                                 Object installedToken) {
+        if(observedBattle==null || observedActor==null || installedToken==null
+                || battle!=observedBattle || actor!=observedActor
+                || token!=installedToken || receipt==null
+                || receipt.mode()!=Mode.FORCED || used || turn<=0
+                || receiptTurn!=turn)return null;
+        UUID found=null;
+        for(var own:receipt.pokemon()){
+            if(!own.dto().active())continue;
+            UUID id=own.dto().uuid();
+            if(id==null || found!=null)return null;
+            found=id;
+        }
+        return found;
+    }
+
     public Lease beginChoice(Object battle, Object actor, Object installedToken, UUID active, boolean forced,
                              Supplier<Boolean> installed) {
         epoch++; choiceOpen = false;
