@@ -491,12 +491,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                 }
             }
             var prepared=phaseShadowPrepared;
-            var offered=prepared==null?null:prepared.proposal();
-            // No certified independent activation for Mega/Z/Tera/Dynamax
-            // exists in the ordinary root. Preserve a native valid gimmick
-            // choice through Legacy rather than replace it with an invented one.
-            var proposal=legacy instanceof MoveActionResponse special
-                    && special.getGimmickID()!=null ? null : offered;
+            var proposal=prepared==null?null:prepared.proposal();
+            // Gimmicks are selected only from THIS owning native moveset,
+            // never inferred from Legacy's choice or opponent hidden data.
             var selected=LivePromotionGate.choosePreparedWithSource(
                 ()->legacy,proposal,battle,phaseShadowRequest,choiceTurn,
                 action->materializePreparedShadowAction(action,activePokemon,battle,
@@ -505,6 +502,8 @@ public class MaestroBattleAI extends RCTBattleAI {
                         && proposal.current(battle,phaseShadowRequest,choiceTurn)
                         && activePokemon!=null
                         && action.isValid(activePokemon,moveset,forceSwitch)
+                        && currentNativeGimmickAllowed(action,activePokemon,
+                                battle,moveset,forceSwitch)
                         && (forceSwitch || phaseShadowLegalWindow!=null
                             && mechanicsSnapshot!=null
                             && phaseShadowLegalWindow.exactlyCovers(
@@ -785,6 +784,7 @@ public class MaestroBattleAI extends RCTBattleAI {
                     || request.getForceSwitch().contains(true)
                     || request.getActive()==null || request.getActive().size()!=1
                     || request.getActive().getFirst()==null
+                    || request.getActive().getFirst()!=moveset
                     || request.getActive().getFirst().getTrapped()!=moveset.getTrapped()
                     || forceSwitch)return null;
             var activeId=active.getBattlePokemon().getUuid();
@@ -848,7 +848,7 @@ public class MaestroBattleAI extends RCTBattleAI {
                     matches++;
             }
             if(matches!=1)return null;
-            return createMoveResponse(activePokemon,moveset,id);
+            return materializeShadowMove(activePokemon,battle,moveset,id);
         }
         if(action.startsWith("switch:")){
             if(!forceSwitch && (moveset==null
@@ -869,6 +869,117 @@ public class MaestroBattleAI extends RCTBattleAI {
             }
             return matches==1?new SwitchActionResponse(id):null;
         }
+        return null;
+    }
+
+    /**
+     * Native gimmick selection uses only this actor's currently INSTALLED
+     * request and offered move slot. Cobblemon's isValid alone does not check
+     * whether the requested gimmick token was advertised for this move.
+     */
+    private String nativeGimmickForMove(ActiveBattlePokemon active,
+            PokemonBattle battle,ShowdownMoveset moveset,String moveId){
+        if(active==null || active.getActor()==null || battle==null
+                || battle.getEnded() || moveset==null || moveset.getMoves()==null
+                || active.getActor().getRequest()!=phaseShadowRequest
+                || phaseShadowRequest==null
+                || phaseShadowRequest.getActive()==null
+                || phaseShadowRequest.getActive().size()!=1
+                || phaseShadowRequest.getActive().getFirst()!=moveset
+                || ownChoiceLease==null || !ownChoiceLease.current()
+                || !RuntimeBattleMode.ordinary(battle))return null;
+        try{
+            int slot=-1;
+            for(int i=0;i<moveset.getMoves().size();i++){
+                var m=moveset.getMoves().get(i);
+                if(m!=null && moveId.equals(m.getId()) && m.canBeUsed()){
+                    if(slot>=0)return null;
+                    slot=i;
+                }
+            }
+            if(slot<0)return null;
+            var moveData=CobblemonMechanics.move(moveId);
+            String type=moveData==null?null:moveData.type();
+            int power=moveData==null?0:moveData.power();
+            var z=moveset.getCanZMove();
+            var max=moveset.getMaxMoves();
+            boolean zOk=z!=null && z.size()==moveset.getMoves().size()
+                    && z.get(slot)!=null && !z.get(slot).getDisabled();
+            boolean maxOk=max!=null && max.size()==moveset.getMoves().size()
+                    && max.get(slot)!=null && !max.get(slot).getDisabled();
+            var own=active.getBattlePokemon()==null?null:
+                    active.getBattlePokemon().getEffectedPokemon();
+            double hp=own==null?0:Math.max(0,Math.min(1,getHpPercent(own)));
+            return com.maestroai.training.ShadowNativeGimmickPolicy.choose(
+                    new com.maestroai.training.ShadowNativeGimmickPolicy.Options(
+                        moveset.getCanMegaEvo(),moveset.getCanUltraBurst(),
+                        z!=null,moveset.getCanDynamax(),
+                        moveset.getCanTerastallize()!=null,
+                        moveset.hasActiveGimmick(),zOk,maxOk,
+                        moveset.getCanTerastallize()),type,power,hp);
+        }catch(RuntimeException unsupported){return null;}
+    }
+
+    private boolean currentNativeGimmickAllowed(ShowdownActionResponse action,
+            ActiveBattlePokemon active,PokemonBattle battle,
+            ShowdownMoveset moveset,boolean forced){
+        if(!(action instanceof MoveActionResponse move))return true;
+        if(move.getGimmickID()==null)return true;
+        if(forced || moveset==null || active==null)return false;
+        return move.getGimmickID().equals(nativeGimmickForMove(
+                active,battle,moveset,move.getMoveName()));
+    }
+
+    private ShowdownActionResponse materializeShadowMove(
+            ActiveBattlePokemon active,PokemonBattle battle,
+            ShowdownMoveset moveset,String moveId){
+        var ordinary=createMoveResponse(active,moveset,moveId);
+        if(ordinary==null)return null;
+        String gimmick=nativeGimmickForMove(active,battle,moveset,moveId);
+        if(gimmick==null)return ordinary;
+        try{
+            String target=null;
+            if("zmove".equals(gimmick) || "max".equals(gimmick)){
+                int slot=-1;
+                for(int i=0;i<moveset.getMoves().size();i++)
+                    if(moveId.equals(moveset.getMoves().get(i).getId()))slot=i;
+                if(slot<0)return null;
+                var options="zmove".equals(gimmick)
+                        ?moveset.getCanZMove():moveset.getMaxMoves();
+                if(options==null || options.size()!=moveset.getMoves().size()
+                        || options.get(slot)==null || options.get(slot).getDisabled())
+                    return null;
+                var nativeTargets=options.get(slot).getTarget()
+                        .getTargetList().invoke(active);
+                target=verifiedGimmickTarget(active,nativeTargets);
+                if(nativeTargets!=null && !nativeTargets.isEmpty() && target==null)
+                    return null;
+            }else{
+                for(var nativeMove:moveset.getMoves()){
+                    if(moveId.equals(nativeMove.getId())){
+                        target=getValidTargetPnx(active,nativeMove);
+                        break;
+                    }
+                }
+            }
+            return new MoveActionResponse(moveId,target,gimmick);
+        }catch(RuntimeException unsupported){return null;}
+    }
+
+    private String verifiedGimmickTarget(ActiveBattlePokemon active,
+            java.util.List<? extends Targetable> candidates){
+        if(active==null || candidates==null || candidates.isEmpty())return null;
+        var opponent=getOpponent(active);
+        if(opponent!=null){
+            for(var target:candidates)
+                if(target instanceof ActiveBattlePokemon battleTarget
+                        && opponent.getPNX().equals(battleTarget.getPNX()))
+                    return battleTarget.getPNX();
+        }
+        for(var target:candidates)
+            if(target instanceof ActiveBattlePokemon battleTarget
+                    && battleTarget.getPNX()!=null)
+                return battleTarget.getPNX();
         return null;
     }
 
@@ -6792,7 +6903,9 @@ public class MaestroBattleAI extends RCTBattleAI {
             var ownZ=ownTransport.ownZMove(ownChoiceLease,runtimeDomain,selfObservation,fieldCapture,()->ownZChoice(ownMoveset));
             if(ownZ!=null){
                 execution=execution.withOwnZMove(ownZ);
-                if(ownZ.activation().isPresent())legalMoves.add(com.maestroai.training.OwnZMoveEvidence.MOVE);
+                // Z-Moves are native modifiers of an ordinary move slot,
+                // not extra independent root IDs in ShowdownMoveset.moves.
+                // Separate source-verified gimmick activation handles them.
             }
             List<String> revealedOpponentMoves = publicOpponent.revealedMoves();
             Map<String, Integer> publicStages = fieldCapture == null ? Map.of()
