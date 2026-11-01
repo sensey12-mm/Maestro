@@ -35,8 +35,8 @@ public final class LivePromotionGate {
     /**
      * Per-trainer, one-way emergency kill switch. Revocation cannot be undone
      * by JVM properties, a stale native receipt, or another candidate.
-     * A future explicitly authorized trainer/battle may receive a fresh
-     * control; this run never arms live Shadow authority.
+     * A new distinct battle ID receives a fresh control; the current battle
+     * can never restore Shadow after an emergency revocation.
      */
     public static final class Control {
         private volatile boolean revoked;
@@ -79,9 +79,9 @@ public final class LivePromotionGate {
     }
 
     /**
-     * Two independent operator factors plus current model evidence:
-     * a live-enable setting, an EXPLICIT owner-approved source constant
-     * (false in production), and a non-revoked per-trainer control.
+     * Owner-approved production authority still requires a live-enable
+     * setting (enabled by default in v1.1.0), the owning source lease,
+     * the exact native request and a non-revoked per-battle control.
      *
      * No candidate response survives a disabled gate, lost source, changed
      * original request/turn, failing native legality or materialization
