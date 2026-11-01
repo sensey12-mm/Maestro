@@ -194,6 +194,62 @@ public final class ShadowPromotionPreparation {
     }
 
     /**
+     * A conservative first-party-only position. When public opponent history
+     * is incomplete, the independently owned request still permits a legal
+     * attack, recovery, setup or emergency switch. No stale public type,
+     * current identity, revealed move or hidden ability enters the policy.
+     */
+    public static BattleSnapshot firstPartyOnly(BattleSnapshot observed) {
+        if(observed==null)return null;
+        var unknownOpponent=new BattleSnapshot.Combatant(
+                "UNVERIFIED",BattleSnapshot.UNKNOWN_HP_FRACTION,
+                List.of(),Map.of(),List.of(),null,null,false);
+        return new BattleSnapshot(observed.turn(),observed.self(),unknownOpponent,
+                observed.selfBench(),List.of(),observed.legalMoves(),
+                observed.legalSwitches(),Map.of(),false,null);
+    }
+
+    /**
+     * Promotion with ONLY owned state and a native legal-root lease.
+     * Status moves requiring a witnessed opponent condition are excluded.
+     * This path is not evidence that an unknown matchup is advantageous.
+     */
+    public static Report inspectOwnOnly(Object battle,Object request,
+            BattleSnapshot owned,ShadowLiveDecisionEngine.Choice chosen,
+            OwnRequestTransport.Lease lease,ShadowNativeLegalWindow.Proof nativeRoot) {
+        if(battle==null || request==null || owned==null || lease==null
+                || !lease.current() || lease.turn()!=owned.turn())
+            return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        if(nativeRoot==null || !nativeRoot.exactlyCovers(battle,request,owned))
+            return abstain(Verdict.MISSING_OR_STALE_NATIVE_LEGAL_WINDOW);
+        var opposing=owned.opponent();
+        if(!"UNVERIFIED".equals(opposing.species())
+                || opposing.hpKnown() || !opposing.types().isEmpty()
+                || !opposing.knownBoosts().isEmpty()
+                || !opposing.revealedMoves().isEmpty()
+                || opposing.revealedItem()!=null || opposing.revealedAbility()!=null
+                || !owned.opponentBench().isEmpty() || owned.opponentTerastallized()
+                || !owned.knownOpponentMoveCounts().isEmpty()
+                || chosen==null || chosen.reason()==ShadowLiveDecisionEngine.Reason.STATUS
+                || chosen.reason()==ShadowLiveDecisionEngine.Reason.UNKNOWN_OR_UNSUPPORTED
+                || chosen.reason()==ShadowLiveDecisionEngine.Reason.NO_LEGAL_ACTION)
+            return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
+        var legal=new java.util.HashSet<String>();
+        for(var move:owned.legalMoves())legal.add("move:"+move);
+        for(var reserve:owned.legalSwitches())legal.add("switch:"+reserve);
+        if(legal.size()!=owned.legalMoves().size()+owned.legalSwitches().size()
+                || !legal.contains(chosen.action()))
+            return abstain(Verdict.INCOMPLETE_OR_UNBOUNDED_ACTIONS);
+        BooleanSupplier current=()->lease.current() && lease.turn()==owned.turn()
+                && nativeRoot.exactlyCovers(battle,request,owned);
+        try{
+            if(!current.getAsBoolean())return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        }catch(RuntimeException stale){return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);}
+        return new Report(Verdict.INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE,
+                new Proposal(battle,request,owned.turn(),chosen.action(),current));
+    }
+
+    /**
      * Forced replacement is deliberately separate: no active opposing
      * matchup, invented next request or ordinary move list is required.
      * The caller must attest the original owning native forced request and
