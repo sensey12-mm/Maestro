@@ -154,7 +154,7 @@ public final class ShadowPromotionPreparation {
     public static Report inspectIndependent(Object battle,Object request,
             BattleSnapshot snapshot,ShadowLiveDecisionEngine.Choice chosen,
             OwnRequestTransport.Lease lease,ShadowNativeLegalWindow.Proof nativeRoot,
-            PublicProtocolEvidence publicHistory) {
+            PublicProtocolEvidence publicHistory,String publicOpponentSlot) {
         if(battle==null || request==null || lease==null || snapshot==null
                 || !lease.current() || lease.turn()!=snapshot.turn())
             return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
@@ -165,6 +165,8 @@ public final class ShadowPromotionPreparation {
                 || !publicHistory.framed() || publicHistory.corrupted()
                 || !publicHistory.coverageUnknown().isEmpty()
                 || publicHistory.publicTurn()!=snapshot.turn()
+                || publicOpponentSlot==null || publicOpponentSlot.isBlank()
+                || publicHistory.reentryAmbiguous(publicOpponentSlot)
                 || !snapshot.opponentBench().isEmpty())
             return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
         var legal=new HashSet<String>();

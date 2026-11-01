@@ -455,7 +455,7 @@ public class MaestroBattleAI extends RCTBattleAI {
                         phaseShadowPrepared=ShadowPromotionPreparation.inspectIndependent(
                                 battle,phaseShadowRequest,mechanicsSnapshot,
                                 independent,ownChoiceLease,phaseShadowLegalWindow,
-                                publicProtocolEvidence);
+                                publicProtocolEvidence,mechanicsOpponentSlot);
                         System.out.println("[MaestroAI] "+independent.safeLine());
                     }
                 }

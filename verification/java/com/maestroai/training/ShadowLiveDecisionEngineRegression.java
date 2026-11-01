@@ -81,6 +81,18 @@ final class ShadowLiveDecisionEngineRegression {
                 List.of("encore"),List.of(),List.of(),Map.of(),List.of()),
                 false,false,true)==null,
                 "Encore abstains when opponent has no publicly witnessed move");
+        var typedOwn=new BattleSnapshot.Combatant("self",.8,
+                List.of("normal"),Map.of(),List.of("tackle","shadowclaw"),
+                null,null,false);
+        var publicGhost=new BattleSnapshot.Combatant("public-ghost",.8,
+                List.of("ghost"),Map.of(),List.of(),null,null,false);
+        var publicTyped=new BattleSnapshot(6,typedOwn,publicGhost,
+                List.of(),List.of(),List.of("tackle","shadowclaw"),
+                List.of(),Map.of(),false,null);
+        check("move:shadowclaw".equals(
+                    ShadowLiveDecisionEngine.ordinary(
+                        publicTyped,false,false,true).action()),
+                "verified public Ghost immunity blocks Normal hit");
         var unknown=snapshot(.5,List.of("unverifiedeffect"),
                 List.of(),List.of(),Map.of(),List.of());
         check(ShadowLiveDecisionEngine.ordinary(unknown,false,false,true)==null,

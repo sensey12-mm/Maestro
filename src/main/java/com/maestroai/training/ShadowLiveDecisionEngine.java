@@ -114,7 +114,18 @@ public final class ShadowLiveDecisionEngine {
         if(mechanics!=null && mechanics.power()>0){
             // Whitelisted simulator base power and source accuracy are known,
             // but predicted damage, matchup and opponent response remain UNKNOWN.
+            double typeFactor=1.0;
+            // Type matchups are consulted ONLY when current opposing types
+            // were explicitly confirmed by the PUBLIC spectator projection.
+            if(!snapshot.opponent().types().isEmpty()){
+                int exponent=CobblemonMechanics.effectiveness(
+                        mechanics.type(),snapshot.opponent().types());
+                if(exponent==Integer.MIN_VALUE)return null; // witnessed immunity
+                typeFactor=Math.scalb(1.0,exponent);
+            }
+            double stab=snapshot.self().types().contains(mechanics.type())?1.5:1;
             double base=mechanics.power()*mechanics.accuracy()/100.0
+                    *typeFactor*stab
                     +Math.max(0,mechanics.priority())*12;
             return new Scored("move:"+id,base,Reason.MOVE);
         }
