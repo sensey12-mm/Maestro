@@ -421,7 +421,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             LivePromotionGate.Control promotionControl=null;
             if(battle!=null && activePokemon!=null && activePokemon.getActor()!=null
                     && activePokemon.getActor().getBattle()==battle
-                    && activePokemon.getActor().getBattleAI()==this
+                    && activePokemon.getActor() instanceof com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor aiOwner && aiOwner.getBattleAI()==this
                     && battle.getActor(activePokemon.getActor().getShowdownId())
                         ==activePokemon.getActor())
                 promotionControl=phaseShadowControls.forBattle(battle.getBattleId());
