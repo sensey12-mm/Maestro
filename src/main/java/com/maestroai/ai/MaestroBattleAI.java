@@ -881,13 +881,13 @@ public class MaestroBattleAI extends RCTBattleAI {
             PokemonBattle battle,ShowdownMoveset moveset,String moveId){
         if(active==null || active.getActor()==null || battle==null
                 || battle.getEnded() || moveset==null || moveset.getMoves()==null
-                || active.getActor().getRequest()!=phaseShadowRequest
-                || phaseShadowRequest==null
-                || phaseShadowRequest.getActive()==null
-                || phaseShadowRequest.getActive().size()!=1
-                || phaseShadowRequest.getActive().getFirst()!=moveset
                 || ownChoiceLease==null || !ownChoiceLease.current()
                 || !RuntimeBattleMode.ordinary(battle))return null;
+        var currentRequest=active.getActor().getRequest();
+        if(currentRequest==null || currentRequest!=phaseShadowRequest
+                || currentRequest.getActive()==null
+                || currentRequest.getActive().size()!=1
+                || currentRequest.getActive().getFirst()!=moveset)return null;
         try{
             int slot=-1;
             for(int i=0;i<moveset.getMoves().size();i++){
