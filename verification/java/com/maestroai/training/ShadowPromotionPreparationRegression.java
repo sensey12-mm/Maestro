@@ -125,6 +125,23 @@ final class ShadowPromotionPreparationRegression {
                 ==ShadowPromotionPreparation.Verdict.MISSING_CURRENT_OWN_SOURCE,
                 "offline fixture cannot fabricate a native owning lease");
 
+        // First-party fallback strips EVERY opponent-derived tactical field.
+        var ownOnly=ShadowPromotionPreparation.firstPartyOnly(snap);
+        check("UNVERIFIED".equals(ownOnly.opponent().species())
+                && ownOnly.opponent().types().isEmpty()
+                && ownOnly.opponent().revealedMoves().isEmpty()
+                && !ownOnly.opponent().hpKnown()
+                && ownOnly.opponentBench().isEmpty()
+                && ownOnly.legalMoves().equals(snap.legalMoves())
+                && ownOnly.self()==snap.self(),
+                "incomplete public history cannot contaminate independent own-only policy");
+        check(ShadowPromotionPreparation.firstPartyOnly(null)==null,
+                "missing source cannot create first-party policy");
+        check(ShadowPromotionPreparation.inspectOwnOnly(
+                battle,request,ownOnly,
+                ShadowLiveDecisionEngine.ordinary(ownOnly,false,false,true),
+                null,null).proposal()==null,
+                "own-only choice without native actor lease is never promoted");
         // The independent *native* own request must enumerate exactly the
         // same ordinary roots as Shadow's snapshot, with its own live lease.
         var nativeWindow=ShadowNativeLegalWindow.capture(battle,request,7,
