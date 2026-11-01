@@ -156,6 +156,28 @@ final class ShadowLiveDecisionEngineRegression {
         check(ShadowLiveDecisionEngine.forcedReplacement(List.of(
                 new ShadowLiveDecisionEngine.Reserve("own",1,true)),false)==null,
                 "normal turn cannot forge a forced-replacement proposal");
+        // Ordinary attacks absent from the narrow Phase 4 damage oracle
+        // remain selectable when their OWN Cobblemon template is authenticated.
+        var nativeOnly=snapshot(.8,List.of("newphysicalattack"),
+                List.of(),List.of(),Map.of(),List.of());
+        var ownAttack=new ShadowLiveDecisionEngine.OwnMoveFacts(
+                "newphysicalattack","steel","physical",95,90,0);
+        check("move:newphysicalattack".equals(
+                ShadowLiveDecisionEngine.ordinary(nativeOnly,false,false,true,
+                        Map.of("newphysicalattack",ownAttack)).action()),
+                "native first-party move metadata enables broad attacks without Legacy");
+        check(ShadowLiveDecisionEngine.ordinary(
+                nativeOnly,false,false,true,Map.of())==null,
+                "unknown unattested move power is never invented");
+        check(ShadowLiveDecisionEngine.ordinary(nativeOnly,false,false,true,
+                Map.of("foreign",ownAttack))==null,
+                "foreign move fact cannot enter current owned native legal root");
+        var nativePriority=snapshot(.8,List.of("newphysicalattack","tackle"),
+                List.of(),List.of(),Map.of(),List.of());
+        check("move:newphysicalattack".equals(
+                ShadowLiveDecisionEngine.ordinary(nativePriority,false,false,true,
+                        Map.of("newphysicalattack",ownAttack)).action()),
+                "source-backed noncatalogue move is independently ranked");
         // Exact native-gimmick eligibility is independent of Legacy and
         // never inferred from opponent private data or an attractive score.
         var absent=new ShadowNativeGimmickPolicy.Options(
@@ -198,6 +220,8 @@ final class ShadowLiveDecisionEngineRegression {
         int nativeOwn=ai.indexOf("captureIndependentShadowSnapshot(");
         int deferredFallback=ai.indexOf("()->chooseLegacy(",choose);
         check(choose>=0 && nativeOwn>choose && deferredFallback>nativeOwn
+                && ai.substring(choose,deferredFallback).contains(
+                        "captureIndependentOwnMoveFacts(")
                 && !ai.substring(choose,deferredFallback).contains(
                         "ShowdownActionResponse legacy=chooseLegacy("),
                 "Legacy tactical evaluator is lazy, never a Shadow input");
