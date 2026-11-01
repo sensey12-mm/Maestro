@@ -180,7 +180,7 @@ final class ShadowPromotionPreparationRegression {
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         check(actualAI.contains("captureShadowNativeLegalWindow(")
                 && actualAI.contains("phaseShadowLegalWindow.exactlyCovers(")
-                && actualAI.contains("phaseShadowControl.revoke()")
+                && actualAI.contains("phaseShadowControls.revoke()")
                 && actualAI.contains("phaseShadowLegalWindow=null;")
                 && actualAI.contains("envelopedAudit.replies().result()")
                 && actualAI.contains("phaseShadowLegalWindow,")
@@ -298,17 +298,70 @@ final class ShadowPromotionPreparationRegression {
         int choose=ai.indexOf("public ShowdownActionResponse choose(");
         int legacy=ai.indexOf("private ShowdownActionResponse chooseLegacy(");
         check(choose>=0 && legacy>choose
-                && ai.substring(choose,legacy).contains("LivePromotionGate.choosePrepared(")
+                && ai.substring(choose,legacy).contains("LivePromotionGate.choosePreparedWithSource(")
                 && ai.substring(choose,legacy).contains(
-                        "false); // Owner has NOT authorized live Shadow selection.")
+                        "true); // Owner explicitly approved live Shadow primary selection.")
                 && ai.contains("ShadowPromotionPreparation.inspect(")
-                && ai.contains("LivePromotionGate.choosePrepared(")
+                && ai.contains("LivePromotionGate.choosePreparedWithSource(")
+                && ai.contains("action.isValid(activePokemon,moveset,forceSwitch)")
+                && ai.contains("phaseShadowControls.forBattle(")
+                && ai.contains("phaseShadowControls.battleEnded(")
                 && ai.contains("phaseShadowPrepared=null;")
                 && ai.contains("phaseShadowRequest=null;")
                 && !ai.substring(choose,legacy).contains(
                         "PublicHistoricalRoleLiveOverlay.Session.choose("),
-                "production legacy-boundary has a real dormant choice materializer, no promotion");
+                "production gate explicitly promotes native-legal Shadow and attributes Legacy fallback");
+        var currentFlag=System.getProperty(LivePromotionGate.PROPERTY);
+        try{
+            System.setProperty(LivePromotionGate.PROPERTY,"true");
+            var fresh=new LivePromotionGate.Control();
+            var promoted=LivePromotionGate.choosePreparedWithSource(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->"SHADOW",action->true,fresh,true);
+            check(promoted.authority()==LivePromotionGate.Authority.SHADOW
+                    && "SHADOW".equals(promoted.action()),"promoted decision attributed Shadow");
+            check(LivePromotionGate.choosePreparedWithSource(
+                    ()->"LEGACY",null,battle,request,7,
+                    action->"SHADOW",action->true,fresh,true)
+                    .authority()==LivePromotionGate.Authority.LEGACY && fresh.current(),
+                    "missing proposal falls back without revocation");
+            System.setProperty(LivePromotionGate.PROPERTY,"false");
+            check(LivePromotionGate.choosePreparedWithSource(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->"SHADOW",action->true,fresh,true)
+                    .authority()==LivePromotionGate.Authority.LEGACY && !fresh.current(),
+                    "operator stop latches Legacy for same battle");
+            System.setProperty(LivePromotionGate.PROPERTY,"true");
+            check(LivePromotionGate.choosePreparedWithSource(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->"SHADOW",action->true,fresh,true)
+                    .authority()==LivePromotionGate.Authority.LEGACY,
+                    "reenabling flag cannot undo emergency revocation");
+            var lifecycle=new LivePromotionGate.BattleControls();
+            var first=java.util.UUID.fromString("11111111-1111-1111-1111-111111111111");
+            var next=java.util.UUID.fromString("22222222-2222-2222-2222-222222222222");
+            var old=lifecycle.forBattle(first);
+            old.revoke();
+            check(old==lifecycle.forBattle(first) && !old.current(),
+                    "same-battle choice cannot reset shutdown");
+            var replacement=lifecycle.forBattle(next);
+            check(replacement!=old && replacement.current(),
+                    "fresh battle may arm its own control");
+            lifecycle.battleEnded(first);
+            check(replacement.current(),"old end callback cannot kill new battle");
+            lifecycle.battleEnded(next);
+            check(!replacement.current() && lifecycle.forBattle(next)==replacement,
+                    "battle completion disables stale Shadow actions");
+            check(LivePromotionGate.choosePreparedWithSource(
+                    ()->"LEGACY",proposal,battle,new Object(),7,
+                    action->"SHADOW",action->true,new LivePromotionGate.Control(),true)
+                    .authority()==LivePromotionGate.Authority.LEGACY,
+                    "wrong original request cannot authorize Shadow");
+        }finally{
+            if(currentFlag==null)System.clearProperty(LivePromotionGate.PROPERTY);
+            else System.setProperty(LivePromotionGate.PROPERTY,currentFlag);
+        }
         System.out.println("Shadow promotion preparation PASS: "+checks+
-                " adversarial checks; no live authorization; Minecraft UNTESTED");
+                " adversarial checks; source-gated live authority; Minecraft UNTESTED");
     }
 }
