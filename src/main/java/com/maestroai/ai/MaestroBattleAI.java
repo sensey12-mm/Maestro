@@ -340,6 +340,7 @@ public class MaestroBattleAI extends RCTBattleAI {
         phase634Scope.withdraw();
         phase5LiveScope.withdraw();
         phase5HistoricalScope.withdraw();
+        phaseShadowControl.revoke();
         phaseShadowPrepared=null;
         phaseShadowBattle=null;
         phaseShadowRequest=null;
@@ -444,7 +445,11 @@ public class MaestroBattleAI extends RCTBattleAI {
                 action->materializePreparedShadowAction(action,activePokemon,battle,
                         moveset,forceSwitch,proposal),
                 action->action!=null && proposal!=null
-                        && proposal.current(battle,phaseShadowRequest,battle.getTurn()),
+                        && proposal.current(battle,phaseShadowRequest,battle.getTurn())
+                        && phaseShadowLegalWindow!=null
+                        && phaseShadowLegalWindow.exactlyCovers(
+                                battle,phaseShadowRequest,mechanicsSnapshot),
+                phaseShadowControl,
                 false); // Owner has NOT authorized live Shadow selection.
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
             phase612Move=null;
@@ -4907,6 +4912,8 @@ public class MaestroBattleAI extends RCTBattleAI {
     private volatile ShadowPromotionPreparation.Report phaseShadowPrepared;
     private volatile Object phaseShadowBattle,phaseShadowRequest;
     private volatile ShadowNativeLegalWindow.Proof phaseShadowLegalWindow;
+    private final LivePromotionGate.Control phaseShadowControl =
+            new LivePromotionGate.Control();
     private final PublicCompetitiveLiveShadowConsumer.BattleScope phase5LiveScope =
             new PublicCompetitiveLiveShadowConsumer.BattleScope();
     private PublicHistoricalRoleLiveOverlay.BattleScope phase5HistoricalScope =

@@ -34,33 +34,63 @@ public final class LivePromotionGate {
     }
 
     /**
-     * Reversible candidate transport for an independently derived current-turn
-     * Shadow proposal. Legacy is always the fallback on absent approval,
-     * incomplete evidence, changed source, illegality or materializer failure.
-     *
-     * IMPORTANT: production calls with ownerApproved=false until the owner
-     * explicitly authorizes a later activation change. A JVM property alone
-     * cannot set this argument. This method does not certify Phase 7 advantage.
+     * Per-trainer, one-way emergency kill switch. Revocation cannot be undone
+     * by JVM properties, a stale native receipt, or another candidate.
+     * A future explicitly authorized trainer/battle may receive a fresh
+     * control; this run never arms live Shadow authority.
+     */
+    public static final class Control {
+        private volatile boolean revoked;
+        public boolean current(){return !revoked;}
+        public void revoke(){revoked=true;}
+    }
+
+    /**
+     * Compatibility API for synthetic/out-of-game call sites. Real gameplay
+     * supplies a durable per-trainer Control instead.
      */
     public static <T> T choosePrepared(
             Supplier<T> legacy,ShadowPromotionPreparation.Proposal candidate,
             Object battle,Object originalRequest,int turn,
             Function<String,T> materialize,Predicate<T> independentlyLegal,
             boolean ownerApproved) {
-        if(!enabled() || !ownerApproved || candidate==null
-                || materialize==null || independentlyLegal==null)
+        return choosePrepared(legacy,candidate,battle,originalRequest,turn,
+                materialize,independentlyLegal,new Control(),ownerApproved);
+    }
+
+    /**
+     * Two independent operator factors plus current model evidence:
+     * a live-enable setting, an EXPLICIT owner-approved source constant
+     * (false in production), and a non-revoked per-trainer control.
+     *
+     * No candidate response survives a disabled gate, lost source, changed
+     * original request/turn, failing native legality or materialization
+     * exception. Any attempted invalid authorized candidate trips the
+     * emergency control and permanently falls back to Legacy until reset.
+     */
+    public static <T> T choosePrepared(
+            Supplier<T> legacy,ShadowPromotionPreparation.Proposal candidate,
+            Object battle,Object originalRequest,int turn,
+            Function<String,T> materialize,Predicate<T> independentlyLegal,
+            Control control,boolean ownerApproved) {
+        if(!enabled() || !ownerApproved || control==null || !control.current()
+                || candidate==null || materialize==null || independentlyLegal==null)
             return legacy.get();
         try {
-            if(!candidate.current(battle,originalRequest,turn))
+            if(!enabled() || !control.current()
+                    || !candidate.current(battle,originalRequest,turn)) {
+                control.revoke();
                 return legacy.get();
+            }
             T action=materialize.apply(candidate.action());
-            if(action!=null && candidate.current(battle,originalRequest,turn)
-                    && independentlyLegal.test(action)
+            if(action!=null && independentlyLegal.test(action)
+                    && enabled() && control.current()
                     && candidate.current(battle,originalRequest,turn))
                 return action;
-        } catch (RuntimeException rejected) {
-            // Never propagate experimental failures into a live action.
+        } catch (RuntimeException invalid) {
+            // Broken speculative selection must not escape to Cobblemon.
         }
+        control.revoke();
         return legacy.get();
     }
 }

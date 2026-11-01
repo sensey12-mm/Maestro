@@ -189,6 +189,46 @@ final class ShadowPromotionPreparationRegression {
             if(original2==null)System.clearProperty(LivePromotionGate.PROPERTY);
             else System.setProperty(LivePromotionGate.PROPERTY,original2);
         }
+        // Per-trainer emergency kill switch: a concurrent operator stop
+        // during materialization must abort the action, then latch Legacy.
+        source.set(true);
+        var control=new LivePromotionGate.Control();
+        var priorEnabled=System.getProperty(LivePromotionGate.PROPERTY);
+        try {
+            System.setProperty(LivePromotionGate.PROPERTY,"true");
+            check("LEGACY".equals(LivePromotionGate.choosePrepared(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->{control.revoke();return "PROMOTED";},
+                    action->true,control,true)),
+                    "operator revocation mid-materialization falls back immediately");
+            check(!control.current()
+                    && "LEGACY".equals(LivePromotionGate.choosePrepared(
+                        ()->"LEGACY",proposal,battle,request,7,
+                        action->"PROMOTED",action->true,control,true)),
+                    "sticky failed/tripped trainer cannot reactivate by JVM setting");
+            var invalidControl=new LivePromotionGate.Control();
+            check("LEGACY".equals(LivePromotionGate.choosePrepared(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->"PROMOTED",action->false,invalidControl,true))
+                    && !invalidControl.current(),
+                    "illegal authorized candidate latches Legacy failsafe");
+            var freshControl=new LivePromotionGate.Control();
+            check("PROMOTED".equals(LivePromotionGate.choosePrepared(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->"PROMOTED",action->true,freshControl,true))
+                    && freshControl.current(),
+                    "fresh explicitly approved future trainer can use same safe gate");
+            source.set(false);
+            check("LEGACY".equals(LivePromotionGate.choosePrepared(
+                    ()->"LEGACY",proposal,battle,request,7,
+                    action->"PROMOTED",action->true,freshControl,true))
+                    && !freshControl.current(),
+                    "revoked source disables current trainer even after future recovery");
+        }finally{
+            source.set(true);
+            if(priorEnabled==null)System.clearProperty(LivePromotionGate.PROPERTY);
+            else System.setProperty(LivePromotionGate.PROPERTY,priorEnabled);
+        }
         // Structural source guard: live chooser's approval stays literal
         // false; no publicly observed Phase 5 role controls any action.
         String ai=Files.readString(Path.of(
