@@ -44,6 +44,24 @@ public final class ShadowLiveDecisionEngine {
     private record Scored(String action, double value, Reason reason) {}
 
     /**
+     * First-party Cobblemon move template. This is NOT an opponent move set,
+     * a damage estimate or an inferred secondary-effect probability.
+     */
+    public record OwnMoveFacts(String id,String type,String category,
+                               double power,double accuracy,int priority) {
+        public OwnMoveFacts {
+            if(id==null || id.isBlank() || type==null || type.isBlank()
+                    || category==null || category.isBlank()
+                    || !Double.isFinite(power) || power<0 || power>1000
+                    || !Double.isFinite(accuracy) || accuracy<0 || accuracy>100
+                    || priority<-7 || priority>7)
+                throw new IllegalArgumentException("Invalid first-party template");
+            type=type.toLowerCase(java.util.Locale.ROOT);
+            category=category.toLowerCase(java.util.Locale.ROOT);
+        }
+    }
+
+    /**
      * Independent forced-replacement policy: highest known remaining own HP,
      * tie broken by own party order. No matchup value is inferred from hidden
      * opposing stats, item, typing or moves. No eligible reserve -> abstain.
@@ -73,6 +91,12 @@ public final class ShadowLiveDecisionEngine {
      */
     public static Choice ordinary(BattleSnapshot snapshot,boolean requestForced,
                                    boolean requestTrapped,boolean sourceCurrent) {
+        return ordinary(snapshot,requestForced,requestTrapped,sourceCurrent,Map.of());
+    }
+
+    public static Choice ordinary(BattleSnapshot snapshot,boolean requestForced,
+                                   boolean requestTrapped,boolean sourceCurrent,
+                                   Map<String,OwnMoveFacts> ownedMoveFacts) {
         if(!sourceCurrent || snapshot==null || requestForced
                 || snapshot.self().fainted() || snapshot.opponent().fainted()
                 || snapshot.legalMoves().size()>16
@@ -80,13 +104,19 @@ public final class ShadowLiveDecisionEngine {
                 || snapshot.selfBench().size()!=snapshot.legalSwitches().size()
                 || snapshot.legalMoves().isEmpty() && snapshot.legalSwitches().isEmpty())
             return null;
+        if(ownedMoveFacts==null || ownedMoveFacts.size()>16
+                || ownedMoveFacts.entrySet().stream().anyMatch(entry->
+                    entry.getKey()==null || entry.getValue()==null
+                    || !entry.getKey().equals(entry.getValue().id())
+                    || !snapshot.legalMoves().contains(entry.getKey())))
+            return null;
         // A changed or duplicated legal root cannot produce an executable
         // independent policy response.
         Set<String> seen=new HashSet<>();
         List<Scored> scores=new ArrayList<>();
         for(String id:snapshot.legalMoves()){
             if(id==null || id.isBlank() || !seen.add("move:"+id))return null;
-            Scored candidate=scoreMove(id,snapshot);
+            Scored candidate=scoreMove(id,snapshot,ownedMoveFacts.get(id));
             if(candidate!=null)scores.add(candidate);
         }
         for(int i=0;i<snapshot.legalSwitches().size();i++){
@@ -113,9 +143,14 @@ public final class ShadowLiveDecisionEngine {
         Scored selected=scores.getFirst();
         return new Choice(selected.action(),selected.reason(),scores.size());
     }
-    private static Scored scoreMove(String id,BattleSnapshot snapshot){
+    private static Scored scoreMove(String id,BattleSnapshot snapshot,
+                                    OwnMoveFacts nativeFacts){
         CobblemonMechanics.Move mechanics=CobblemonMechanics.move(id);
-        if(mechanics!=null && mechanics.power()>0){
+        boolean nativeAttack=nativeFacts!=null && nativeFacts.power()>0
+                && nativeFacts.accuracy()>0
+                && ("physical".equals(nativeFacts.category())
+                    || "special".equals(nativeFacts.category()));
+        if(nativeAttack || nativeFacts==null && mechanics!=null && mechanics.power()>0){
             // Whitelisted simulator base power and source accuracy are known,
             // but predicted damage, matchup and opponent response remain UNKNOWN.
             double typeFactor=1.0;
@@ -123,18 +158,26 @@ public final class ShadowLiveDecisionEngine {
             // were explicitly confirmed by the PUBLIC spectator projection.
             if(!snapshot.opponent().types().isEmpty()){
                 int exponent=CobblemonMechanics.effectiveness(
-                        mechanics.type(),snapshot.opponent().types());
+                        nativeAttack?nativeFacts.type():mechanics.type(),
+                        snapshot.opponent().types());
                 if(exponent==Integer.MIN_VALUE)return null; // witnessed immunity
                 typeFactor=Math.scalb(1.0,exponent);
             }
-            double stab=snapshot.self().types().contains(mechanics.type())?1.5:1;
-            double base=mechanics.power()*mechanics.accuracy()/100.0
-                    *typeFactor*stab
-                    +Math.max(0,mechanics.priority())*12;
+            String type=nativeAttack?nativeFacts.type():mechanics.type();
+            double stab=snapshot.self().types().stream().anyMatch(t->
+                    t.equalsIgnoreCase(type))?1.5:1;
+            double base=(nativeAttack?nativeFacts.power():mechanics.power())
+                    *(nativeAttack?nativeFacts.accuracy():mechanics.accuracy())
+                    /100.0*typeFactor*stab
+                    +Math.max(0,nativeAttack?nativeFacts.priority():mechanics.priority())*12;
             return new Scored("move:"+id,base,Reason.MOVE);
         }
         MoveEffectModel.Effect effect=MoveEffectModel.describe(
-                id,"unknown","status",0,100,0).effect();
+                id,nativeFacts==null?"unknown":nativeFacts.type(),
+                nativeFacts==null?"status":nativeFacts.category(),
+                nativeFacts==null?0:nativeFacts.power(),
+                nativeFacts==null?100:nativeFacts.accuracy(),
+                nativeFacts==null?0:nativeFacts.priority()).effect();
         return switch(effect){
             case HEAL_SELF -> snapshot.self().hpKnown()
                     && snapshot.self().hpFraction()<=0.60
@@ -151,6 +194,9 @@ public final class ShadowLiveDecisionEngine {
             case LOCK_TARGET_MOVE -> !snapshot.opponent().revealedMoves().isEmpty()
                     ?new Scored("move:"+id,32,Reason.STATUS):null;
             case SET_HAZARD -> new Scored("move:"+id,28,Reason.STATUS);
+            case PROTECT -> snapshot.self().hpKnown()
+                    && snapshot.self().hpFraction()<=0.55
+                    ?new Scored("move:"+id,22,Reason.STATUS):null;
             case REMOVE_HAZARD -> null; // own hazard absence not proved here
             default -> null;
         };
