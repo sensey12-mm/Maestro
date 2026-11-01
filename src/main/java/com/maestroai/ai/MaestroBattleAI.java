@@ -28,6 +28,7 @@ import com.maestroai.training.NativeOpponentRevealRecipientEvidence;
 import com.maestroai.training.PublicCompetitiveLiveShadowConsumer;
 import com.maestroai.training.PublicHistoricalRoleLiveOverlay;
 import com.maestroai.training.ShadowPromotionPreparation;
+import com.maestroai.training.ShadowLiveDecisionEngine;
 import com.maestroai.training.ShadowNativeLegalWindow;
 import com.maestroai.training.PublicOpponentIdentityContinuity;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
@@ -438,6 +439,27 @@ public class MaestroBattleAI extends RCTBattleAI {
                     activePokemon,battle,moveset,forceSwitch);
             ShowdownActionResponse legacy=chooseLegacy(
                     activePokemon,battle,side,moveset,forceSwitch);
+            // Legacy is computed once as a safe fallback, never supplied
+            // to the independent Shadow policy as a tactical input.
+            if(phaseShadowPrepared==null || phaseShadowPrepared.proposal()==null){
+                if(forceSwitch){
+                    phaseShadowPrepared=prepareShadowForcedReplacement(
+                            activePokemon,battle);
+                } else if(phaseShadowLegalWindow!=null && mechanicsSnapshot!=null
+                        && mechanicsSnapshot.turn()==battle.getTurn()){
+                    var independent=ShadowLiveDecisionEngine.ordinary(
+                            mechanicsSnapshot,false,
+                            moveset!=null && moveset.getTrapped(),
+                            ownChoiceLease!=null && ownChoiceLease.current());
+                    if(independent!=null){
+                        phaseShadowPrepared=ShadowPromotionPreparation.inspectIndependent(
+                                battle,phaseShadowRequest,mechanicsSnapshot,
+                                independent,ownChoiceLease,phaseShadowLegalWindow,
+                                publicProtocolEvidence);
+                        System.out.println("[MaestroAI] "+independent.safeLine());
+                    }
+                }
+            }
             var prepared=phaseShadowPrepared;
             var proposal=prepared==null?null:prepared.proposal();
             ShowdownActionResponse response=LivePromotionGate.choosePrepared(
@@ -446,9 +468,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         moveset,forceSwitch,proposal),
                 action->action!=null && proposal!=null
                         && proposal.current(battle,phaseShadowRequest,battle.getTurn())
-                        && phaseShadowLegalWindow!=null
-                        && phaseShadowLegalWindow.exactlyCovers(
-                                battle,phaseShadowRequest,mechanicsSnapshot),
+                        && (forceSwitch || phaseShadowLegalWindow!=null
+                            && mechanicsSnapshot!=null
+                            && phaseShadowLegalWindow.exactlyCovers(
+                                    battle,phaseShadowRequest,mechanicsSnapshot)),
                 phaseShadowControl,
                 false); // Owner has NOT authorized live Shadow selection.
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
@@ -635,6 +658,64 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 && actor.getRequest().getActive().size() == 1
                                 && moveset != null && !moveset.getTrapped());
             }
+    }
+
+    /**
+     * Independent forced-replacement selection from the owning actor's
+     * *currently eligible* own party. Does not examine an opponent Pokémon,
+     * invent a matchup, or infer its hidden moves/items/abilities.
+     * All native evidence is rechecked when the proposal is consumed.
+     */
+    private ShadowPromotionPreparation.Report prepareShadowForcedReplacement(
+            ActiveBattlePokemon active,PokemonBattle battle) {
+        try {
+            if(active==null || battle==null || battle.getEnded()
+                    || active.getActor()==null || !ownTransportVersionSupported()
+                    || !RuntimeBattleMode.ordinary(battle)
+                    || ownChoiceLease==null || !ownChoiceLease.current())
+                return null;
+            var actor=active.getActor();
+            var request=actor.getRequest();
+            if(request==null || request!=phaseShadowRequest
+                    || actor.getBattle()!=battle || !actor.getMustChoose()
+                    || !actor.getResponses().isEmpty()
+                    || request.getWait() || request.getForceSwitch()==null
+                    || !request.getForceSwitch().contains(true)
+                    || actor.getPokemonList()==null)return null;
+            var reserves=new java.util.ArrayList<ShadowLiveDecisionEngine.Reserve>();
+            for(BattlePokemon reserve:actor.getPokemonList()){
+                if(reserve==null || reserve.getUuid()==null)return null;
+                var own=reserve.getEffectedPokemon();
+                boolean eligible=reserve.canBeSentOut() && !reserve.getGone()
+                        && reserve.getHealth()>0 && !reserve.isSentOut()
+                        && own!=null && own.getCurrentHealth()>0;
+                // HP is only read from the trainer's OWN party.
+                double hp=own==null?0:Math.max(0,Math.min(1,getHpPercent(own)));
+                reserves.add(new ShadowLiveDecisionEngine.Reserve(
+                        reserve.getUuid().toString(),hp,eligible));
+            }
+            var choice=ShadowLiveDecisionEngine.forcedReplacement(reserves,true);
+            if(choice==null)return null;
+            var selectedId=java.util.UUID.fromString(choice.action().substring(7));
+            var originalRequest=request;
+            var originalActor=actor;
+            var originalLease=ownChoiceLease;
+            var result=ShadowPromotionPreparation.inspectForced(
+                    battle,request,battle.getTurn(),choice,originalLease,()->
+                        originalLease.current() && !battle.getEnded()
+                        && originalActor.getBattle()==battle
+                        && originalActor.getRequest()==originalRequest
+                        && originalActor.getMustChoose()
+                        && originalRequest.getForceSwitch()!=null
+                        && originalRequest.getForceSwitch().contains(true)
+                        && originalActor.getPokemonList()!=null
+                        && originalActor.getPokemonList().stream().filter(p->
+                            p!=null && selectedId.equals(p.getUuid())
+                            && p.canBeSentOut() && !p.getGone()
+                            && p.getHealth()>0 && !p.isSentOut()).count()==1);
+            System.out.println("[MaestroAI] "+choice.safeLine());
+            return result;
+        }catch(RuntimeException unsupported){return null;}
     }
 
     /**
