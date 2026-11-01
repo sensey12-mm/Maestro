@@ -307,11 +307,11 @@ final class ShadowLiveCompetitiveConsumerSafetyRegression {
                 "Phase 5 source consumer has not acquired live permissions");
         String chooser=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(chooser.contains("LivePromotionGate.choosePrepared(")
-                && chooser.contains("false); // Owner has NOT authorized live Shadow selection.")
+        check(chooser.contains("LivePromotionGate.choosePreparedWithSource(")
+                && chooser.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !chooser.contains("ShadowLiveCompetitiveConsumerSafety.")
                 && !chooser.contains("ShadowLiveCompetitiveConsumerSafety.Session"),
-                "Legacy chooser disconnected; no Phase 6.32 live calls or tactics");
+                "promoted chooser remains disconnected from unverified Phase 6.32 tactics");
         System.out.println("Phase 6.32 live consumer SAFETY contract PASS: "
                 +checks+" synthetic/source checks; Minecraft UNTESTED");
     }
