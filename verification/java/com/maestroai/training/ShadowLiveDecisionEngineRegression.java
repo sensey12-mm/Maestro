@@ -198,6 +198,38 @@ final class ShadowLiveDecisionEngineRegression {
                     new ShadowLiveDecisionEngine.Choice(
                         "move:tackle",ShadowLiveDecisionEngine.Reason.STATUS,1)),
                 "Encore and falsely labeled status cannot bypass public evidence");
+        // Source-scoped FORCE request can bind the fainted previous occupant
+        // even when ActiveBattlePokemon.battlePokemon has become null.
+        Object nativeBattle=new Object(), nativeActor=new Object(), nativeReq=new Object();
+        var forcedOwner=new OwnRequestTransport();
+        forcedOwner.owner(nativeBattle,nativeActor,"p2");
+        forcedOwner.turnDispatched(nativeBattle,1);
+        var faintedId=java.util.UUID.fromString(
+                "00000000-0000-0000-0000-0000000000a1");
+        var sourceDto=new OwnRequestEvidence.Sample(faintedId,"p2: Own fainted",
+                "0/100",true,"pressure",List.of("ghost"));
+        var sourcePokemon=new OwnRequestTransport.Pokemon(
+                sourceDto,100,Map.of(),"",List.of("ghost"),"",false);
+        var currentForced=new OwnRequestTransport.Request(
+                "p2",OwnRequestTransport.Mode.FORCED,List.of(sourcePokemon));
+        forcedOwner.dispatched(nativeBattle,nativeActor,"p2",
+                nativeReq,()->currentForced);
+        check(faintedId.equals(forcedOwner.forcedActiveUuid(
+                nativeBattle,nativeActor,nativeReq))
+                && forcedOwner.forcedActiveUuid(nativeBattle,new Object(),
+                        nativeReq)==null
+                && forcedOwner.forcedActiveUuid(nativeBattle,nativeActor,
+                        new Object())==null,
+                "fainted empty slot admits only original native forced owner");
+        var sourceLease=forcedOwner.beginChoice(nativeBattle,nativeActor,
+                nativeReq,faintedId,true,()->true);
+        check(sourceLease.current()
+                && forcedOwner.forcedActiveUuid(nativeBattle,nativeActor,
+                        nativeReq)==null,
+                "forced slot current during single legal owning choice, no replay");
+        forcedOwner.endChoice();
+        check(!sourceLease.current(),
+                "fainted forced identity expires after choice");
         // Exact native-gimmick eligibility is independent of Legacy and
         // never inferred from opponent private data or an attractive score.
         var absent=new ShadowNativeGimmickPolicy.Options(
