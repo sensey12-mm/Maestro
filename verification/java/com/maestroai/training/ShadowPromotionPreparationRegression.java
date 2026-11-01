@@ -125,6 +125,65 @@ final class ShadowPromotionPreparationRegression {
                 ==ShadowPromotionPreparation.Verdict.MISSING_CURRENT_OWN_SOURCE,
                 "offline fixture cannot fabricate a native owning lease");
 
+        // The independent *native* own request must enumerate exactly the
+        // same ordinary roots as Shadow's snapshot, with its own live lease.
+        var nativeWindow=ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","quickattack"),List.of(),
+                false,false,false,true,source::get);
+        check(nativeWindow!=null && nativeWindow.exactlyCovers(battle,request,snap)
+                && !nativeWindow.promotionAuthorized(),
+                "real owning native window exactly covers both ordinary moves");
+        check(!nativeWindow.exactlyCovers(new Object(),request,snap)
+                && !nativeWindow.exactlyCovers(battle,new Object(),snap)
+                && !nativeWindow.exactlyCovers(battle,request,new BattleSnapshot(
+                        8,snap.self(),snap.opponent(),snap.selfBench(),
+                        snap.opponentBench(),snap.legalMoves(),snap.legalSwitches(),
+                        snap.knownOpponentMoveCounts(),false,null)),
+                "native request cannot be replayed in foreign battle/request/turn");
+        var missing=ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle"),List.of(),false,false,false,true,source::get);
+        check(missing!=null && !missing.exactlyCovers(battle,request,snap),
+                "native action missing from alleged Shadow root rejects");
+        check(ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","tackle"),List.of(),
+                false,false,false,true,source::get)==null,
+                "duplicate usable native move invalidates own root");
+        check(ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","quickattack"),List.of(),
+                true,false,false,true,source::get)==null
+                && ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","quickattack"),List.of(),
+                false,false,true,true,source::get)==null,
+                "forced replacement and charging continuation abstain");
+        check(ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","quickattack"),List.of("own-bench"),
+                false,true,false,true,source::get)==null,
+                "trapped request never certifies a voluntary switch");
+        check(ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","quickattack"),List.of(),
+                false,false,false,false,source::get)==null,
+                "incomplete native request cannot certify root legality");
+        var extraneous=ShadowNativeLegalWindow.capture(battle,request,7,
+                List.of("tackle","quickattack","synthetic-zmove"),List.of(),
+                false,false,false,true,source::get);
+        check(extraneous!=null && !extraneous.exactlyCovers(battle,request,snap),
+                "native special action absent from snapshot invalidates exhaustive coverage");
+        source.set(false);
+        check(!nativeWindow.exactlyCovers(battle,request,snap)
+                && ShadowNativeLegalWindow.capture(battle,request,7,
+                    List.of("tackle","quickattack"),List.of(),
+                    false,false,false,true,source::get)==null,
+                "withdrawn native own source revokes action legality");
+        source.set(true);
+        // Production source audit: no old unconstrained call is allowed.
+        String actualAI=Files.readString(Path.of(
+                "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+        check(actualAI.contains("captureShadowNativeLegalWindow(")
+                && actualAI.contains("phaseShadowLegalWindow.exactlyCovers(")
+                && actualAI.contains("phaseShadowControl.revoke()")
+                && actualAI.contains("phaseShadowLegalWindow=null;"),
+                "actual chooser independently captures, rechecks and releases native action roots");
+
         // Only synthetic unit tests exercise ownerApproved=true. The real AI
         // passes a literal false, regardless of its JVM promotion flag.
         var original=System.getProperty(LivePromotionGate.PROPERTY);
