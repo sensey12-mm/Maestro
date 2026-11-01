@@ -242,8 +242,8 @@ final class PublicOpponentIdentityContinuityRegression {
         check(chooserStart>=0 && chooserEnd>chooserStart,
                 "source-level live chooser boundary located");
         String chooser=ai.substring(chooserStart,chooserEnd);
-        check(chooser.contains("LivePromotionGate.choosePrepared(")
-                && chooser.contains("false); // Owner has NOT authorized live Shadow selection.")
+        check(chooser.contains("LivePromotionGate.choosePreparedWithSource(")
+                && chooser.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !chooser.contains("PublicOpponentIdentityContinuity.")
                 && !chooser.contains("ShadowCompetitiveRuntimeBridge.")
                 && !chooser.contains("PublicCompetitiveLiveShadowConsumer.")
