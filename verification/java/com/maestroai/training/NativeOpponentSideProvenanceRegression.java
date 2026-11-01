@@ -292,8 +292,8 @@ final class NativeOpponentSideProvenanceRegression {
         check(offline.purpose()==PublicCompetitiveConsumerContract.Purpose.OFFLINE_SHADOW_REVIEW,
                 "Phase 5 online mode still rejected");
         var ai=Files.readString(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choosePrepared(")
-                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
+        check(ai.contains("LivePromotionGate.choosePreparedWithSource(")
+                && ai.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !ai.contains("NativeOpponentSideProvenance.Session.inspect(")
                 && !ai.contains("ShadowCompetitiveRuntimeBridge.Session.inspect("),
                 "Legacy chooser still cannot use Shadow native-side evidence");
