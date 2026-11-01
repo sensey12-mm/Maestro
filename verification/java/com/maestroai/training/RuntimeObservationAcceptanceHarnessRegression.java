@@ -174,9 +174,9 @@ final class RuntimeObservationAcceptanceHarnessRegression {
         int chooser=ai.indexOf("public ShowdownActionResponse choose(");
         int selected=ai.indexOf("LivePromotionGate.choosePreparedWithSource(",chooser);
         int refresh=ai.indexOf("phase622Harness.publicHistory(",selected);
-        int phase621=ai.indexOf("phase622Harness.observePhase621(",selected);
+        int phase621Index=ai.indexOf("phase622Harness.observePhase621(",selected);
         check(chooser>=0 && selected>chooser && refresh>selected
-                && phase621>refresh && ai.substring(selected,refresh)
+                && phase621Index>refresh && ai.substring(selected,refresh)
                     .contains("recordOwnChoice("),
                 "production refresh occurs after Shadow/Legacy selection, before Phase 6.21 diagnostic");
         check(!ai.substring(selected,refresh).contains(
