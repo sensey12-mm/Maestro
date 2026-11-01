@@ -8,8 +8,7 @@ import com.maestroai.training.ShadowPromotionPreparation;
 /**
  * Fail-closed live promotion boundary. A flag alone never authorizes a
  * shadow experiment: a candidate must also be independently promoted and
- * validated against the current owning action. Phase 4/5/6/7 now prepares
- * conditional candidates only; no live promotion is approved.
+ * validated against the current owning action. Owner-approved Shadow may lead when current independent source and native legality prove a candidate. Legacy remains the fail-safe.
  */
 public final class LivePromotionGate {
     public static final String PROPERTY = "maestroai.livePromotion.enabled";
@@ -17,7 +16,7 @@ public final class LivePromotionGate {
     private LivePromotionGate() {}
 
     public static boolean enabled() {
-        return Boolean.parseBoolean(System.getProperty(PROPERTY, "false"));
+        return Boolean.parseBoolean(System.getProperty(PROPERTY, "true"));
     }
 
     public static <T> T choose(Supplier<T> legacy, Supplier<T> promoted,
@@ -43,6 +42,27 @@ public final class LivePromotionGate {
         private volatile boolean revoked;
         public boolean current(){return !revoked;}
         public void revoke(){revoked=true;}
+    }
+
+    public enum Authority { SHADOW, LEGACY }
+    public record Selection<T>(T action,Authority authority) {
+        public Selection {
+            if(authority==null)throw new IllegalArgumentException("Missing authority");
+        }
+    }
+    /** A one-way emergency latch reset only by a NEW owning battle ID. */
+    public static final class BattleControls {
+        private java.util.UUID battleId;
+        private Control control=new Control();
+        public synchronized Control forBattle(java.util.UUID id) {
+            if(id==null){control.revoke();return control;}
+            if(!id.equals(battleId)){battleId=id;control=new Control();}
+            return control;
+        }
+        public synchronized void revoke(){control.revoke();}
+        public synchronized void battleEnded(java.util.UUID id){
+            if(id!=null && id.equals(battleId))control.revoke();
+        }
     }
 
     /**
@@ -73,24 +93,38 @@ public final class LivePromotionGate {
             Object battle,Object originalRequest,int turn,
             Function<String,T> materialize,Predicate<T> independentlyLegal,
             Control control,boolean ownerApproved) {
-        if(!enabled() || !ownerApproved || control==null || !control.current()
-                || candidate==null || materialize==null || independentlyLegal==null)
-            return legacy.get();
-        try {
-            if(!enabled() || !control.current()
-                    || !candidate.current(battle,originalRequest,turn)) {
+        return choosePreparedWithSource(legacy,candidate,battle,originalRequest,turn,
+                materialize,independentlyLegal,control,ownerApproved).action();
+    }
+
+    /** Prevents Shadow return values being recorded as Legacy in Phase 7. */
+    public static <T> Selection<T> choosePreparedWithSource(
+            Supplier<T> legacy,ShadowPromotionPreparation.Proposal candidate,
+            Object battle,Object originalRequest,int turn,
+            Function<String,T> materialize,Predicate<T> independentlyLegal,
+            Control control,boolean ownerApproved) {
+        if(!ownerApproved || control==null || !control.current())
+            return new Selection<>(legacy.get(),Authority.LEGACY);
+        if(!enabled()){
+            control.revoke(); // Emergency operator disable sticks for this battle.
+            return new Selection<>(legacy.get(),Authority.LEGACY);
+        }
+        if(candidate==null || materialize==null || independentlyLegal==null)
+            return new Selection<>(legacy.get(),Authority.LEGACY);
+        try{
+            if(!control.current() || !candidate.current(battle,originalRequest,turn)){
                 control.revoke();
-                return legacy.get();
+                return new Selection<>(legacy.get(),Authority.LEGACY);
             }
             T action=materialize.apply(candidate.action());
             if(action!=null && independentlyLegal.test(action)
                     && enabled() && control.current()
                     && candidate.current(battle,originalRequest,turn))
-                return action;
-        } catch (RuntimeException invalid) {
-            // Broken speculative selection must not escape to Cobblemon.
+                return new Selection<>(action,Authority.SHADOW);
+        }catch(RuntimeException invalid){
+            // Stale, invalid or broken speculative response cannot escape.
         }
         control.revoke();
-        return legacy.get();
+        return new Selection<>(legacy.get(),Authority.LEGACY);
     }
 }
