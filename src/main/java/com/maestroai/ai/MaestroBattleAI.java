@@ -416,7 +416,15 @@ public class MaestroBattleAI extends RCTBattleAI {
         // Owner-approved Shadow leads only for a current native legal action.
         // Unsupported or stale proposals keep Legacy as the fallback.
         try {
-            phaseShadowControls.forBattle(battle==null?null:battle.getBattleId());
+            // Only a real owning AI actor may arm a fresh battle. Foreign or
+            // unverified chooser invocations have NO promotion control.
+            LivePromotionGate.Control promotionControl=null;
+            if(battle!=null && activePokemon!=null && activePokemon.getActor()!=null
+                    && activePokemon.getActor().getBattle()==battle
+                    && activePokemon.getActor().getBattleAI()==this
+                    && battle.getActor(activePokemon.getActor().getShowdownId())
+                        ==activePokemon.getActor())
+                promotionControl=phaseShadowControls.forBattle(battle.getBattleId());
             try {
             if (activePokemon != null && activePokemon.getBattlePokemon() != null && activePokemon.getActor() != null) {
                 var actor = activePokemon.getActor(); var request = actor.getRequest();
@@ -430,9 +438,8 @@ public class MaestroBattleAI extends RCTBattleAI {
             } catch (RuntimeException unavailable) {
                 ownTransportUnavailable(); ownChoiceLease = null;
             }
-            // Evaluate Legacy exactly once, unchanged. The separately
-            // constructed Shadow proposal is conditional/advisory and has
-            // NO production owner approval to replace this response.
+            // Evaluate Legacy exactly once as a safe fallback; independent
+            // Shadow actions require separately authenticated native evidence.
             phaseShadowPrepared=null;
             phaseShadowBattle=battle;
             phaseShadowRequest=activePokemon==null || activePokemon.getActor()==null
@@ -502,12 +509,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                             && mechanicsSnapshot!=null
                             && phaseShadowLegalWindow.exactlyCovers(
                                     battle,phaseShadowRequest,mechanicsSnapshot)),
-                phaseShadowControls.forBattle(battle==null?null:battle.getBattleId()),
+                promotionControl,
                 true); // Owner explicitly approved live Shadow primary selection.
             ShowdownActionResponse response=selected.action();
             System.out.println("[MaestroAI] Live decision authority="+selected.authority()
                     +";currentNativeLegalRequired=true;legacyFallbackAvailable=true");
-                        recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
+            recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
             phase612Move=null;
             phase612Switch=null;
             try { observeNativeOwnMoves(battle, activePokemon, moveset, forceSwitch); }
