@@ -142,13 +142,13 @@ final class Integration4567Regression {
             else System.setProperty(LivePromotionGate.PROPERTY, original);
         }
         var ai = Files.readString(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choosePrepared(")
+        check(ai.contains("LivePromotionGate.choosePreparedWithSource(")
                 && ai.contains("ShadowPromotionPreparation.inspect(")
-                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
+                && ai.contains("true); // Owner explicitly approved live Shadow primary selection.")
                         && !ai.contains("OfflineShadowTacticalAdapter.inspect(")
                         && !ai.contains("OfflineShadowResponseScenarios.construct(")
                         && !ai.contains("PublicShadowBuildHandoff.prepare("),
-                "production chooser never executes offline Phase 5/6 tactical consumers");
+                "promoted chooser still isolates offline Phase 5/6 tactical consumers");
         System.out.println("Maestro4567 independent cross-phase safety PASS: "
                 + checks + " checks (synthetic/source only; Minecraft unverified)");
     }
