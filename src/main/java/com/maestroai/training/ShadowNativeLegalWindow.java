@@ -38,7 +38,7 @@ public final class ShadowNativeLegalWindow {
                                      BattleSnapshot snapshot){
             if(snapshot==null || !current(originalBattle,originalRequest,snapshot.turn()))
                 return false;
-            if(forced || snapshot.legalMoves().isEmpty()
+            if(forced || snapshot.legalMoves().isEmpty() && snapshot.legalSwitches().isEmpty()
                     || trapped && !snapshot.legalSwitches().isEmpty()
                     || continuation && !snapshot.legalSwitches().isEmpty())
                 return false;
@@ -72,7 +72,8 @@ public final class ShadowNativeLegalWindow {
             return null;
         // Unsupported forced-replacement requests and continuation are
         // categorically outside today's independently modeled comparison.
-        if(forceSwitch || continuation || nativeUsableMoves.isEmpty())
+        if(forceSwitch || continuation || nativeUsableMoves.isEmpty()
+                && nativeEligibleSwitches.isEmpty())
             return null;
         if(trapped && !nativeEligibleSwitches.isEmpty())return null;
         Set<String> actions=new HashSet<>();
