@@ -326,8 +326,8 @@ final class NativeOpponentRevealRecipientEvidenceRegression {
         check(ai.contains("NativeOpponentRevealRecipientEvidence.BattleScope")
                 && ai.contains("maestroai.phase634Observe")
                 && ai.contains(".observeNativeReturn(battle,own,sourceActor,")
-                && ai.contains("LivePromotionGate.choosePrepared(")
-                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
+                && ai.contains("LivePromotionGate.choosePreparedWithSource(")
+                && ai.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !ai.contains("NativeOpponentRevealRecipientEvidence.Session.inspect("),
                 "native hook is observational and Legacy live chooser remains isolated");
         System.out.println("Phase 6.34 native public branch/reveal safety PASS: "
