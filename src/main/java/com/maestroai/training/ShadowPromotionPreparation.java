@@ -27,7 +27,9 @@ public final class ShadowPromotionPreparation {
         INSUFFICIENT_PUBLIC_REPLY_OR_MODIFIER_COVERAGE,
         INCOMPLETE_OR_UNBOUNDED_ACTIONS,
         NO_STRICT_INDEPENDENT_PREFERENCE,
-        CONDITIONAL_PROPOSAL_NONAUTHORITATIVE
+        CONDITIONAL_PROPOSAL_NONAUTHORITATIVE,
+        INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE,
+        INDEPENDENT_FORCED_REPLACEMENT_NONAUTHORITATIVE
     }
 
     /** Deliberately stores a source lease; never retain raw public/private
@@ -57,7 +59,9 @@ public final class ShadowPromotionPreparation {
     public record Report(Verdict verdict,Proposal proposal) {
         public Report {
             Objects.requireNonNull(verdict);
-            if((verdict==Verdict.CONDITIONAL_PROPOSAL_NONAUTHORITATIVE)
+            if((verdict==Verdict.CONDITIONAL_PROPOSAL_NONAUTHORITATIVE
+                    || verdict==Verdict.INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE
+                    || verdict==Verdict.INDEPENDENT_FORCED_REPLACEMENT_NONAUTHORITATIVE)
                     !=(proposal!=null))
                 throw new IllegalArgumentException("Invalid Shadow proposal verdict");
         }
@@ -138,6 +142,80 @@ public final class ShadowPromotionPreparation {
         }
         return new Report(Verdict.CONDITIONAL_PROPOSAL_NONAUTHORITATIVE,
                 new Proposal(physicalBattle,originalRequest,snapshot.turn(),preferred,source));
+    }
+
+    /**
+     * Source-owned independent live policy. Allows a fully disclosed
+     * heuristic when the conditional damage comparator cannot prove a global
+     * best action. Unlike the strict Phase 4 comparator this makes no claim
+     * of bounded matchup superiority, status success or response probability.
+     * Real selection remains blocked by LivePromotionGate until authorized.
+     */
+    public static Report inspectIndependent(Object battle,Object request,
+            BattleSnapshot snapshot,ShadowLiveDecisionEngine.Choice chosen,
+            OwnRequestTransport.Lease lease,ShadowNativeLegalWindow.Proof nativeRoot,
+            PublicProtocolEvidence publicHistory) {
+        if(battle==null || request==null || lease==null || snapshot==null
+                || !lease.current() || lease.turn()!=snapshot.turn())
+            return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        if(chosen==null || nativeRoot==null
+                || !nativeRoot.exactlyCovers(battle,request,snapshot))
+            return abstain(Verdict.MISSING_OR_STALE_NATIVE_LEGAL_WINDOW);
+        if(publicHistory==null || !publicHistory.complete()
+                || !publicHistory.framed() || publicHistory.corrupted()
+                || !publicHistory.coverageUnknown().isEmpty()
+                || publicHistory.publicTurn()!=snapshot.turn()
+                || !snapshot.opponentBench().isEmpty())
+            return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
+        var legal=new HashSet<String>();
+        for(String move:snapshot.legalMoves()) legal.add("move:"+move);
+        for(String reserve:snapshot.legalSwitches()) legal.add("switch:"+reserve);
+        if(legal.size()!=snapshot.legalMoves().size()
+                    +snapshot.legalSwitches().size()
+                || !legal.contains(chosen.action()))
+            return abstain(Verdict.INCOMPLETE_OR_UNBOUNDED_ACTIONS);
+        BooleanSupplier current=()->lease.current()
+                && lease.turn()==snapshot.turn()
+                && nativeRoot.exactlyCovers(battle,request,snapshot)
+                && publicHistory.complete() && publicHistory.framed()
+                && !publicHistory.corrupted()
+                && publicHistory.coverageUnknown().isEmpty()
+                && publicHistory.publicTurn()==snapshot.turn();
+        try {
+            if(!current.getAsBoolean())
+                return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        }catch(RuntimeException stale){
+            return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        }
+        return new Report(Verdict.INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE,
+                new Proposal(battle,request,snapshot.turn(),chosen.action(),current));
+    }
+
+    /**
+     * Forced replacement is deliberately separate: no active opposing
+     * matchup, invented next request or ordinary move list is required.
+     * The caller must attest the original owning native forced request and
+     * all eligible own reserves. A fresh physical request/turn is mandatory.
+     */
+    public static Report inspectForced(Object battle,Object request,int turn,
+            ShadowLiveDecisionEngine.Choice chosen,
+            OwnRequestTransport.Lease lease,BooleanSupplier nativeForcedCurrent) {
+        if(battle==null || request==null || lease==null || chosen==null
+                || chosen.reason()!=ShadowLiveDecisionEngine.Reason.FORCED_REPLACEMENT
+                || !chosen.action().startsWith("switch:")
+                || nativeForcedCurrent==null || !lease.current()
+                || lease.turn()!=turn)
+            return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        BooleanSupplier current=()->lease.current() && lease.turn()==turn
+                && nativeForcedCurrent.getAsBoolean();
+        try {
+            if(!current.getAsBoolean())
+                return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        }catch(RuntimeException invalid){
+            return abstain(Verdict.MISSING_CURRENT_OWN_SOURCE);
+        }
+        return new Report(Verdict.INDEPENDENT_FORCED_REPLACEMENT_NONAUTHORITATIVE,
+                new Proposal(battle,request,turn,chosen.action(),current));
     }
 
     /**
