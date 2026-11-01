@@ -148,10 +148,10 @@ final class ShadowLiveDecisionEngineRegression {
                 && ai.substring(choose,legacyStart).contains(
                     "prepareShadowForcedReplacement(")
                 && ai.substring(choose,legacyStart).contains(
-                    "false); // Owner has NOT authorized live Shadow selection.")
+                    "true); // Owner explicitly approved live Shadow primary selection.")
                 && !ai.substring(choose,legacyStart).contains(
                     "PublicCompetitiveConsumerContract.prepare("),
-                "actual live chooser integrates independent policy, stays shadow-only");
+                "actual live chooser integrates owner-authorized independent policy");
         System.out.println("Shadow live decision engine PASS: "+checks
                 +" adversarial standalone checks; Minecraft UNTESTED");
     }
