@@ -482,7 +482,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                 }
             }
             var prepared=phaseShadowPrepared;
-            var proposal=prepared==null?null:prepared.proposal();
+            var offered=prepared==null?null:prepared.proposal();
+            // No certified independent activation for Mega/Z/Tera/Dynamax
+            // exists in the ordinary root. Preserve a native valid gimmick
+            // choice through Legacy rather than replace it with an invented one.
+            var proposal=legacy instanceof MoveActionResponse special
+                    && special.getGimmickID()!=null ? null : offered;
             var selected=LivePromotionGate.choosePreparedWithSource(
                 ()->legacy,proposal,battle,phaseShadowRequest,choiceTurn,
                 action->materializePreparedShadowAction(action,activePokemon,battle,
