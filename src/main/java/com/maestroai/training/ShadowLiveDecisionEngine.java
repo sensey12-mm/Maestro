@@ -78,7 +78,7 @@ public final class ShadowLiveDecisionEngine {
                 || snapshot.legalMoves().size()>16
                 || snapshot.legalSwitches().size()>6
                 || snapshot.selfBench().size()!=snapshot.legalSwitches().size()
-                || snapshot.legalMoves().isEmpty())
+                || snapshot.legalMoves().isEmpty() && snapshot.legalSwitches().isEmpty())
             return null;
         // A changed or duplicated legal root cannot produce an executable
         // independent policy response.
@@ -97,10 +97,14 @@ public final class ShadowLiveDecisionEngine {
             // certified matchup/entry-hazard estimate this is NOT a generic
             // favorable switch. It is a preservation option at critical HP.
             var reserve=snapshot.selfBench().get(i);
-            if(snapshot.self().hpKnown() && snapshot.self().hpFraction()<=0.20
-                    && reserve.hpKnown() && reserve.hpFraction()>=0.75
-                    && !reserve.fainted())
-                scores.add(new Scored("switch:"+id,115+reserve.hpFraction()*10,
+            if(reserve.hpKnown() && !reserve.fainted()
+                    && (snapshot.legalMoves().isEmpty()
+                        || snapshot.self().hpKnown() && snapshot.self().hpFraction()<=0.20
+                            && reserve.hpFraction()>=0.75))
+                scores.add(new Scored("switch:"+id,
+                        snapshot.legalMoves().isEmpty()
+                            ?100+reserve.hpFraction()*10
+                            :115+reserve.hpFraction()*10,
                         Reason.VOLUNTARY_SWITCH));
         }
         if(scores.isEmpty())return null;
