@@ -189,12 +189,12 @@ final class ShadowCompetitiveRuntimeBridgeRegression {
         // Read-only integration contract is not called by Minecraft chooser.
         var ai=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
-        check(ai.contains("LivePromotionGate.choosePrepared(")
-                && ai.contains("false); // Owner has NOT authorized live Shadow selection.")
+        check(ai.contains("LivePromotionGate.choosePreparedWithSource(")
+                && ai.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !ai.contains("ShadowCompetitiveRuntimeBridge.")
                 && !ai.contains("PublicShadowBuildHandoff.prepare(")
                 && !ai.contains("PublicCompetitiveConsumerContract.prepare("),
-                "Legacy live choice has no Phase 5/6 online binding or Shadow call");
+                "Shadow live choice still excludes unverified Phase 5/6 online tactical binding");
         System.out.println("Phase 6.28 Shadow-only runtime bridge preparation PASS: "
                 +checks+" synthetic/source-only checks; Minecraft unverified");
     }
