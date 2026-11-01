@@ -185,10 +185,14 @@ public final class ShadowLiveDecisionEngine {
                             Reason.RECOVERY):null;
             case BOOST_SELF -> mechanics!=null && !mechanics.boosts().isEmpty()
                     && snapshot.self().hpKnown() && snapshot.self().hpFraction()>=0.65
-                    && mechanics.boosts().keySet().stream().allMatch(
-                        k->snapshot.self().knownBoosts().containsKey(k)
-                          && snapshot.self().knownBoosts().get(k)<=2)
-                    ?new Scored("move:"+id,80,Reason.SETUP):null;
+                    && mechanics.boosts().entrySet().stream().allMatch(
+                        entry->snapshot.self().knownBoosts().containsKey(entry.getKey())
+                            && snapshot.self().knownBoosts().get(entry.getKey())
+                                <=(entry.getValue()>=2?0:1))
+                    ?new Scored("move:"+id,
+                        100+25*Math.min(4,mechanics.boosts().values().stream()
+                            .mapToInt(Integer::intValue).sum()),
+                        Reason.SETUP):null;
             // Only witnessed, annotated effects are considered; no imagined
             // poison/burn chance, Encore target or hazard absence.
             case LOCK_TARGET_MOVE -> !snapshot.opponent().revealedMoves().isEmpty()
