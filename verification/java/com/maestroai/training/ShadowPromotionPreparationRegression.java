@@ -204,8 +204,8 @@ final class ShadowPromotionPreparationRegression {
                 && actualAI.contains("envelopedAudit);"),
                 "actual chooser independently captures, rechecks and releases native action roots");
 
-        // Only synthetic unit tests exercise ownerApproved=true. The real AI
-        // passes a literal false, regardless of its JVM promotion flag.
+        // Synthetic gate contracts include both explicit denial and owner-
+        // approved production promotion; runtime supplies the real native lease.
         var original=System.getProperty(LivePromotionGate.PROPERTY);
         try {
             System.setProperty(LivePromotionGate.PROPERTY,"true");
@@ -308,8 +308,8 @@ final class ShadowPromotionPreparationRegression {
             if(priorEnabled==null)System.clearProperty(LivePromotionGate.PROPERTY);
             else System.setProperty(LivePromotionGate.PROPERTY,priorEnabled);
         }
-        // Structural source guard: live chooser's approval stays literal
-        // false; no publicly observed Phase 5 role controls any action.
+        // Structural source guard: the authorized live chooser uses Shadow
+        // before any Legacy tactical calculation or Phase 5 hidden inference.
         String ai=Files.readString(Path.of(
                 "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
         int choose=ai.indexOf("public ShowdownActionResponse choose(");
@@ -332,11 +332,22 @@ final class ShadowPromotionPreparationRegression {
         try{
             System.setProperty(LivePromotionGate.PROPERTY,"true");
             var fresh=new LivePromotionGate.Control();
+            var legacyExecutions=new AtomicInteger();
             var promoted=LivePromotionGate.choosePreparedWithSource(
-                    ()->"LEGACY",proposal,battle,request,7,
+                    ()->{legacyExecutions.incrementAndGet();return "LEGACY";},
+                    proposal,battle,request,7,
                     action->"SHADOW",action->true,fresh,true);
             check(promoted.authority()==LivePromotionGate.Authority.SHADOW
-                    && "SHADOW".equals(promoted.action()),"promoted decision attributed Shadow");
+                    && "SHADOW".equals(promoted.action())
+                    && legacyExecutions.get()==0,
+                    "promoted decision attributed Shadow; Legacy scorer never runs");
+            check(LivePromotionGate.choosePreparedWithSource(
+                    ()->{legacyExecutions.incrementAndGet();return "LEGACY";},
+                    null,battle,request,7,
+                    action->"SHADOW",action->true,fresh,true)
+                    .authority()==LivePromotionGate.Authority.LEGACY
+                    && legacyExecutions.get()==1,
+                    "missing Shadow action invokes Legacy only as lazy fallback");
             check(LivePromotionGate.choosePreparedWithSource(
                     ()->"LEGACY",null,battle,request,7,
                     action->"SHADOW",action->true,fresh,true)
