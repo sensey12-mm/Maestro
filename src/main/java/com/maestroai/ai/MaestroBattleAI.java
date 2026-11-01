@@ -429,14 +429,25 @@ public class MaestroBattleAI extends RCTBattleAI {
             // observer/diagnostic caches on their own fresh battle identity.
             if(promotionControl!=null)resetMemoryForNewBattle(battle);
             try {
-            if (activePokemon != null && activePokemon.getBattlePokemon() != null && activePokemon.getActor() != null) {
-                var actor = activePokemon.getActor(); var request = actor.getRequest();
-                var activeUuid = activePokemon.getBattlePokemon().getUuid();
-                ownChoiceLease = ownTransport.beginChoice(battle, actor, request, activePokemon.getBattlePokemon().getUuid(), forceSwitch,
-                        () -> actor.getBattle() == battle && actor.getRequest() == request && !battle.getEnded()
+            if(activePokemon!=null && activePokemon.getActor()!=null){
+                var actor=activePokemon.getActor();
+                var request=actor.getRequest();
+                var activeMon=activePokemon.getBattlePokemon();
+                var activeUuid=activeMon==null
+                        ?forceSwitch
+                            ?ownTransport.forcedActiveUuid(battle,actor,request):null
+                        :activeMon.getUuid();
+                if(activeUuid!=null)
+                    ownChoiceLease=ownTransport.beginChoice(battle,actor,request,
+                            activeUuid,forceSwitch,
+                            ()->actor.getBattle()==battle
+                                && actor.getRequest()==request
+                                && !battle.getEnded()
                                 && ownTransport.observedTurnAllowed(battle.getTurn())
-                                && activePokemon.getBattlePokemon() != null && activeUuid.equals(activePokemon.getBattlePokemon().getUuid())
-                                && actor.getActivePokemon().contains(activePokemon));
+                                && actor.getActivePokemon().contains(activePokemon)
+                                && (activePokemon.getBattlePokemon()!=null
+                                    ?activeUuid.equals(activePokemon.getBattlePokemon().getUuid())
+                                    :forceSwitch && activeMon==null));
             }
             } catch (RuntimeException unavailable) {
                 ownTransportUnavailable(); ownChoiceLease = null;
@@ -927,7 +938,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             ShadowPromotionPreparation.Proposal proposal){
         if(action==null || proposal==null || battle==null
                 || activePokemon==null || activePokemon.getActor()==null
-                || activePokemon.getBattlePokemon()==null
+                || !forceSwitch && activePokemon.getBattlePokemon()==null
                 || !proposal.current(battle,activePokemon.getActor().getRequest(),
                         ownChoiceLease==null?-1:ownChoiceLease.turn()) || battle.getEnded())
             return null;
@@ -955,7 +966,8 @@ public class MaestroBattleAI extends RCTBattleAI {
             int matches=0;
             for(BattlePokemon reserve:activePokemon.getActor().getPokemonList()){
                 if(reserve!=null && id.equals(reserve.getUuid())
-                        && !id.equals(activePokemon.getBattlePokemon().getUuid())
+                        && (activePokemon.getBattlePokemon()==null
+                                || !id.equals(activePokemon.getBattlePokemon().getUuid()))
                         && reserve.canBeSentOut() && !reserve.getGone()
                         && reserve.getHealth()>0 && !reserve.isSentOut())matches++;
             }
