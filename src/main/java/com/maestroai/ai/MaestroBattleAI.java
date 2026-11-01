@@ -268,9 +268,10 @@ public class MaestroBattleAI extends RCTBattleAI {
             com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor,
             com.cobblemon.mod.common.battles.ShowdownActionRequest request,
             java.util.function.Supplier<String> raw) {
-        phaseShadowControls.forBattle(battle==null?null:battle.getBattleId());
+        if(actor==null || battle==null || actor.getBattleAI()!=this
+                || actor.getBattle()!=battle || battle.getActor(actor.getShowdownId())!=actor)return;
+        phaseShadowControls.forBattle(battle.getBattleId());
         if (!ownTransportVersionSupported()) { ownTransport.invalidate("OWN_TRANSPORT_VERSION_UNSUPPORTED"); return; }
-        if (actor.getBattleAI() != this || actor.getBattle() != battle || battle.getActor(actor.getShowdownId()) != actor) return;
         ownTransport.owner(battle, actor, actor.getShowdownId());
         if (!PHASE610_OBSERVE && !PHASE611_OBSERVE) {
             ownTransport.dispatched(battle, actor, actor.getShowdownId(), request,
@@ -316,9 +317,10 @@ public class MaestroBattleAI extends RCTBattleAI {
 
     public void ownTurnDispatched(PokemonBattle battle,
             com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor actor, int turn) {
-        phaseShadowControls.forBattle(battle==null?null:battle.getBattleId());
+        if(actor==null || battle==null || actor.getBattleAI()!=this
+                || actor.getBattle()!=battle)return;
+        phaseShadowControls.forBattle(battle.getBattleId());
         if (!ownTransportVersionSupported()) { ownTransport.invalidate("OWN_TRANSPORT_VERSION_UNSUPPORTED"); return; }
-        if (actor.getBattleAI() != this || actor.getBattle() != battle) return;
         ownTransport.owner(battle, actor, actor.getShowdownId());
         ownTransport.turnDispatched(battle, turn);
     }
