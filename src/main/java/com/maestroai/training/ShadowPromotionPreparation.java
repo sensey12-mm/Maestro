@@ -212,8 +212,24 @@ public final class ShadowPromotionPreparation {
     }
 
     /**
+     * Only native-legal moves whose verified effect requires NO opponent
+     * hidden identity/last move/status may be chosen without public opponent
+     * evidence. This does not certify an absent opposing hazard or guarantee
+     * a protect outcome.
+     */
+    public static boolean sourceIndependentStatus(ShadowLiveDecisionEngine.Choice selected) {
+        if(selected==null || selected.reason()!=ShadowLiveDecisionEngine.Reason.STATUS
+                || !selected.action().startsWith("move:"))return false;
+        String id=selected.action().substring(5);
+        var effect=MoveEffectModel.describe(id,"unknown","status",0,100,0).effect();
+        return effect==MoveEffectModel.Effect.SET_HAZARD
+                || effect==MoveEffectModel.Effect.PROTECT;
+    }
+
+    /**
      * Promotion with ONLY owned state and a native legal-root lease.
-     * Status moves requiring a witnessed opponent condition are excluded.
+     * Target-dependent status effects still require confirmed public
+     * evidence; only verified field/self status may use the owned-only path.
      * This path is not evidence that an unknown matchup is advantageous.
      */
     public static Report inspectOwnOnly(Object battle,Object request,
@@ -232,7 +248,9 @@ public final class ShadowPromotionPreparation {
                 || opposing.revealedItem()!=null || opposing.revealedAbility()!=null
                 || !owned.opponentBench().isEmpty() || owned.opponentTerastallized()
                 || !owned.knownOpponentMoveCounts().isEmpty()
-                || chosen==null || chosen.reason()==ShadowLiveDecisionEngine.Reason.STATUS
+                || chosen==null
+                || chosen.reason()==ShadowLiveDecisionEngine.Reason.STATUS
+                    && !sourceIndependentStatus(chosen)
                 || chosen.reason()==ShadowLiveDecisionEngine.Reason.UNKNOWN_OR_UNSUPPORTED
                 || chosen.reason()==ShadowLiveDecisionEngine.Reason.NO_LEGAL_ACTION)
             return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
