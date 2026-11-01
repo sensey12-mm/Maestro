@@ -215,13 +215,13 @@ final class ShadowOpponentIdentityIntegrationRegression {
         check(choiceStart>=0 && choiceEnd>choiceStart,
                 "native live chooser source boundaries exist");
         String chooser=ai.substring(choiceStart,choiceEnd);
-        check(chooser.contains("LivePromotionGate.choosePrepared(")
-                && chooser.contains("false); // Owner has NOT authorized live Shadow selection.")
+        check(chooser.contains("LivePromotionGate.choosePreparedWithSource(")
+                && chooser.contains("true); // Owner explicitly approved live Shadow primary selection.")
                 && !chooser.contains("inspectWithContinuity(")
                 && !chooser.contains("ShadowCompetitiveRuntimeBridge.")
                 && !chooser.contains("PublicOpponentIdentityContinuity.")
                 && !chooser.contains("PublicCompetitiveLiveShadowConsumer."),
-                "Legacy choice does not invoke any Shadow runtime bridge or Phase 5 v2");
+                "Shadow promotion does not invoke unverified opponent identity or Phase 5 v2");
         System.out.println("Phase 6.30 source-identity integration PASS: "
                 +checks+" synthetic/adversarial checks; Minecraft untested");
     }
