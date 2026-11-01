@@ -93,12 +93,12 @@ final class Phase6FinalClosureRegression {
         int legacy=ai.indexOf("private ShowdownActionResponse chooseLegacy(");
         check(chooser>=0 && legacy>chooser
                     && ai.substring(chooser,legacy).contains(
-                        "LivePromotionGate.choosePrepared(")
+                        "LivePromotionGate.choosePreparedWithSource(")
                     && ai.substring(chooser,legacy).contains(
-                        "false); // Owner has NOT authorized live Shadow selection.")
+                        "true); // Owner explicitly approved live Shadow primary selection.")
                     && !ai.substring(chooser,legacy).contains(
                         "ShadowSearchEngine.search("),
-                "actual live chooser remains Legacy-only, without an injected Shadow policy");
+                "Phase 6 conditional search stays out of the owner-approved Shadow live policy");
         String search=Files.readString(Path.of(
                 "src/main/java/com/maestroai/training/ShadowSearchEngine.java"));
         check(search.contains("NOT a battle/damage simulator")
