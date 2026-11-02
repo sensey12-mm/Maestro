@@ -284,6 +284,14 @@ public final class PublicSplitRoutingGate {
                                     "[a-zA-Z]{3,12}(?:/[a-zA-Z]{3,12}){0,2}"))
                             throw invalid();
                     }
+                    if(type.equals("-item") || type.equals("-enditem")
+                            || type.equals("-endability")){
+                        if(publicFields.length<4 || publicFields.length>7
+                                || !ACTOR.matcher(publicFields[2]).matches()
+                                || !publicEffect(publicFields[3]))throw invalid();
+                        for(int field=4;field<publicFields.length;field++)
+                            if(!tag(publicFields[field]))throw invalid();
+                    }
                     if(type.equals("-ability")){
                         if(publicFields.length<4 || publicFields.length>6
                                 || !ACTOR.matcher(publicFields[2]).matches()

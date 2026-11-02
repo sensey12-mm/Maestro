@@ -144,8 +144,15 @@ final class PublicSplitRoutingGateRegression {
                 "unrecognized boost annotation");
         deny(add(nativeOpening,"sideupdate\np1\n|request|"+SECRET),
                 "native private request never recast as a public event");
-        deny(add(nativeOpening,"update\n|-item|p1a: Own|Leftovers"),
-                "other unreviewed direct types remain unsupported");
+        var witnessedItem=new PublicSplitRoutingGate.Session().inspect(battle,
+                add(nativeOpening,"update\n|-item|p1a: Own|Leftovers"),true);
+        check(witnessedItem.current()
+                && witnessedItem.directEvents()==4
+                && !witnessedItem.livePromotionAuthorized()
+                && !witnessedItem.privatePayloadExportable(),
+                "strictly witnessed PUBLIC item announcements are observational only");
+        deny(add(nativeOpening,"update\n|-item|p1a: Own|{"+SECRET+"}"),
+                "malformed item does not bypass narrow public validation");
 
 
         // Phase 6.26: the pinned native interpreter stores private sideupdate
