@@ -147,7 +147,7 @@ final class PublicSplitRoutingGateRegression {
                 new Object(),privatePp,true);
         check(privatePpReport.current()
                 && privatePpReport.directEvents()==3
-                && !privatePpReport.safeLine().contains("Shadow Ball")
+                && !privatePpReport.toString().contains("Shadow Ball")
                 && PublicProtocolFilter.nativePublicEvents(privatePp).equals(
                         PublicProtocolFilter.nativePublicEvents(nativeOpening)),
                 "private Cobblemon PP sync is structurally ignored, never public");
