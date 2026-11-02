@@ -25,6 +25,15 @@ public final class PublicSpeciesCatalog {
         } catch(IOException | RuntimeException unsupported) { return Map.of(); }
     }
     public static Set<String> ids(){return ENTRIES.keySet();}
+    /**
+     * Public rules data only. A displayed species is a CONDITIONAL matchup
+     * hypothesis, never an observation that the opposing Pokemon truly has
+     * these types (Illusion and Transform remain possible).
+     */
+    public static List<String> displayedTypeHypothesis(String shownId) {
+        var entry=shownId==null?null:ENTRIES.get(shownId);
+        return entry==null?List.of():entry.nativeTypes();
+    }
     public static PublicMechanicsEvidence.Species verified(String id,PublicMechanicsEvidence.Species actual) {
         var expected=ENTRIES.get(id); return expected!=null && expected.equals(actual)?actual:null;
     }

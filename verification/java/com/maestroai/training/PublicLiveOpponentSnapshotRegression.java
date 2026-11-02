@@ -58,6 +58,48 @@ final class PublicLiveOpponentSnapshotRegression {
         check(display.snapshot().opponent().types().isEmpty()
                 && display.snapshot().opponent().species().equals("UNVERIFIED"),
                 "public switch species appearance never proves true types under Illusion");
+        // Shadow Promotion 7: a switch display is a matchup possibility, NOT
+        // a confirmed type or identity. Synthetically supply a source-owned
+        // public rules catalog and prove a different, still legal preference.
+        var shownGhost=new ArrayList<>(opening());
+        shownGhost.set(1,split("p2",
+                "|switch|p2a: Opp|Gengar, L100|20/100",
+                "|switch|p2a: Opp|Gengar, L100|85/100"));
+        var ghostDisplay=PublicLiveOpponentSnapshot.capture(new Object(),"p1",1,
+                own(),true,()->shownGhost,()->true,
+                id->id.equals("gengar")?List.of("ghost","poison"):List.of());
+        check(ghostDisplay!=null
+                && ghostDisplay.snapshot().opponent().species().equals("UNVERIFIED")
+                && ghostDisplay.snapshot().opponent().types().isEmpty()
+                && ghostDisplay.displayedTypeHypothesis().equals(List.of("ghost","poison"))
+                && ghostDisplay.safeLine().contains("displayHypothesis=CONDITIONAL")
+                && !ghostDisplay.safeLine().contains("Gengar"),
+                "ordinary appearance produces only a redacted conditional matchup");
+        var noHypothesis=ShadowLiveDecisionEngine.ordinary(
+                ghostDisplay.snapshot(),false,false,true);
+        var conditional=ShadowLiveDecisionEngine.ordinary(
+                ghostDisplay.snapshot(),false,false,true,Map.of(),
+                ghostDisplay.displayedTypeHypothesis());
+        check(noHypothesis!=null && "move:extremespeed".equals(noHypothesis.action())
+                && conditional!=null && "move:shadowclaw".equals(conditional.action()),
+                "conditioned public appearance changes Shadow's independent move preference");
+        check(ShadowLiveDecisionEngine.ordinary(
+                ghostDisplay.snapshot(),false,false,true,Map.of(),
+                List.of("unknown-type"))!=null,
+                "invalid hypothetical types do not authorize a hard type immunity");
+        var masked=with(shownGhost,"|-transform|p2a: Opp|p1a: Mine");
+        check(PublicOpponentAppearance.displayedTypeHypothesis("p2a",
+                new PublicProtocolEvidence().mechanicsEvents(),
+                id->List.of("ghost")).isEmpty()
+                && PublicLiveOpponentSnapshot.capture(new Object(),"p1",1,
+                    own(),true,()->masked,()->true,
+                    id->List.of("ghost","poison"))==null,
+                "Transform/unsupported public identity cannot borrow displayed typing");
+        var sourceCode=Files.readString(Path.of(
+                "src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+        check(sourceCode.contains("LivePublicSpeciesTyping::displayedTypeHypothesis")
+                && sourceCode.contains("witnessed.displayedTypeHypothesis()"),
+                "live chooser passes source-owned public registry possibility to Shadow");
         check(!display.safeLine().contains("Greninja")
                 && !display.safeLine().contains("p2a: Opp")
                 && !display.safeLine().contains("85/100"),
@@ -100,9 +142,15 @@ final class PublicLiveOpponentSnapshotRegression {
         check(capture(new Object(),"p1",1,own(),
                 with(opening(),"|-transform|p2a: Opp|p1a: Mine"))==null,
                 "Transform poisons public Pokemon continuity");
-        check(capture(new Object(),"p1",1,own(),
-                with(opening(),"|replace|p2a: Opp|Zoroark, L100"))==null,
-                "Illusion reveal is NOT a real-time stable identity certificate");
+        var publicReveal=capture(new Object(),"p1",1,own(),
+                with(opening(),"|replace|p2a: Opp|Zoroark, L100"));
+        check(publicReveal!=null
+                && publicReveal.snapshot().opponent().species().equals("zoroark")
+                && publicReveal.snapshot().opponent().types().equals(List.of("dark"))
+                && !publicReveal.snapshot().opponent().hpKnown()
+                && publicReveal.displayedTypeHypothesis().isEmpty(),
+                "actual current Illusion replace positively reveals species, "
+                    +"but not cross-switch identity or exact HP");
         check(capture(new Object(),"p1",1,own(),
                 with(opening(),"|-formechange|p2a: Opp|Greninja-Ash"))==null,
                 "unverified form change abstains");

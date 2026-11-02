@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -19,20 +20,25 @@ public final class PublicLiveOpponentSnapshot {
 
     public static final class Capture {
         private final BattleSnapshot snapshot;
+        private final List<String> displayedTypeHypothesis;
         private final Object battle;
         private final PublicSplitRoutingGate.Report routing;
         private final PublicOpponentIdentityContinuity.Report continuity;
         private final Supplier<List<String>> originalHistory;
         private final BooleanSupplier nativeOwnCurrent;
-        private Capture(BattleSnapshot snapshot,Object battle,
+        private Capture(BattleSnapshot snapshot,List<String> hypothesis,Object battle,
                 PublicSplitRoutingGate.Report routing,
                 PublicOpponentIdentityContinuity.Report continuity,
                 Supplier<List<String>> history,BooleanSupplier own) {
-            this.snapshot=snapshot;this.battle=battle;this.routing=routing;
+            this.snapshot=snapshot;
+            this.displayedTypeHypothesis=List.copyOf(hypothesis);
+            this.battle=battle;this.routing=routing;
             this.continuity=continuity;this.originalHistory=history;
             this.nativeOwnCurrent=own;
         }
         public BattleSnapshot snapshot(){return snapshot;}
+        /** Conditional public appearance; NEVER actual identity or confirmed typing. */
+        public List<String> displayedTypeHypothesis(){return displayedTypeHypothesis;}
         public boolean current(){
             try {
                 return nativeOwnCurrent.getAsBoolean() && routing.current()
@@ -49,7 +55,9 @@ public final class PublicLiveOpponentSnapshot {
                 +";types="+(snapshot.opponent().types().isEmpty()?"UNKNOWN":"EXPLICIT")
                 +";hp="+(snapshot.opponent().hpKnown()?"PUBLIC_DISPLAY":"UNKNOWN")
                 +";identity="+("UNVERIFIED".equals(snapshot.opponent().species())
-                    ?"UNKNOWN":"EXPLICIT")+";authority=NONE]";
+                    ?"UNKNOWN":"EXPLICIT")
+                +";displayHypothesis="+(displayedTypeHypothesis.isEmpty()?"UNKNOWN":"CONDITIONAL")
+                +";authority=NONE]";
         }
     }
 
@@ -61,6 +69,19 @@ public final class PublicLiveOpponentSnapshot {
     public static Capture capture(Object battle,String ownSide,int turn,
             BattleSnapshot ownOnly,boolean pinned,
             Supplier<List<String>> originalHistory,BooleanSupplier ownerCurrent){
+        return capture(battle,ownSide,turn,ownOnly,pinned,originalHistory,
+                ownerCurrent,PublicSpeciesCatalog::displayedTypeHypothesis);
+    }
+
+    /**
+     * Live integration may use the *installed public species registry* for
+     * hypothetical display-match types. No opponent object enters this API.
+     */
+    public static Capture capture(Object battle,String ownSide,int turn,
+            BattleSnapshot ownOnly,boolean pinned,
+            Supplier<List<String>> originalHistory,BooleanSupplier ownerCurrent,
+            Function<String,List<String>> displayedCatalog){
+        if(displayedCatalog==null)return null;
         if(battle==null || ownOnly==null || turn<1 || ownOnly.turn()!=turn
                 || !Set.of("p1","p2").contains(ownSide) || !pinned
                 || originalHistory==null || ownerCurrent==null)return null;
@@ -72,12 +93,7 @@ public final class PublicLiveOpponentSnapshot {
                     || !routing.matchesOriginalHistory(battle,history))return null;
             var continuity=new PublicOpponentIdentityContinuity.Session()
                     .inspect(battle,routing,history);
-            // A reused public POSITION does not bind persistent Pokemon
-            // identity. An explicitly witnessed current type is different.
-            if(!continuity.current() || !continuity.uncertainty().stream()
-                    .allMatch(risk->risk==PublicOpponentIdentityContinuity.Uncertainty.PUBLIC_DISPLAY_ONLY
-                        || risk==PublicOpponentIdentityContinuity.Uncertainty.SLOT_REUSED_NOT_POKEMON_REENTRY))
-                return null;
+            if(!continuity.current())return null;
             var publicEvents=new PublicProtocolEvidence();
             publicEvents.update(history);
             if(!publicEvents.complete() || !publicEvents.framed()
@@ -86,6 +102,15 @@ public final class PublicLiveOpponentSnapshot {
                     || (routing.publicTurn()!=turn && routing.publicTurn()!=turn-1))
                 return null;
             String foe=ownSide.equals("p1")?"p2a":"p1a";
+            String trueReveal=PublicOpponentAppearance.witnessedRevealSpecies(
+                    foe,publicEvents.mechanicsEvents());
+            // A public replace can *positively reveal* the current true
+            // species. It never binds identity across a switch or Transform.
+            if(!continuity.uncertainty().stream().allMatch(risk->
+                    risk==PublicOpponentIdentityContinuity.Uncertainty.PUBLIC_DISPLAY_ONLY
+                    || risk==PublicOpponentIdentityContinuity.Uncertainty.SLOT_REUSED_NOT_POKEMON_REENTRY
+                    || trueReveal!=null && risk==PublicOpponentIdentityContinuity.Uncertainty.ILLUSION_REVEAL_UNRESOLVED))
+                return null;
             boolean reused=publicEvents.reentryAmbiguous(foe)
                     || continuity.uncertainty().contains(
                         PublicOpponentIdentityContinuity.Uncertainty.SLOT_REUSED_NOT_POKEMON_REENTRY);
@@ -96,16 +121,27 @@ public final class PublicLiveOpponentSnapshot {
             // explicit current type notice remains valid for this active
             // position. HP and species continue to be UNKNOWN on reuse.
             if(observed==null || observed.ambiguous()
-                    && (!reused || !observed.types().known()))return null;
+                    && !reused && trueReveal==null)return null;
             // A named switch could be Illusion. Only positive public revelations
             // can supply real species and ONLY explicit type announcements can
             // supply current attack-effectiveness typing.
-            String species=!reused && observed.confirmedSpecies().known()
+            String species=trueReveal!=null && observed.confirmedSpecies().known()
+                    && trueReveal.equals(observed.confirmedSpecies().value())
                     && !observed.unsupportedEffects()
-                    ?observed.confirmedSpecies().value():"UNVERIFIED";
+                    ?trueReveal:"UNVERIFIED";
             List<String> types=observed.types().known()
                     ?observed.types().value():List.of();
-            if(reused && types.isEmpty())return null;
+            if(types.isEmpty() && !"UNVERIFIED".equals(species)) {
+                // Public species metadata is valid only after actual public
+                // Illusion removal, never after an ordinary displayed switch.
+                types=PublicOpponentAppearance.registryTypes(species,displayedCatalog);
+            }
+            var hypothetical=types.isEmpty() && "UNVERIFIED".equals(species)
+                    ?PublicOpponentAppearance.displayedTypeHypothesis(foe,
+                            publicEvents.mechanicsEvents(),displayedCatalog)
+                    :List.<String>of();
+            if(reused && types.isEmpty() && hypothetical.isEmpty()
+                    && "UNVERIFIED".equals(species))return null;
             var hpEvidence=publicEvents.hp(foe);
             double hp=!reused && hpEvidence.known()
                     ?Math.min(1.0,Math.max(0.0,hpEvidence.value().midpoint()))
@@ -116,7 +152,7 @@ public final class PublicLiveOpponentSnapshot {
             if(isFainted(publicEvents.mechanicsEvents(),foe))return null;
             if(types.isEmpty() && hp==BattleSnapshot.UNKNOWN_HP_FRACTION
                     && "UNVERIFIED".equals(species) && revealed.isEmpty()
-                    && item==null && ability==null)return null;
+                    && item==null && ability==null && hypothetical.isEmpty())return null;
             boolean tera=isTera(publicEvents.mechanicsEvents(),foe)
                     && types.size()==1;
             var opponent=new BattleSnapshot.Combatant(species,hp,types,
@@ -124,7 +160,7 @@ public final class PublicLiveOpponentSnapshot {
             var snapshot=new BattleSnapshot(turn,ownOnly.self(),opponent,
                     ownOnly.selfBench(),List.of(),ownOnly.legalMoves(),
                     ownOnly.legalSwitches(),Map.of(),tera,tera?types.getFirst():null);
-            var bound=new Capture(snapshot,battle,routing,continuity,
+            var bound=new Capture(snapshot,hypothetical,battle,routing,continuity,
                     originalHistory,ownerCurrent);
             return bound.current()?bound:null;
         }catch(RuntimeException invalid){return null;}

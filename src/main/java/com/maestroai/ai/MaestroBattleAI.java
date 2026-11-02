@@ -325,6 +325,11 @@ public class MaestroBattleAI extends RCTBattleAI {
         ownTransport.turnDispatched(battle, turn);
     }
 
+    /** Runtime-only public rules-catalog version pin; never opponent state. */
+    public static boolean publicCobblemon173Installed() {
+        return ownTransportVersionSupported();
+    }
+
     private static boolean ownTransportVersionSupported() {
         return net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("cobblemon")
                 .map(mod -> mod.getMetadata().getVersion().getFriendlyString().equals("1.7.3+1.21.1")).orElse(false);
@@ -490,12 +495,14 @@ public class MaestroBattleAI extends RCTBattleAI {
                             ()->ownLease.current() && !battle.getEnded()
                                 && nativeActor.getBattle()==battle
                                 && nativeActor.getRequest()==phaseShadowRequest
-                                && battle.getActor(nativeActor.getShowdownId())==nativeActor);
+                                && battle.getActor(nativeActor.getShowdownId())==nativeActor,
+                            LivePublicSpeciesTyping::displayedTypeHypothesis);
                     if(witnessed!=null){
                         var observed=witnessed.snapshot();
                         var preference=ShadowLiveDecisionEngine.ordinary(
                                 observed,false,moveset.getTrapped(),
-                                ownLease.current(),ownedFacts);
+                                ownLease.current(),ownedFacts,
+                                witnessed.displayedTypeHypothesis());
                         if(preference==null)
                             preference=ShadowLiveDecisionEngine.minimumNativeLegal(
                                     observed,false,moveset.getTrapped(),

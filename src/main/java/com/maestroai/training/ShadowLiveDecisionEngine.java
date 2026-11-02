@@ -97,6 +97,21 @@ public final class ShadowLiveDecisionEngine {
     public static Choice ordinary(BattleSnapshot snapshot,boolean requestForced,
                                    boolean requestTrapped,boolean sourceCurrent,
                                    Map<String,OwnMoveFacts> ownedMoveFacts) {
+        return ordinary(snapshot,requestForced,requestTrapped,sourceCurrent,
+                ownedMoveFacts,List.of());
+    }
+
+    /**
+     * OPTIONAL public-display scenario: may be an Illusion. This is a
+     * conditional heuristic, NOT actual opponent typing, immunity or odds.
+     * Current explicit types in the snapshot always take precedence.
+     */
+    public static Choice ordinary(BattleSnapshot snapshot,boolean requestForced,
+                                   boolean requestTrapped,boolean sourceCurrent,
+                                   Map<String,OwnMoveFacts> ownedMoveFacts,
+                                   List<String> displayedTypeHypothesis) {
+        if(displayedTypeHypothesis==null || displayedTypeHypothesis.size()>2)
+            return null;
         if(!sourceCurrent || snapshot==null || requestForced
                 || snapshot.self().fainted() || snapshot.opponent().fainted()
                 || snapshot.legalMoves().size()>16
@@ -116,7 +131,8 @@ public final class ShadowLiveDecisionEngine {
         List<Scored> scores=new ArrayList<>();
         for(String id:snapshot.legalMoves()){
             if(id==null || id.isBlank() || !seen.add("move:"+id))return null;
-            Scored candidate=scoreMove(id,snapshot,ownedMoveFacts.get(id));
+            Scored candidate=scoreMove(id,snapshot,ownedMoveFacts.get(id),
+                    displayedTypeHypothesis);
             if(candidate!=null)scores.add(candidate);
         }
         for(int i=0;i<snapshot.legalSwitches().size();i++){
@@ -182,7 +198,8 @@ public final class ShadowLiveDecisionEngine {
     }
 
     private static Scored scoreMove(String id,BattleSnapshot snapshot,
-                                    OwnMoveFacts nativeFacts){
+                                    OwnMoveFacts nativeFacts,
+                                    List<String> displayedTypeHypothesis){
         CobblemonMechanics.Move mechanics=CobblemonMechanics.move(id);
         boolean nativeAttack=nativeFacts!=null && nativeFacts.power()>0
                 && nativeFacts.accuracy()>0
@@ -200,6 +217,18 @@ public final class ShadowLiveDecisionEngine {
                         snapshot.opponent().types());
                 if(exponent==Integer.MIN_VALUE)return null; // witnessed immunity
                 typeFactor=Math.scalb(1.0,exponent);
+            } else if(!displayedTypeHypothesis.isEmpty()){
+                // A displayed species may be Illusion. Never conclude an
+                // immunity or exclude a real legal attack from this candidate.
+                int conditional;
+                try {
+                    conditional=CobblemonMechanics.effectiveness(
+                        nativeAttack?nativeFacts.type():mechanics.type(),
+                        displayedTypeHypothesis);
+                } catch(RuntimeException invalid){conditional=0;}
+                if(conditional==Integer.MIN_VALUE)typeFactor=.40;
+                else if(conditional>0)typeFactor=1.0+.35*Math.min(2,conditional);
+                else if(conditional<0)typeFactor=1.0-.20*Math.min(2,-conditional);
             }
             String type=nativeAttack?nativeFacts.type():mechanics.type();
             double stab=snapshot.self().types().stream().anyMatch(t->
