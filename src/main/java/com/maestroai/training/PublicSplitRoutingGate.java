@@ -30,7 +30,10 @@ public final class PublicSplitRoutingGate {
                     "-boost","-unboost","-setboost","-clearboost","-clearallboost",
                     "-copyboost","-swapboost","-invertboost",
                     "-curestatus","faint","-activate","-sidestart","-sideend",
-                    "-swapsideconditions","-end","-terastallize","-start");
+                    "-swapsideconditions","-end","-terastallize","-start",
+"-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
+            "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
+            "cant", "-block");
     // Known source-public framing and annotations that cannot change a
     // species/type/health projection. Filter and provenance ignore them too.
     // Unknown or private event kinds are NEVER discarded speculatively.
@@ -283,6 +286,26 @@ public final class PublicSplitRoutingGate {
                                 || !publicFields[4].matches(
                                     "[a-zA-Z]{3,12}(?:/[a-zA-Z]{3,12}){0,2}"))
                             throw invalid();
+                    }
+                    // Public field and gimmick notices are observational
+                    // only. Require source-shaped actors/effects and bounded
+                    // annotations; reject raw private payloads or unknown kinds.
+                    if(Set.of("-dynamax","-zpower","-singleturn",
+                            "-singlemove","-prepare","-mustrecharge",
+                            "cant","-block").contains(type)){
+                        if(publicFields.length<3 || publicFields.length>7
+                                || !ACTOR.matcher(publicFields[2]).matches())
+                            throw invalid();
+                        for(int field=3;field<publicFields.length;field++){
+                            String value=publicFields[field];
+                            if(!publicEffect(value) && !tag(value))throw invalid();
+                        }
+                    }
+                    if(Set.of("-weather","-fieldstart","-fieldend").contains(type)){
+                        if(publicFields.length<3 || publicFields.length>7
+                                || !publicEffect(publicFields[2]))throw invalid();
+                        for(int field=3;field<publicFields.length;field++)
+                            if(!tag(publicFields[field]))throw invalid();
                     }
                     if(type.equals("-item") || type.equals("-enditem")
                             || type.equals("-endability")){

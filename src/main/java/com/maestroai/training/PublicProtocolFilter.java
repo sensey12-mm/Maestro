@@ -21,7 +21,10 @@ public final class PublicProtocolFilter {
             "-item", "-enditem", "-ability", "-endability",
             "-status", "-curestatus", "-transform", "-start", "-end", "-activate",
             "-terastallize", "-damage", "-heal", "-sethp",
-            "-sidestart", "-sideend", "-swapsideconditions"
+            "-sidestart", "-sideend", "-swapsideconditions",
+            "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
+            "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
+            "cant", "-block"
     );
 
     private PublicProtocolFilter() {}

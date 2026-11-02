@@ -28,7 +28,10 @@ public final class PublicEnvelopeProvenance {
             "-copyboost", "-swapboost", "-invertboost", "-item", "-enditem",
             "-ability", "-endability", "-status", "-curestatus", "-transform",
             "-start", "-end", "-activate", "-terastallize", "-damage", "-heal",
-            "-sethp", "-sidestart", "-sideend", "-swapsideconditions"
+            "-sethp", "-sidestart", "-sideend", "-swapsideconditions",
+            "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
+            "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
+            "cant", "-block"
     );
 
     private PublicEnvelopeProvenance() {}

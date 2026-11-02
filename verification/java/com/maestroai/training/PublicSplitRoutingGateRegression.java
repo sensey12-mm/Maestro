@@ -144,6 +144,19 @@ final class PublicSplitRoutingGateRegression {
                 "unrecognized boost annotation");
         deny(add(nativeOpening,"sideupdate\np1\n|request|"+SECRET),
                 "native private request never recast as a public event");
+        var ordinaryPublic=new PublicSplitRoutingGate.Session().inspect(
+                battle,add(nativeOpening,
+                    "update\n|-weather|RainDance",
+                    "update\n|-fieldstart|move: Trick Room",
+                    "update\n|-dynamax|p2a: Opp",
+                    "update\n|-zpower|p1a: Own",
+                    "update\n|-singleturn|p2a: Opp|move: Protect"),true);
+        check(ordinaryPublic.current() && ordinaryPublic.directEvents()==8
+                && !ordinaryPublic.livePromotionAuthorized(),
+                "strict public field and gimmick notices remain diagnostic only");
+        deny(add(nativeOpening,"update\n|-zpower|p1a: Own|{"+SECRET+"}"),
+                "private-shaped gimmick annotation rejected");
+
         var witnessedItem=new PublicSplitRoutingGate.Session().inspect(battle,
                 add(nativeOpening,"update\n|-item|p1a: Own|Leftovers"),true);
         check(witnessedItem.current()
