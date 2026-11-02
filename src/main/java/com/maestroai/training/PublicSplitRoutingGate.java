@@ -25,10 +25,29 @@ public final class PublicSplitRoutingGate {
             Set.of("-damage","-heal","-sethp","switch","drag");
     private static final Set<String> DIRECT_TYPES=
             Set.of("turn","move","switch","drag","replace","detailschange",
-                    "-formechange","-transform","-damage","-heal","-status",
-                    "-ability","-boost",
-                    "-curestatus","faint","-activate","-sidestart","-unboost","-end",
-                    "-terastallize","-start");
+                    "-formechange","-mega","-transform","-damage","-heal","-sethp",
+                    "-status","-ability","-endability","-item","-enditem",
+                    "-boost","-unboost","-setboost","-clearboost","-clearallboost",
+                    "-copyboost","-swapboost","-invertboost",
+                    "-curestatus","faint","-activate","-sidestart","-sideend",
+                    "-swapsideconditions","-end","-terastallize","-start");
+    // Known source-public framing and annotations that cannot change a
+    // species/type/health projection. Filter and provenance ignore them too.
+    // Unknown or private event kinds are NEVER discarded speculatively.
+    private static final Set<String> PUBLIC_METADATA=Set.of(
+            "player","teamsize","tier","rule","seed","upkeep",
+            "gen","gametype","start","-nothing","-anim",
+            "-mostlyineffective","-extremelyeffective","-crit",
+            "-supereffective","-resisted","-immune","-miss",
+            "-fail","-notarget");
+    private static boolean ignorableMetadata(String line) {
+        if(line==null || line.length()>1024 || !line.startsWith("|"))
+            return false;
+        if(line.matches("\\|t:\\|[0-9]{1,13}"))return true;
+        int split=line.indexOf('|',1);
+        String kind=split<0?line.substring(1):line.substring(1,split);
+        return PUBLIC_METADATA.contains(kind);
+    }
     private static final Pattern ACTOR=Pattern.compile("p[12][a-c]: [^|\\r\\n]{1,80}");
     private static final Pattern HP=Pattern.compile(
             "(?:[0-9]{1,5}/[1-9][0-9]{0,5}|[0-9]{1,3}%)(?: (?:brn|par|psn|tox|slp|frz|fnt))?");
@@ -239,6 +258,7 @@ public final class PublicSplitRoutingGate {
                     splitChunks.add(chunkOrdinal);
                     splits++;
                 } else {
+                    if(ignorableMetadata(line))continue;
                     if(!DIRECT_TYPES.contains(type))throw invalid();
                     String[] publicFields=fields(line);
                     // Only verified common public events are added in 6.23.

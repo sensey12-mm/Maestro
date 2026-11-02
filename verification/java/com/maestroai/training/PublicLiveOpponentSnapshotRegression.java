@@ -109,6 +109,24 @@ final class PublicLiveOpponentSnapshotRegression {
         check(capture(new Object(),"p1",1,own(),
                 with(opening(),"|switch|p2a: Opp|Greninja, L100|100/100"))==null,
                 "reused slot cannot masquerade as known same opponent");
+        var meta=with(opening(),"|upkeep","|-supereffective|p2a: Opp",
+                "|-crit|p1a: Mine");
+        check(capture(new Object(),"p1",1,own(),meta)!=null,
+                "public no-effect annotations do not poison current source evidence");
+        var switchWithTera=with(opening(),
+                "|switch|p2a: Opp|Sableye, L100|100/100",
+                "|-terastallize|p2a: Opp|Ghost");
+        var explicitAfterSwitch=capture(new Object(),"p1",1,own(),switchWithTera);
+        check(explicitAfterSwitch!=null
+                && explicitAfterSwitch.snapshot().opponent().types().equals(List.of("ghost"))
+                && !explicitAfterSwitch.snapshot().opponent().hpKnown()
+                && explicitAfterSwitch.snapshot().opponent().species().equals("UNVERIFIED"),
+                "reused public slot stays unbound but independent current explicit "
+                    +"Tera typing is usable without fabricated HP/species");
+        var mega=with(opening(),"|-mega|p2a: Opp|Gengar|Gengarite");
+        var megaReport=capture(new Object(),"p1",1,own(),mega);
+        check(megaReport!=null && megaReport.snapshot().opponent().types().isEmpty(),
+                "unverified mega form never manufactures opponent type");
         var incomplete=new ArrayList<>(opening());
         incomplete.add("update\n|split|p2\n|-damage|p2a: Opp|1/100");
         check(capture(new Object(),"p1",1,own(),incomplete)==null,

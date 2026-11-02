@@ -455,6 +455,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             // Evaluate Legacy exactly once as a safe fallback; independent
             // Shadow actions require separately authenticated native evidence.
             phaseShadowPrepared=null;
+            forcedReadinessReason="NOT_ATTEMPTED";
             phaseShadowBattle=battle;
             phaseShadowRequest=activePokemon==null || activePokemon.getActor()==null
                     ?null:activePokemon.getActor().getRequest();
@@ -495,6 +496,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         var preference=ShadowLiveDecisionEngine.ordinary(
                                 observed,false,moveset.getTrapped(),
                                 ownLease.current(),ownedFacts);
+                        if(preference==null)
+                            preference=ShadowLiveDecisionEngine.minimumNativeLegal(
+                                    observed,false,moveset.getTrapped(),
+                                    ownLease.current(),ownedFacts);
                         if(preference!=null){
                             var proof=ShadowPromotionPreparation.inspectPublicOnly(
                                     battle,phaseShadowRequest,observed,
@@ -513,6 +518,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                         var preference=ShadowLiveDecisionEngine.ordinary(
                                 owned,false,moveset.getTrapped(),
                                 ownLease.current(),ownedFacts);
+                        if(preference==null)
+                            preference=ShadowLiveDecisionEngine.minimumNativeLegal(
+                                    owned,false,moveset.getTrapped(),
+                                    ownLease.current(),ownedFacts);
                         if(preference!=null){
                             var proof=ShadowPromotionPreparation.inspectOwnOnly(
                                     battle,phaseShadowRequest,owned,
@@ -581,7 +590,8 @@ public class MaestroBattleAI extends RCTBattleAI {
                     +";currentNativeLegalRequired=true;legacyFallbackAvailable=true");
             if(forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY)
                 System.out.println("[MaestroAI] Shadow forced fallback stage="
-                        +forcedPreparationStage+";authority=LEGACY");
+                        +forcedPreparationStage+";reason="+forcedReadinessReason
+                        +";authority=LEGACY");
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
             // Phase 6.22's historical source path used to run only inside
             // chooseLegacy -> syncPublicProtocolObservation. Once Shadow
@@ -890,9 +900,12 @@ public class MaestroBattleAI extends RCTBattleAI {
      * invent a matchup, or infer its hidden moves/items/abilities.
      * All native evidence is rechecked when the proposal is consumed.
      */
+    private String forcedReadinessReason="NOT_ATTEMPTED";
+
     private ShadowPromotionPreparation.Report prepareShadowForcedReplacement(
             ActiveBattlePokemon active,PokemonBattle battle) {
         try {
+            forcedReadinessReason="SOURCE_UNAVAILABLE";
             if(active==null || battle==null || battle.getEnded()
                     || active.getActor()==null || !ownTransportVersionSupported()
                     || !RuntimeBattleMode.ordinary(battle)
@@ -900,12 +913,18 @@ public class MaestroBattleAI extends RCTBattleAI {
                 return null;
             var actor=active.getActor();
             var request=actor.getRequest();
+            // This is already an actively invoked native chooser. Cobblemon
+            // may clear mustChoose / retain a prior response while handling
+            // a faint replacement; neither is proof of an invalid fresh forced
+            // request. Require original-own lease and actual forced request,
+            // with exact action validity checked again before execution.
+            forcedReadinessReason="NO_CURRENT_NATIVE_FORCED_REQUEST";
             if(request==null || request!=phaseShadowRequest
-                    || actor.getBattle()!=battle || !actor.getMustChoose()
-                    || !actor.getResponses().isEmpty()
+                    || actor.getBattle()!=battle
                     || request.getWait() || request.getForceSwitch()==null
                     || !request.getForceSwitch().contains(true)
                     || actor.getPokemonList()==null)return null;
+            forcedReadinessReason="NO_ELIGIBLE_OWN_RESERVE";
             var reserves=new java.util.ArrayList<ShadowLiveDecisionEngine.Reserve>();
             for(BattlePokemon reserve:actor.getPokemonList()){
                 if(reserve==null || reserve.getUuid()==null)return null;
@@ -920,6 +939,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             }
             var choice=ShadowLiveDecisionEngine.forcedReplacement(reserves,true);
             if(choice==null)return null;
+            forcedReadinessReason="FORCED_PROPOSAL_PROOF_ABSTAIN";
             var selectedId=java.util.UUID.fromString(choice.action().substring(7));
             var originalRequest=request;
             var originalActor=actor;
@@ -938,8 +958,13 @@ public class MaestroBattleAI extends RCTBattleAI {
                             && p.canBeSentOut() && !p.getGone()
                             && p.getHealth()>0 && !p.isSentOut()).count()==1);
             System.out.println("[MaestroAI] "+choice.safeLine());
+            if(result!=null && result.proposal()!=null)
+                forcedReadinessReason="READY";
             return result;
-        }catch(RuntimeException unsupported){return null;}
+        }catch(RuntimeException unsupported){
+            forcedReadinessReason="FORCED_SOURCE_EXCEPTION";
+            return null;
+        }
     }
 
     /**

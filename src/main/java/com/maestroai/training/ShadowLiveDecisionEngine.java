@@ -18,7 +18,7 @@ public final class ShadowLiveDecisionEngine {
 
     public enum Reason {
         MOVE, RECOVERY, SETUP, STATUS, VOLUNTARY_SWITCH,
-        FORCED_REPLACEMENT, UNKNOWN_OR_UNSUPPORTED, NO_LEGAL_ACTION
+        FORCED_REPLACEMENT, NATIVE_LEGAL_MINIMUM, UNKNOWN_OR_UNSUPPORTED, NO_LEGAL_ACTION
     }
     public record Choice(String action, Reason reason, int scoredCandidates) {
         public Choice {
@@ -143,6 +143,44 @@ public final class ShadowLiveDecisionEngine {
         Scored selected=scores.getFirst();
         return new Choice(selected.action(),selected.reason(),scores.size());
     }
+    /**
+     * Deterministic independently sourced native legal action when all
+     * supported tactical estimates abstain. Never claims move utility.
+     */
+    public static Choice minimumNativeLegal(BattleSnapshot own,boolean forced,
+            boolean trapped,boolean sourceCurrent,
+            Map<String,OwnMoveFacts> ownFacts) {
+        if(own==null || !sourceCurrent || forced || own.self().fainted()
+                || own.legalMoves().size()>16 || own.legalSwitches().size()>6
+                || own.selfBench().size()!=own.legalSwitches().size()
+                || ownFacts==null || ownFacts.size()>16
+                || ownFacts.entrySet().stream().anyMatch(e->
+                    e.getKey()==null || e.getValue()==null
+                    || !e.getKey().equals(e.getValue().id())
+                    || !own.legalMoves().contains(e.getKey())))return null;
+        Set<String> seen=new HashSet<>();
+        String chosen=null;
+        for(String id:own.legalMoves()){
+            if(id==null || id.isBlank() || !seen.add(id))return null;
+            if(chosen==null)chosen=id;
+            var facts=ownFacts.get(id);
+            if(facts!=null && facts.power()>0 && facts.accuracy()>0
+                    && ("physical".equals(facts.category())
+                         || "special".equals(facts.category()))){
+                chosen=id;
+                break;
+            }
+        }
+        if(chosen!=null)return new Choice("move:"+chosen,Reason.NATIVE_LEGAL_MINIMUM,
+                own.legalMoves().size()+own.legalSwitches().size());
+        if(trapped || own.legalSwitches().isEmpty())return null;
+        for(String id:own.legalSwitches()){
+            if(id==null || id.isBlank() || !seen.add(id))return null;
+        }
+        return new Choice("switch:"+own.legalSwitches().getFirst(),
+                Reason.NATIVE_LEGAL_MINIMUM,own.legalSwitches().size());
+    }
+
     private static Scored scoreMove(String id,BattleSnapshot snapshot,
                                     OwnMoveFacts nativeFacts){
         CobblemonMechanics.Move mechanics=CobblemonMechanics.move(id);

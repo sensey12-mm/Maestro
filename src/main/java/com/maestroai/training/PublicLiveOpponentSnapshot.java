@@ -72,10 +72,11 @@ public final class PublicLiveOpponentSnapshot {
                     || !routing.matchesOriginalHistory(battle,history))return null;
             var continuity=new PublicOpponentIdentityContinuity.Session()
                     .inspect(battle,routing,history);
-            if(!continuity.current()
-                    || continuity.verdict()!=PublicOpponentIdentityContinuity.Verdict.PUBLIC_POSITIONS_ONLY_UNBOUND
-                    || !continuity.uncertainty().equals(Set.of(
-                        PublicOpponentIdentityContinuity.Uncertainty.PUBLIC_DISPLAY_ONLY)))
+            // A reused public POSITION does not bind persistent Pokemon
+            // identity. An explicitly witnessed current type is different.
+            if(!continuity.current() || !continuity.uncertainty().stream()
+                    .allMatch(risk->risk==PublicOpponentIdentityContinuity.Uncertainty.PUBLIC_DISPLAY_ONLY
+                        || risk==PublicOpponentIdentityContinuity.Uncertainty.SLOT_REUSED_NOT_POKEMON_REENTRY))
                 return null;
             var publicEvents=new PublicProtocolEvidence();
             publicEvents.update(history);
@@ -85,7 +86,9 @@ public final class PublicLiveOpponentSnapshot {
                     || (routing.publicTurn()!=turn && routing.publicTurn()!=turn-1))
                 return null;
             String foe=ownSide.equals("p1")?"p2a":"p1a";
-            if(publicEvents.reentryAmbiguous(foe))return null;
+            boolean reused=publicEvents.reentryAmbiguous(foe)
+                    || continuity.uncertainty().contains(
+                        PublicOpponentIdentityContinuity.Uncertainty.SLOT_REUSED_NOT_POKEMON_REENTRY);
             var mechanics=new PublicMechanicsEvidence(ignored->null);
             mechanics.update(publicEvents);
             var observed=mechanics.observation(foe);
@@ -93,13 +96,14 @@ public final class PublicLiveOpponentSnapshot {
             // A named switch could be Illusion. Only positive public revelations
             // can supply real species and ONLY explicit type announcements can
             // supply current attack-effectiveness typing.
-            String species=observed.confirmedSpecies().known()
+            String species=!reused && observed.confirmedSpecies().known()
                     && !observed.unsupportedEffects()
                     ?observed.confirmedSpecies().value():"UNVERIFIED";
             List<String> types=observed.types().known()
                     ?observed.types().value():List.of();
+            if(reused && types.isEmpty())return null;
             var hpEvidence=publicEvents.hp(foe);
-            double hp=hpEvidence.known()
+            double hp=!reused && hpEvidence.known()
                     ?Math.min(1.0,Math.max(0.0,hpEvidence.value().midpoint()))
                     :BattleSnapshot.UNKNOWN_HP_FRACTION;
             var revealed=publicMoves(publicEvents.mechanicsEvents(),foe);
