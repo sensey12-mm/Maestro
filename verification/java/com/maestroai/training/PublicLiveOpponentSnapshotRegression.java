@@ -117,27 +117,6 @@ final class PublicLiveOpponentSnapshotRegression {
                 "|switch|p2a: Opp|Sableye, L100|100/100",
                 "|-terastallize|p2a: Opp|Ghost");
         var explicitAfterSwitch=capture(new Object(),"p1",1,own(),switchWithTera);
-        if(explicitAfterSwitch==null){
-            var route=new PublicSplitRoutingGate.Session().inspect(
-                    new Object(),switchWithTera,true);
-            var game=new Object();
-            var source=new PublicSplitRoutingGate.Session().inspect(
-                    game,switchWithTera,true);
-            var identity=new PublicOpponentIdentityContinuity.Session().inspect(
-                    game,source,switchWithTera);
-            var proto=new PublicProtocolEvidence();
-            proto.update(switchWithTera);
-            var mechanics=new PublicMechanicsEvidence(ignored->null);
-            mechanics.update(proto);
-            var appearance=mechanics.observation("p2a");
-            System.out.println("Promotion6 source diagnosis routing="+route.verdict()
-                +";identity="+identity.verdict()
-                +";uncertainty="+identity.uncertainty()
-                +";protoComplete="+proto.complete()
-                +";protoTurn="+proto.publicTurn()
-                +";typesKnown="+(appearance!=null && appearance.types().known())
-                +";ambiguous="+(appearance!=null && appearance.ambiguous()));
-        }
         check(explicitAfterSwitch!=null
                 && explicitAfterSwitch.snapshot().opponent().types().equals(List.of("ghost"))
                 && !explicitAfterSwitch.snapshot().opponent().hpKnown()

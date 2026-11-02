@@ -592,6 +592,16 @@ public class MaestroBattleAI extends RCTBattleAI {
                 System.out.println("[MaestroAI] Shadow forced fallback stage="
                         +forcedPreparationStage+";reason="+forcedReadinessReason
                         +";authority=LEGACY");
+            if(!forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY){
+                String ordinaryStage=ownChoiceLease==null?"NO_OWN_LEASE"
+                        :!ownChoiceLease.current()?"STALE_OWN_LEASE"
+                        :phaseShadowLegalWindow==null?"NATIVE_LEGAL_WINDOW_UNAVAILABLE"
+                        :choiceSnapshot==null?"INDEPENDENT_SNAPSHOT_UNAVAILABLE"
+                        :proposal==null?"NO_INDEPENDENT_PROPOSAL"
+                        :"POST_PROPOSAL_NATIVE_LEGALITY_OR_EMERGENCY";
+                System.out.println("[MaestroAI] Shadow ordinary fallback stage="
+                        +ordinaryStage+";authority=LEGACY");
+            }
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
             // Phase 6.22's historical source path used to run only inside
             // chooseLegacy -> syncPublicProtocolObservation. Once Shadow

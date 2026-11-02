@@ -92,7 +92,11 @@ public final class PublicLiveOpponentSnapshot {
             var mechanics=new PublicMechanicsEvidence(ignored->null);
             mechanics.update(publicEvents);
             var observed=mechanics.observation(foe);
-            if(observed==null || observed.ambiguous())return null;
+            // Reused nicknames are not stable identities. However, a fresh
+            // explicit current type notice remains valid for this active
+            // position. HP and species continue to be UNKNOWN on reuse.
+            if(observed==null || observed.ambiguous()
+                    && (!reused || !observed.types().known()))return null;
             // A named switch could be Illusion. Only positive public revelations
             // can supply real species and ONLY explicit type announcements can
             // supply current attack-effectiveness typing.
