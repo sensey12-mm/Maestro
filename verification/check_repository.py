@@ -55,10 +55,13 @@ def check_workflow(source):
         # README-only changes. Workflow-level path skips leave required checks pending.
         if re.search(r'(?m)^ +(paths|paths-ignore):', block):
             raise ValueError('Path filters can strand required verification')
-    # SHA-keyed integration jobs must not queue behind older commits.
-    if ("(github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567') && github.sha || 'shared'"
-            not in source):
-        raise ValueError('Maestro4567 requires SHA-isolated CI concurrency')
+    # A newer integration commit must retire obsolete heavy verification.
+    # Exact commit isolation belongs to immutable GitHub run / artifact SHAs,
+    # enforced below; serializing/cancelling branch supersession is safe.
+    if ("group: verify-${{ github.event.pull_request.number || github.ref }}" not in source
+            or "cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567' }}" not in source
+            or "&& github.sha || 'shared'" in source):
+        raise ValueError('Maestro4567 requires branch-scoped superseded-run cancellation')
     if 'python3 verification/check_repository.py\n' not in source or 'python3 verification/check_repository.py --self-test\n' not in source:
         raise ValueError('Safeguards not executed')
     if 'python3 verification/phase5_verify_download.py --self-test\n' not in source:
@@ -166,14 +169,27 @@ class SafeguardRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Maestro4567'):
             check_workflow(broken)
 
-    def test_sha_isolated_maestro4567_ci(self):
+    def test_superseded_maestro4567_ci_is_cancelled_but_exact_commit_published(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
         check_workflow(source)
         for before, after in (
-                ("github.ref == 'refs/heads/Maestro4567'", "github.ref == 'refs/heads/not-the-integration-branch'"),
-                ("&& github.sha || 'shared'", "&& 'shared'")):
-            with self.subTest(before=before), self.assertRaisesRegex(ValueError, 'SHA-isolated'):
-                check_workflow(source.replace(before, after))
+                ("group: verify-${{ github.event.pull_request.number || github.ref }}",
+                 "group: verify-${{ github.event.pull_request.number || github.sha }}"),
+                ("github.ref == 'refs/heads/Maestro4567'",
+                 "github.ref == 'refs/heads/not-the-integration-branch'"),
+                ("cancel-in-progress:", "do-not-cancel:"),
+                ("group: verify-${{ github.event.pull_request.number || github.ref }}",
+                 "group: verify-shared")):
+            with self.subTest(before=before), self.assertRaisesRegex(
+                    ValueError, 'branch-scoped'):
+                check_workflow(source.replace(before, after, 1))
+        # Supersession must never turn release artifacts into branch-latest
+        # downloads, or permit publish when one simulator job failed.
+        for before, after in (
+                ("maestroai-candidate-${{ github.sha }}", "maestroai-candidate-latest"),
+                ("    needs: [verify, pack_source]", "    needs: [verify]")):
+            with self.subTest(before=before), self.assertRaises(ValueError):
+                check_workflow(source.replace(before, after, 1))
 
     def test_installed_artifact_self_test_required(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
