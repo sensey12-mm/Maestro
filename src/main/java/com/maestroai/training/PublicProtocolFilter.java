@@ -58,10 +58,10 @@ public final class PublicProtocolFilter {
                 if (splitRemaining > 0) {
                     splitRemaining--;
                     if (splitRemaining == 1) continue; // private side
-                    if (allowed(line)) result.add(line);
+                    if (allowed(line,nativeOnly)) result.add(line);
                     continue;
                 }
-                if (allowed(line)) result.add(line);
+                if (allowed(line,nativeOnly)) result.add(line);
             }
         }
         return List.copyOf(result);

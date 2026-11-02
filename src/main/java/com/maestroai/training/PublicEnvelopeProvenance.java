@@ -92,7 +92,7 @@ public final class PublicEnvelopeProvenance {
                         return new Audit(false, "MALFORMED_SPLIT_PAYLOAD", List.of());
                     pending--;
                     if (pending == 0) {
-                        if (allowed(line)) {
+                        if (allowed(line,nativeOnly)) {
                             observed.add(line);
                             sources.add(new Origin(Route.SPLIT_PUBLIC, target));
                         }
@@ -101,7 +101,7 @@ public final class PublicEnvelopeProvenance {
                     // The first split payload (private) is discarded entirely.
                     continue;
                 }
-                if (allowed(line)) {
+                if (allowed(line,nativeOnly)) {
                     observed.add(line);
                     sources.add(new Origin(framed ? Route.DIRECT_UPDATE
                                                   : Route.UNFRAMED_UNKNOWN, "NONE"));

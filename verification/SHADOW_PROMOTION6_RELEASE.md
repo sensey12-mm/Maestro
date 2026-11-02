@@ -17,3 +17,6 @@ The owner-provided 1.1.3 Minecraft log records 23 Shadow selections and six Lega
 A green CI suite, should it occur, establishes only the stated deterministic source-level and synthetic tests. It **cannot** establish that the installed 1.1.4 build actually selects all forced replacements, has zero routine Legacy fallback, or recognizes all safely observable opponents. A fresh Minecraft acceptance log is needed to validate these properties and investigate any remaining failure. Until then full live promotion is **PENDING**, not completed.
 
 Existing native legality, owning request currentness, battle identity and automatic Legacy emergency recovery remain active. Phase 6.22 split-return hook was not inferred from the separate Phase 6.24 sided-return callback: HOOK_UNOBSERVED remains a distinct missing observation and cannot be called repaired without new evidence.
+
+## Phase 5 offline compatibility
+Weather/field/gimmick event kinds were admitted only by the new *native-source-specific* Phase 6.16 routing/filter reconciliation. The existing Phase 5 offline replay PublicProtocolFilter.publicEvents and PublicEnvelopeProvenance.reconcile retain their original frozen allowlists, including rejection of injected weather and unreviewed replay events. The Phase 5.5 hardening regression must continue to pass. No retrospective offline evidence authority is expanded.
