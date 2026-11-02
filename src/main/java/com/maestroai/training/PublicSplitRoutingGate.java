@@ -262,6 +262,18 @@ public final class PublicSplitRoutingGate {
                     splits++;
                 } else {
                     if(ignorableMetadata(line))continue;
+                    // Cobblemon PpUpdateInstruction is a PRIVATE in-memory
+                    // simulator sync in the original update history. Drop it
+                    // before public extraction; its opponent moves/PP never
+                    // become tactical evidence, nor are they logged/stored.
+                    // Only a narrow source-shaped, bounded UUID/PP tuple is
+                    // eligible for this private-drop path.
+                    if(type.equals("pp_update")){
+                        if(line.length()>512 || !line.matches(
+                                "\\|pp_update\\|p[12][a-c]?: [0-9a-fA-F-]{36}\\|[^|\\r\\n]{1,360}"))
+                            throw invalid();
+                        continue;
+                    }
                     if(!DIRECT_TYPES.contains(type))throw invalid();
                     String[] publicFields=fields(line);
                     // Only verified common public events are added in 6.23.

@@ -142,6 +142,19 @@ final class PublicSplitRoutingGateRegression {
                 "out-of-range boosted stat level");
         deny(add(nativeOpening,"update\n|-boost|p2a: Opp|atk|1|[private] "+SECRET),
                 "unrecognized boost annotation");
+        var privatePp=add(nativeOpening,"update\n|pp_update|p2a: 11111111-1111-1111-1111-111111111111|Shadow Ball: 10, Recover: 8");
+        var privatePpReport=new PublicSplitRoutingGate.Session().inspect(
+                new Object(),privatePp,true);
+        check(privatePpReport.current()
+                && privatePpReport.directEvents()==3
+                && !privatePpReport.safeLine().contains("Shadow Ball")
+                && PublicProtocolFilter.nativePublicEvents(privatePp).equals(
+                        PublicProtocolFilter.nativePublicEvents(nativeOpening)),
+                "private Cobblemon PP sync is structurally ignored, never public");
+        deny(add(nativeOpening,"update\n|pp_update|p2a: NOT-A-UUID|Shadow Ball: 10"),
+                "unbound PP private sync cannot smuggle unverified identity");
+        deny(add(nativeOpening,"update\n|pp_update|p2a: 11111111-1111-1111-1111-111111111111|Shadow Ball: 10|request|secret"),
+                "private PP record cannot contain arbitrary extra protocol fields");
         deny(add(nativeOpening,"sideupdate\np1\n|request|"+SECRET),
                 "native private request never recast as a public event");
         var ordinaryPublic=new PublicSplitRoutingGate.Session().inspect(
