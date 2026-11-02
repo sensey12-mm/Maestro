@@ -20,14 +20,15 @@ import java.util.regex.Pattern;
 public final class PublicSplitRoutingGate {
     public static final String SCHEMA="phase6.16.split-routing-custody.v1";
     public static final String SOURCE=ReadOnlyShadowObservationBridge.COBBLEMON_VERSION;
-    private static final int MAX_CHUNKS=128, MAX_CHARS=65536, MAX_LINES=64;
+    private static final int MAX_CHUNKS=2048, MAX_CHARS=4194304, MAX_LINES=64;
     private static final Set<String> SPLIT_TYPES=
             Set.of("-damage","-heal","-sethp","switch","drag");
     private static final Set<String> DIRECT_TYPES=
             Set.of("turn","move","switch","drag","replace","detailschange",
                     "-formechange","-transform","-damage","-heal","-status",
                     "-ability","-boost",
-                    "-curestatus","faint","-activate","-sidestart","-unboost","-end");
+                    "-curestatus","faint","-activate","-sidestart","-unboost","-end",
+                    "-terastallize","-start");
     private static final Pattern ACTOR=Pattern.compile("p[12][a-c]: [^|\\r\\n]{1,80}");
     private static final Pattern HP=Pattern.compile(
             "(?:[0-9]{1,5}/[1-9][0-9]{0,5}|[0-9]{1,3}%)(?: (?:brn|par|psn|tox|slp|frz|fnt))?");
@@ -243,6 +244,26 @@ public final class PublicSplitRoutingGate {
                     // Only verified common public events are added in 6.23.
                     // A wider public filter is NOT evidence of source ownership.
                     // All parsed source is compared with the independent filter.
+                    // Source-pinned, directly public current-type notices.
+                    // Never widen to arbitrary '-start' or pretend the
+                    // visible appearance proves native species/typing.
+                    if(type.equals("-terastallize")){
+                        if(publicFields.length!=4
+                                || !ACTOR.matcher(publicFields[2]).matches()
+                                || !Set.of("Normal","Fire","Water","Electric","Grass",
+                                    "Ice","Fighting","Poison","Ground","Flying",
+                                    "Psychic","Bug","Rock","Ghost","Dragon","Dark",
+                                    "Steel","Fairy").contains(publicFields[3]))
+                            throw invalid();
+                    }
+                    if(type.equals("-start")){
+                        if(publicFields.length!=5
+                                || !ACTOR.matcher(publicFields[2]).matches()
+                                || !publicFields[3].equalsIgnoreCase("typechange")
+                                || !publicFields[4].matches(
+                                    "[a-zA-Z]{3,12}(?:/[a-zA-Z]{3,12}){0,2}"))
+                            throw invalid();
+                    }
                     if(type.equals("-ability")){
                         if(publicFields.length<4 || publicFields.length>6
                                 || !ACTOR.matcher(publicFields[2]).matches()
@@ -291,7 +312,7 @@ public final class PublicSplitRoutingGate {
                     routes.add(PublicEnvelopeProvenance.Route.DIRECT_UPDATE);
                     direct++;
                 }
-                if(splits+direct>512)throw invalid();
+                if(splits+direct>8192)throw invalid();
             }
         }
         if(splits+direct==0)throw invalid();

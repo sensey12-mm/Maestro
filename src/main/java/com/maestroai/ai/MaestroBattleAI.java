@@ -475,18 +475,53 @@ public class MaestroBattleAI extends RCTBattleAI {
                 liveShadowSnapshot=captureIndependentShadowSnapshot(
                         activePokemon,battle,moveset);
                 if(liveShadowSnapshot!=null){
-                    var independent=ShadowLiveDecisionEngine.ordinary(
-                            liveShadowSnapshot,false,moveset.getTrapped(),
-                            ownChoiceLease!=null && ownChoiceLease.current(),
-                            captureIndependentOwnMoveFacts(activePokemon,moveset));
-                    if(independent!=null){
-                        var ownReport=ShadowPromotionPreparation.inspectOwnOnly(
-                                battle,phaseShadowRequest,liveShadowSnapshot,
-                                independent,ownChoiceLease,phaseShadowLegalWindow);
-                        if(ownReport.proposal()!=null){
-                            phaseShadowPrepared=ownReport;
-                            System.out.println("[MaestroAI] "+independent.safeLine());
-                            System.out.println("[MaestroAI] Shadow source=NATIVE_OWN;opponent=UNKNOWN");
+                    var owned=liveShadowSnapshot;
+                    var nativeActor=activePokemon.getActor();
+                    var ownLease=ownChoiceLease;
+                    var ownedFacts=captureIndependentOwnMoveFacts(activePokemon,moveset);
+                    // A public appearance is NOT a true Pokemon identity.
+                    // Phase 6.16/6.29 source checks and Phase 4 public facts
+                    // are independent of Legacy tactical evaluations.
+                    var witnessed=com.maestroai.training.PublicLiveOpponentSnapshot.capture(
+                            battle,nativeActor.getShowdownId(),ownLease.turn(),
+                            owned,ownTransportVersionSupported(),
+                            ()->battle.getShowdownMessages(),
+                            ()->ownLease.current() && !battle.getEnded()
+                                && nativeActor.getBattle()==battle
+                                && nativeActor.getRequest()==phaseShadowRequest
+                                && battle.getActor(nativeActor.getShowdownId())==nativeActor);
+                    if(witnessed!=null){
+                        var observed=witnessed.snapshot();
+                        var preference=ShadowLiveDecisionEngine.ordinary(
+                                observed,false,moveset.getTrapped(),
+                                ownLease.current(),ownedFacts);
+                        if(preference!=null){
+                            var proof=ShadowPromotionPreparation.inspectPublicOnly(
+                                    battle,phaseShadowRequest,observed,
+                                    preference,ownLease,phaseShadowLegalWindow,witnessed);
+                            if(proof.proposal()!=null){
+                                liveShadowSnapshot=observed;
+                                phaseShadowPrepared=proof;
+                                System.out.println("[MaestroAI] "+preference.safeLine());
+                                System.out.println("[MaestroAI] "+witnessed.safeLine());
+                            }
+                        }
+                    }
+                    // Public history is optional; an uncertain opponent must
+                    // not disable the independent native own-only policy.
+                    if(phaseShadowPrepared==null){
+                        var preference=ShadowLiveDecisionEngine.ordinary(
+                                owned,false,moveset.getTrapped(),
+                                ownLease.current(),ownedFacts);
+                        if(preference!=null){
+                            var proof=ShadowPromotionPreparation.inspectOwnOnly(
+                                    battle,phaseShadowRequest,owned,
+                                    preference,ownLease,phaseShadowLegalWindow);
+                            if(proof.proposal()!=null){
+                                phaseShadowPrepared=proof;
+                                System.out.println("[MaestroAI] "+preference.safeLine());
+                                System.out.println("[MaestroAI] Shadow source=NATIVE_OWN;opponent=UNKNOWN");
+                            }
                         }
                     }
                 }

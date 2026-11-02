@@ -270,6 +270,34 @@ public final class ShadowPromotionPreparation {
     }
 
     /**
+     * Original native-own action lease plus the exact current public-history
+     * custody from Phase 6.16/6.29. No Pokemon identity or tactical authority
+     * is inferred from the public observer itself.
+     */
+    public static Report inspectPublicOnly(Object battle,Object request,
+            BattleSnapshot observed,ShadowLiveDecisionEngine.Choice chosen,
+            OwnRequestTransport.Lease lease,ShadowNativeLegalWindow.Proof root,
+            PublicLiveOpponentSnapshot.Capture publicCapture) {
+        if(publicCapture==null || publicCapture.snapshot()!=observed
+                || !publicCapture.current())
+            return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
+        var original=inspectOwnOnly(battle,request,firstPartyOnly(observed),
+                chosen,lease,root);
+        if(original.proposal()==null)return original;
+        BooleanSupplier current=()->publicCapture.current()
+                && lease.current() && lease.turn()==observed.turn()
+                && root.exactlyCovers(battle,request,observed);
+        try {
+            if(!current.getAsBoolean())
+                return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
+        }catch(RuntimeException stale){
+            return abstain(Verdict.MISSING_PUBLIC_OR_MECHANICS_SOURCE);
+        }
+        return new Report(Verdict.INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE,
+                new Proposal(battle,request,observed.turn(),chosen.action(),current));
+    }
+
+    /**
      * Forced replacement is deliberately separate: no active opposing
      * matchup, invented next request or ordinary move list is required.
      * The caller must attest the original owning native forced request and
