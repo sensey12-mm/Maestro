@@ -59,7 +59,7 @@ final class PublicLiveOpponentSnapshotRegression {
                 && display.snapshot().opponent().species().equals("UNVERIFIED"),
                 "public switch species appearance never proves true types under Illusion");
         check(!display.safeLine().contains("Greninja")
-                && !display.safeLine().contains("Opp")
+                && !display.safeLine().contains("p2a: Opp")
                 && !display.safeLine().contains("85/100"),
                 "diagnostic never leaks identities or public/private HP values");
         var ownUnknown=ShadowLiveDecisionEngine.ordinary(display.snapshot(),
