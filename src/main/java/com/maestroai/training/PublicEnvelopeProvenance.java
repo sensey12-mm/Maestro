@@ -28,19 +28,21 @@ public final class PublicEnvelopeProvenance {
             "-copyboost", "-swapboost", "-invertboost", "-item", "-enditem",
             "-ability", "-endability", "-status", "-curestatus", "-transform",
             "-start", "-end", "-activate", "-terastallize", "-damage", "-heal",
-            "-sethp", "-sidestart", "-sideend", "-swapsideconditions",
+            "-sethp", "-sidestart", "-sideend", "-swapsideconditions"
+    );
+    private static final Set<String> NATIVE_ADDITIONAL = Set.of(
             "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
             "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
-            "cant", "-block"
-    );
+            "cant", "-block");
+
 
     private PublicEnvelopeProvenance() {}
 
-    private static boolean allowed(String line) {
+    private static boolean allowed(String line,boolean nativeOnly) {
         if (!line.startsWith("|")) return false;
         int end = line.indexOf('|', 1);
         String kind = end < 0 ? line.substring(1) : line.substring(1, end);
-        return ALLOWED.contains(kind);
+        return ALLOWED.contains(kind) || nativeOnly && NATIVE_ADDITIONAL.contains(kind);
     }
 
     /**
@@ -49,6 +51,15 @@ public final class PublicEnvelopeProvenance {
      * private sideupdate interrupts an active split.
      */
     public static Audit reconcile(List<String> rawHistory, List<String> filtered) {
+        return reconcileWithPolicy(rawHistory,filtered,false);
+    }
+
+    /** Native runtime only. Never change offline Phase 5 replay grammar. */
+    static Audit reconcileNative(List<String> rawHistory,List<String> filtered) {
+        return reconcileWithPolicy(rawHistory,filtered,true);
+    }
+    private static Audit reconcileWithPolicy(List<String> rawHistory,
+            List<String> filtered,boolean nativeOnly) {
         if (rawHistory == null || filtered == null)
             return new Audit(false, "MISSING_HISTORY", List.of());
         List<String> observed = new ArrayList<>();

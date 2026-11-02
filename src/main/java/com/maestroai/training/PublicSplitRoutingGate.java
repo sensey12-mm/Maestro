@@ -424,9 +424,9 @@ public final class PublicSplitRoutingGate {
                 Parsed parsed=parse(copy);
                 // Independent existing filter and provenance must match
                 // exactly, including the route and ORDER of each public event.
-                List<String> filtered=PublicProtocolFilter.publicEvents(copy);
+                List<String> filtered=PublicProtocolFilter.nativePublicEvents(copy);
                 PublicEnvelopeProvenance.Audit independent=
-                        PublicEnvelopeProvenance.reconcile(copy,filtered);
+                        PublicEnvelopeProvenance.reconcileNative(copy,filtered);
                 if(!independent.complete()
                         || !parsed.publicEvents.equals(filtered)
                         || independent.origins().size()!=parsed.routes.size())

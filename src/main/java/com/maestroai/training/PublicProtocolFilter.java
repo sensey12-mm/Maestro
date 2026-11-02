@@ -21,15 +21,27 @@ public final class PublicProtocolFilter {
             "-item", "-enditem", "-ability", "-endability",
             "-status", "-curestatus", "-transform", "-start", "-end", "-activate",
             "-terastallize", "-damage", "-heal", "-sethp",
-            "-sidestart", "-sideend", "-swapsideconditions",
+            "-sidestart", "-sideend", "-swapsideconditions"
+    );
+    private static final Set<String> NATIVE_ADDITIONAL = Set.of(
             "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
             "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
-            "cant", "-block"
-    );
+            "cant", "-block");
+
 
     private PublicProtocolFilter() {}
 
     public static List<String> publicEvents(List<String> rawMessages) {
+        return collect(rawMessages,false);
+    }
+
+    /** Only the current original native battle-source owner may opt in.
+     * Offline Phase 5 replay intake retains its frozen allowlist. */
+    static List<String> nativePublicEvents(List<String> rawMessages) {
+        return collect(rawMessages,true);
+    }
+
+    private static List<String> collect(List<String> rawMessages,boolean nativeOnly) {
         if (rawMessages == null) return List.of();
         List<String> result = new ArrayList<>();
         int splitRemaining = 0;
@@ -55,10 +67,10 @@ public final class PublicProtocolFilter {
         return List.copyOf(result);
     }
 
-    private static boolean allowed(String line) {
+    private static boolean allowed(String line,boolean nativeOnly) {
         if (line == null || !line.startsWith("|")) return false;
         int end = line.indexOf('|', 1);
         String kind = end < 0 ? line.substring(1) : line.substring(1, end);
-        return ALLOWED.contains(kind);
+        return ALLOWED.contains(kind) || nativeOnly && NATIVE_ADDITIONAL.contains(kind);
     }
 }
