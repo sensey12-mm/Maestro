@@ -23,7 +23,7 @@ JAVA_NONCODE = re.compile(
 EMBEDDED = re.compile(r"['\"]verification/([a-z][a-z0-9_]*\.cjs)['\"]")
 
 
-def declared_oracles(matrix):
+def declared_oracles(matrix, registry):
     """Parse static Python declarations without evaluating arbitrary source."""
     declared = {}
     for node in ast.parse(matrix).body:
@@ -42,6 +42,14 @@ def declared_oracles(matrix):
                     'Invalid source-oracle invocation')
     require(len(declared['NATIVE_STEPS']) == 25 and len(declared['PACK_STEPS']) == 6,
             'Native/pack source-oracle invocation count missing')
+    # Membership alone cannot preserve independent setup, run order, and the
+    # native-vs-pack responsibility boundary. Review an explicit registry change.
+    expected = registry.get('node_profiles', {})
+    require(set(expected) == {'native', 'pack'}, 'Oracle profile registry missing')
+    for name, steps in (('native', declared['NATIVE_STEPS']),
+                        ('pack', declared['PACK_STEPS'])):
+        require([list(x) for x in steps] == expected[name],
+                'Pinned Node profile order or independent coverage changed: ' + name)
     require(declared['NATIVE_STEPS'].count(('weather_entry_oracle.cjs',)) == 1
             and declared['NATIVE_STEPS'].count(('weather_entry_oracle.cjs', '--setters')) == 1,
             'Missing independent weather setter checks')
@@ -192,7 +200,7 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
 
     node = {Path(p).name for p in data['original_paths'] if p.endswith('.cjs')}
     required_oracle_profiles(source)
-    invoked = declared_oracles(matrix)
+    invoked = declared_oracles(matrix, data)
     # Only quoted Java string tokens represent resource loading. A comment
     # mentioning a file must never satisfy an oracle registration.
     embedded = {filename for name in reached if name + '.java' in java
@@ -335,6 +343,18 @@ class RegistryRegression(unittest.TestCase):
             check(source_override=source + '\nfrom missing_oracle import unsafe\n')
         with self.assertRaises(SyntaxError):
             check(source_override=source + '\ndef invalid(:\n')
+
+    def test_oracle_order_and_independent_profile_scope_are_locked(self):
+        matrix = (ROOT / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
+        left = '    ("source_oracle.cjs",)\n    ("move_attestation_oracle.cjs",)'
+        right = '    ("move_attestation_oracle.cjs",)\n    ("source_oracle.cjs",)'
+        self.assertIn(left, matrix)
+        with self.assertRaisesRegex(ValueError, 'profile order'):
+            check(matrix_override=matrix.replace(left, right))
+        source = '    ("method_provenance_oracle.cjs",)'
+        self.assertIn(source, matrix)
+        with self.assertRaisesRegex(ValueError, 'profile order'):
+            check(matrix_override=matrix.replace(source, '    ("source_oracle.cjs",)'))
 
     def test_native_preflight_migration_is_mapped_and_enforced(self):
         data, found = load(ROOT), paths(ROOT)

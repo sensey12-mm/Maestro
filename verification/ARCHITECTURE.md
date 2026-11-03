@@ -27,7 +27,9 @@ The release `publish` job must continue to depend on **both** independent native
 The independent Node source checks now have a declarative `oracle_matrix.py`
 execution registry rather than 31 duplicated Python process invocations.
 The 25 native and six pack steps run in their original order with original
-fixtures and time bounds. The weather-entry oracle still runs twice, with its
+fixtures and time bounds. The independent ordered sequences are also pinned
+in the reviewed registry: a silent reordering, removal or native-to-pack
+reclassification fails even if the union of files remains identical. The weather-entry oracle still runs twice, with its
 separate `--setters` profile. Static AST validation and negative tests reject
 missing, malformed or unregistered source oracles and missing native/pack runner
 invocations. The individual JavaScript oracles remain separate to preserve
