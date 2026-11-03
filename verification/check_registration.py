@@ -432,6 +432,14 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require('sourceVerification' in source and 'selected_profiles' in source
             and 'bounded_run' in source,
             'Native/pack execution linkage missing')
+    require("with parallel_native_source_gradle(native_gradle):" in source
+            and "def parallel_native_source_gradle(command, limit=5400):" in source
+            and "process = subprocess.Popen(command, start_new_session=True)" in source
+            and "status = process.wait(timeout=limit)" in source
+            and "raise subprocess.CalledProcessError(status, command)" in source
+            and "os.killpg(process.pid, signal.SIGTERM)" in source
+            and "os.killpg(process.pid, signal.SIGKILL)" in source,
+            'Native overlapping verification must await both statuses and cancel failed children')
     for moved in data['migrations'].values():
         require(all(workflow.count(moved[key] + '\n') == 1
                     for key in ('coverage_command', 'negative_command')),
@@ -547,6 +555,17 @@ class RegistryRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Java-embedded Node oracle'):
             check(overrides={p.name: content.replace(marker, 'verification/fake_xerneas_oracle.cjs')
                   + '\n// ' + marker + '\n'})
+
+    def test_native_overlap_fail_closed_invocation_is_registered(self):
+        source = (ROOT / 'verification/source_oracle.py').read_text()
+        for before, after in (
+                ('with parallel_native_source_gradle(native_gradle):', 'if True:'),
+                ('status = process.wait(timeout=limit)', 'status = 0'),
+                ('os.killpg(process.pid, signal.SIGTERM)', 'pass'),
+                ('raise subprocess.CalledProcessError(status, command)', 'pass')):
+            with self.subTest(fragment=before):
+                with self.assertRaisesRegex(ValueError, 'overlapping verification'):
+                    check(source_override=source.replace(before, after))
 
     def test_removed_node_oracle_call_is_rejected(self):
         matrix = (ROOT / 'verification/oracle_matrix.py').read_text(encoding='utf-8')

@@ -194,3 +194,25 @@ measured from GitHub job logs and may fail closed.
 ### Java 25 compatibility result
 
 Exact-commit GitHub CI for `9b2b4cdffbccc7f3ba5c562288a5d1d171350e78` rejected the JDK 25 experiment: the unmodified Cobblemon relocated Truffle bytecode calls `sun.misc.Unsafe.ensureClassInitialized`, which no longer exists on JDK 25. The isolated JavaScript verifier is therefore restored to the already-passing GraalVM JDK 21. The project remains Java 21; no production source changed. This experiment is explicitly **not** a claimed speedup.
+
+### Native source-oracle overlap: full checks retained
+
+The native verification used to launch 25 independent Node oracle subprocesses
+sequentially and only afterward start the lengthy Java/Graal
+sourceVerification Gradle task. These Node commands read the same pinned
+extracted source tree without write-output arguments; the Gradle task also
+reads the pinned sources and runs every original Graal differential.
+
+The native runner now starts that same Gradle process before the unchanged
+25-command Node loop, then waits for its successful exit after every Node
+oracle succeeds. Both statuses are required; Node failures terminate the
+entire Gradle process group and reap it before the temporary source directory
+is removed. Java errors and timeouts also fail closed. The pack runner
+remains sequential because its independent source setup and restore
+boundaries must not overlap. Synthetic tests prove both success gates,
+nonzero Java rejection, Node failure cleanup, and TERM-to-KILL timeout
+cleanup; the registration checker rejects removal of their safeguards.
+
+The optimization targets actual serial CI overhead without reducing the
+number or order of independent Node or Java checks. Any claimed wall-clock
+improvement must be confirmed from exact-commit GitHub Actions timestamps.

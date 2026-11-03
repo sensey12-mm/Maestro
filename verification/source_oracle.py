@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run source checks with pinned external bytes and temporary extraction only."""
 import hashlib
+from contextlib import contextmanager
 import io
 import json
 import os
@@ -10,8 +11,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import urllib.request
 import re
+import signal
 import zipfile
 from oracle_matrix import commands_for, OracleMatrixGuards
 from pinned_public_archive import PinnedPublicArchiveGuards
@@ -110,6 +113,45 @@ def bounded_run(command, limit=5400, check=True):
     subprocess.run(command, check=True, timeout=limit)
 
 
+@contextmanager
+def parallel_native_source_gradle(command, limit=5400):
+    """Overlap read-only Node oracles with independent native Java verification.
+
+    Both subprocesses must succeed. On a Node failure, stop and reap the
+    Gradle process group before deleting its disposable simulator directory.
+    """
+    if (not isinstance(command, list) or command[:2] != ['bash', 'gradlew']
+            or 'sourceVerification' not in command or limit <= 0):
+        raise ValueError('Unsafe overlapping source verification process')
+    process = subprocess.Popen(command, start_new_session=True)
+    try:
+        yield
+        status = process.wait(timeout=limit)
+        if status != 0:
+            raise subprocess.CalledProcessError(status, command)
+    except BaseException:
+        if process.poll() is None:
+            if os.name == 'posix':
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                if os.name == 'posix':
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    process.kill()
+                process.wait(timeout=10)
+        raise
+
+
 class SourceGuards(unittest.TestCase):
     def archive(self, names, symlink=False):
         stream = io.BytesIO()
@@ -169,6 +211,55 @@ class SourceGuards(unittest.TestCase):
         with self.assertRaises(ValueError): bounded_run(['bash'], 0)
         with self.assertRaises(subprocess.TimeoutExpired):
             bounded_run(['bash','-c','sleep 0.2'], 0.01)
+
+    def test_parallel_source_runs_require_both_successful_exit_statuses(self):
+        command = ['bash', 'gradlew', 'sourceVerification']
+        successful = mock.Mock(pid=3719)
+        successful.wait.return_value = 0
+        with mock.patch('source_oracle.subprocess.Popen', return_value=successful) as launch:
+            with parallel_native_source_gradle(command):
+                self.assertEqual(successful.wait.call_count, 0)
+            launch.assert_called_once_with(command, start_new_session=True)
+            successful.wait.assert_called_once_with(timeout=5400)
+        with self.assertRaisesRegex(ValueError, 'Unsafe overlapping source'):
+            with parallel_native_source_gradle(['bash', 'gradlew', 'assemble']):
+                pass
+        failing = mock.Mock(pid=3719)
+        failing.wait.return_value = 9
+        failing.poll.return_value = 9
+        with mock.patch('source_oracle.subprocess.Popen', return_value=failing):
+            with self.assertRaises(subprocess.CalledProcessError):
+                with parallel_native_source_gradle(command):
+                    pass
+
+    def test_node_failure_cancels_running_java_process_group(self):
+        command = ['bash', 'gradlew', 'sourceVerification']
+        running = mock.Mock(pid=3719)
+        running.poll.return_value = None
+        running.wait.return_value = -signal.SIGTERM
+        with mock.patch('source_oracle.subprocess.Popen', return_value=running):
+            with mock.patch('source_oracle.os.killpg') as terminate:
+                with self.assertRaisesRegex(RuntimeError, 'synthetic Node failure'):
+                    with parallel_native_source_gradle(command):
+                        raise RuntimeError('synthetic Node failure')
+                terminate.assert_called_once_with(3719, signal.SIGTERM)
+                running.wait.assert_called_once_with(timeout=10)
+
+    def test_gradle_timeout_sends_term_then_kill_and_reaps(self):
+        command = ['bash', 'gradlew', 'sourceVerification']
+        hung = mock.Mock(pid=3719)
+        hung.poll.return_value = None
+        hung.wait.side_effect = [subprocess.TimeoutExpired(command, 1),
+                                 subprocess.TimeoutExpired(command, 10), -signal.SIGKILL]
+        with mock.patch('source_oracle.subprocess.Popen', return_value=hung):
+            with mock.patch('source_oracle.os.killpg') as terminate:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    with parallel_native_source_gradle(command, limit=1):
+                        pass
+                self.assertEqual(terminate.call_args_list, [
+                    mock.call(3719, signal.SIGTERM),
+                    mock.call(3719, signal.SIGKILL),
+                ])
 
     def test_missing_dependency(self):
         with tempfile.TemporaryDirectory() as folder, self.assertRaises(ValueError): cache_dependency(Path(folder))
@@ -269,10 +360,12 @@ def main():
             with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
                 safe_entries(archive)
                 archive.extractall(folder)
-            for command in commands_for('native', folder):
-                bounded_run(command, check=True)
-            bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
-                            'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
+            native_gradle = ['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
+                             'sourceVerification', '-PverificationSource=' + folder,
+                             '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace']
+            with parallel_native_source_gradle(native_gradle):
+                for command in commands_for('native', folder):
+                    bounded_run(command, check=True)
     if do_pack:
         assets = pack_sources(Path('src/main/resources/com/maestroai/training'))
         with tempfile.TemporaryDirectory(prefix='maestroai-pack-source-') as folder:
