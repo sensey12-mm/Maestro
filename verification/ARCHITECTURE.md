@@ -22,6 +22,17 @@ This is public-safe engineering documentation of this repository, not private pr
 
 The release `publish` job must continue to depend on **both** independent native and pack jobs, and verify an artifact from the exact same source commit. The registration audit checks direct/transitive Java reachability, independent Python-to-Node invocation and Java-embedded oracle source references; static reachability alone cannot establish actual runtime execution. The separate pinned native and pack CI profiles exercise the registrations. Required CI actually runs these profiles.
 
+## First executable-architecture consolidation
+
+The independent Node source checks now have a declarative `oracle_matrix.py`
+execution registry rather than 31 duplicated Python process invocations.
+The 25 native and six pack steps run in their original order with original
+fixtures and time bounds. The weather-entry oracle still runs twice, with its
+separate `--setters` profile. Static AST validation and negative tests reject
+missing, malformed or unregistered source oracles and missing native/pack runner
+invocations. The individual JavaScript oracles remain separate to preserve
+independence and debugging.
+
 ## Existing manual or not-yet-CI-reachable probes
 
 **Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.

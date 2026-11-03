@@ -260,7 +260,8 @@
     "verification/weather_suppression_oracle.cjs": "44bfd29e2b37b57b70e8a4594769fa526ac1a9cd"
   },
   "new_checked_sources": [
-    "verification/check_registration.py"
+    "verification/check_registration.py",
+    "verification/oracle_matrix.py"
   ],
   "java_manual_not_ci": [
     "AddonReloadRegression",

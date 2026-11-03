@@ -23,23 +23,41 @@ JAVA_NONCODE = re.compile(
 EMBEDDED = re.compile(r"['\"]verification/([a-z][a-z0-9_]*\.cjs)['\"]")
 
 
-def invoked_cjs(source):
-    """Count actual bounded Node subprocess calls, not comments or strings."""
-    invoked = set()
-    for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
-            continue
-        if node.func.id != 'bounded_run' or not node.args or not isinstance(node.args[0], ast.List):
-            continue
-        elements = node.args[0].elts
-        if len(elements) < 2 or not all(isinstance(x, ast.Constant) for x in elements[:2]):
-            continue
-        if elements[0].value != 'node' or not isinstance(elements[1].value, str):
-            continue
-        filename = elements[1].value
-        if filename.startswith('verification/') and filename.endswith('.cjs'):
-            invoked.add(Path(filename).name)
-    return invoked
+def declared_oracles(matrix):
+    """Parse static Python declarations without evaluating arbitrary source."""
+    declared = {}
+    for node in ast.parse(matrix).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id in {'NATIVE_STEPS', 'PACK_STEPS'}:
+                require(target.id not in declared, 'Duplicate source profile')
+                declared[target.id] = ast.literal_eval(node.value)
+    require(set(declared) == {'NATIVE_STEPS', 'PACK_STEPS'}, 'Missing source-oracle profile')
+    for profile, steps in declared.items():
+        require(isinstance(steps, tuple), 'Invalid declared source profile')
+        for step in steps:
+            require(isinstance(step, tuple) and len(step) in (1, 2)
+                    and re.fullmatch('[a-z_0-9]+[.]cjs', step[0])
+                    and (len(step) == 1 or step[1] == '--setters'),
+                    'Invalid source-oracle invocation')
+    require(len(declared['NATIVE_STEPS']) == 25 and len(declared['PACK_STEPS']) == 6,
+            'Native/pack source-oracle invocation count missing')
+    require(declared['NATIVE_STEPS'].count(('weather_entry_oracle.cjs',)) == 1
+            and declared['NATIVE_STEPS'].count(('weather_entry_oracle.cjs', '--setters')) == 1,
+            'Missing independent weather setter checks')
+    return {step[0] for rows in declared.values() for step in rows}
+
+
+def required_oracle_profiles(source):
+    tree = ast.parse(source)
+    imported = any(isinstance(n, ast.ImportFrom) and n.module == 'oracle_matrix'
+                   and 'commands_for' in [a.name for a in n.names] for n in tree.body)
+    invoked = [n.args[0].value for n in ast.walk(tree)
+               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+               and n.func.id == 'commands_for' and n.args
+               and isinstance(n.args[0], ast.Constant)]
+    require(imported and sorted(invoked) == ['native', 'pack'],
+            'Required independent native/pack source runner invocation missing')
 
 
 def require(ok, why):
@@ -57,7 +75,8 @@ def load(root):
         require(name.startswith('verification/') and '..' not in Path(name).parts
                 and re.fullmatch('[0-9a-f]{40}', sha) is not None,
                 'Invalid historical path or Git blob identity')
-    require(data['new_checked_sources'] == ['verification/check_registration.py'],
+    require(data['new_checked_sources'] == ['verification/check_registration.py',
+                                            'verification/oracle_matrix.py'],
             'New verification sources require explicit registry review')
     return data
 
@@ -77,7 +96,7 @@ def check_paths(data, found):
             'Unregistered verification source: ' + repr(sorted(actual_sources ^ expected_sources)))
 
 
-def check_runners(data, java, source, gradle):
+def check_runners(data, java, source, gradle, matrix):
     require("mainClass = 'com.maestroai.training.StandaloneRegression'" in gradle
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle,
             'Required Java entry point missing from Gradle')
@@ -104,7 +123,8 @@ def check_runners(data, java, source, gradle):
             + ', '.join(sorted(reached & manual_java)))
 
     node = {Path(p).name for p in data['original_paths'] if p.endswith('.cjs')}
-    invoked = invoked_cjs(source)
+    required_oracle_profiles(source)
+    invoked = declared_oracles(matrix)
     # Only quoted Java string tokens represent resource loading. A comment
     # mentioning a file must never satisfy an oracle registration.
     embedded = {filename for name in reached if name + '.java' in java
@@ -128,7 +148,7 @@ def check_runners(data, java, source, gradle):
             'Native/pack execution linkage missing')
 
 
-def check(root=ROOT, found=None, overrides=None, source_override=None):
+def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None):
     data = load(root)
     check_paths(data, paths(root) if found is None else found)
     folder = root / 'verification/java/com/maestroai/training'
@@ -139,7 +159,9 @@ def check(root=ROOT, found=None, overrides=None, source_override=None):
     if source_override is not None:
         source = source_override
     gradle = (root / 'verification/verification.init.gradle').read_text(encoding='utf-8')
-    check_runners(data, java, source, gradle)
+    matrix = ((root / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
+              if matrix_override is None else matrix_override)
+    check_runners(data, java, source, gradle, matrix)
     return data
 
 
@@ -195,15 +217,15 @@ class RegistryRegression(unittest.TestCase):
                   + '\n// ' + marker + '\n'})
 
     def test_removed_node_oracle_call_is_rejected(self):
-        content = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
-        marker = "'verification/accuracy_miss_oracle.cjs'"
-        self.assertIn(marker, content)
-        with self.assertRaisesRegex(ValueError, 'Unregistered Node oracle'):
-            check(source_override=content.replace(marker, "''"))
-        # A comment naming the dropped source is not an executable oracle.
-        with self.assertRaisesRegex(ValueError, 'Unregistered Node oracle'):
-            check(source_override=content.replace(marker, "''")
-                  + "\n# " + marker + "\n")
+        matrix = (ROOT / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
+        missing = '("accuracy_miss_oracle.cjs",)'
+        self.assertIn(missing, matrix)
+        with self.assertRaisesRegex(ValueError, 'invocation count'):
+            check(matrix_override=matrix.replace(missing, ''))
+        source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
+            check(source_override=source.replace("commands_for('native', folder)",
+                                                  "commands_for('pack', folder)"))
 
     def test_history_is_not_a_file_count_target(self):
         self.assertEqual(load(ROOT)['origin_commit'], ORIGIN)

@@ -132,4 +132,4 @@ See `verification/PHASE457_INTEGRATION_STATUS.md` for exact upstream commits,
 cross-phase acceptance tests, and remaining Phase 6 prerequisites.
 
 
-Verification architecture and original-file custody inventory: [verification/ARCHITECTURE.md](verification/ARCHITECTURE.md). Before running the verification suite, run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`.
+Verification architecture, ordered native/pack oracle matrix and original-file custody inventory: [verification/ARCHITECTURE.md](verification/ARCHITECTURE.md). Before running the verification suite, run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`.

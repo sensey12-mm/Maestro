@@ -13,6 +13,7 @@ import unittest
 import urllib.request
 import re
 import zipfile
+from oracle_matrix import commands_for, OracleMatrixGuards
 
 DEPENDENCY_SHA256 = 'f7c25955176badc444ad6211fc556514fedbdba776227f105fe899f8819d74e3'
 PACK_REVISION = '2a6d0efb8a45652769c4fdecb8c6e26bbd7aabc9'
@@ -246,6 +247,7 @@ def main():
             unittest.defaultTestLoader.loadTestsFromTestCase(PackSourceGuards),
             unittest.defaultTestLoader.loadTestsFromTestCase(HookOracleRegression),
             unittest.defaultTestLoader.loadTestsFromTestCase(InstallerGuards),
+            unittest.defaultTestLoader.loadTestsFromTestCase(OracleMatrixGuards),
         ))
         return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
     do_native,do_pack=selected_profiles(sys.argv[1:])
@@ -265,31 +267,8 @@ def main():
             with zipfile.ZipFile(io.BytesIO(simulator)) as archive:
                 safe_entries(archive)
                 archive.extractall(folder)
-            bounded_run(['node', 'verification/source_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/move_attestation_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/blocked_hit_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/healing_recoil_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/recoil_continuation_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/pivot_outcome_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/modifier_composition_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/accuracy_miss_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/residual_recovery_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/sandstorm_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/weather_suppression_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/weather_speed_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/utility_umbrella_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/weather_ability_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/roster_ability_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/download_entry_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/weather_entry_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/weather_entry_oracle.cjs', folder, '--setters'], check=True)
-            bounded_run(['node', 'verification/own_mega_y_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/own_z_move_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/own_reentry_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/cold_weather_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/toxic_entry_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/status_speed_oracle.cjs', folder], check=True)
-            bounded_run(['node', 'verification/psychic_terrain_oracle.cjs', folder], check=True)
+            for command in commands_for('native', folder):
+                bounded_run(command, check=True)
             bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                             'sourceVerification', '-PverificationSource=' + folder, '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace'], check=True)
     if do_pack:
@@ -309,12 +288,8 @@ def main():
             raid=raid_sources(home, Path('src/main/resources/com/maestroai/training'))
             (Path(folder)/'raid-condition-fixtures.json').write_text(json.dumps(raid))
             (Path(folder)/'pack-native-fixtures.json').write_text(json.dumps(pack_native_sources(home, Path('src/main/resources/com/maestroai/training'))))
-            bounded_run(['node','verification/addon_reload_oracle.cjs',str(simulator_root)],check=True)
-            bounded_run(['node','verification/raid_condition_oracle.cjs',str(simulator_root)],check=True)
-            bounded_run(['node','verification/pack_item_reload_oracle.cjs',str(simulator_root)],check=True)
-            bounded_run(['node', 'verification/runtime_cache_oracle.cjs', str(simulator_root)], check=True)
-            bounded_run(['node', 'verification/method_provenance_oracle.cjs', str(simulator_root)], check=True)
-            bounded_run(['node', 'verification/source_oracle.cjs', str(simulator_root)], check=True)
+            for command in commands_for('pack', simulator_root):
+                bounded_run(command, check=True)
             bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                             'sourceVerification', '-PverificationSource=' + str(simulator_root),
                             '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true', '--stacktrace'], check=True)
