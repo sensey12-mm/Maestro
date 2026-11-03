@@ -31,6 +31,7 @@ jobs:
           python3 verification/check_repository.py
           python3 verification/check_registration.py --self-test
           python3 verification/check_registration.py
+          for oracle in verification/*.cjs; do node --check "$oracle"; done
       - name: Build and run standalone regressions
         run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression phase7Benchmark --stacktrace
       - name: Check JAR and checker regressions
@@ -89,6 +90,7 @@ jobs:
           python3 verification/check_repository.py
           python3 verification/check_registration.py --self-test
           python3 verification/check_registration.py
+          for oracle in verification/*.cjs; do node --check "$oracle"; done
       - name: Prepare pinned Cobblemon dependency and Graal verification classes
         run: bash gradlew --no-daemon -I verification/verification.init.gradle remapJar verificationClasses --stacktrace
       - name: Verify pinned pack-source and relocated engine

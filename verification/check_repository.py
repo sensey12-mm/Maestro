@@ -97,6 +97,9 @@ def check_workflow(source):
             or native.count('python3 verification/runtime_hook_oracle.py --verify-pinned\n') != 1
             or 'python3 verification/check_native_split_hooks.py' in source):
         raise ValueError('Native ABI preflight or selector negative tests missing')
+    for name, section in (('verify', native), ('pack_source', pack)):
+        if section.count('for oracle in verification/*.cjs; do node --check "$oracle"; done\n') != 1:
+            raise ValueError('Mandatory independent Node syntax and path gate missing in ' + name)
     if (required_native not in native or required_pack not in pack
             or 'python3 verification/source_oracle.py --self-test\n' not in native
             or 'python3 verification/source_oracle.py --self-test\n' not in pack
@@ -293,6 +296,17 @@ class SafeguardRegression(unittest.TestCase):
                         'python3 verification/runtime_hook_oracle.py --verify-pinned\n'):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'Native ABI'):
                 check_workflow(source.replace(command, '', 1))
+
+    def test_all_source_oracle_syntax_is_mandatory(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        check_workflow(source)
+        command = 'for oracle in verification/*.cjs; do node --check "$oracle"; done\n'
+        for start, end in (('  verify:\n', '  pack_source:\n'),
+                           ('  pack_source:\n', '  publish:\n')):
+            begin, stop = source.index(start), source.index(end)
+            broken = source[:begin] + source[begin:stop].replace(command, '', 1) + source[stop:]
+            with self.subTest(job=start), self.assertRaisesRegex(ValueError, 'Node syntax'):
+                check_workflow(broken)
 
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)

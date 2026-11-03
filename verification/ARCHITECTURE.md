@@ -45,6 +45,19 @@ the replacement, a reason and both positive/negative coverage commands.
 Missing originals are rejected unless explicitly registered as reviewed
 migrations; missing replacements and broken CI mappings also fail closed.
 
+## Historical verification navigation and regression hygiene
+
+[Verification history index](INDEX.md) groups all 75 original
+public-safe reports by responsibility without changing their original text,
+attribution or historical conclusions. It is checked against the exact origin
+inventory, rejecting missing, duplicate and stale links. Newly added reports,
+fixtures and scripts must be explicitly registered, not merely present on disk.
+
+All Python verification files are parsed for syntax and checked for missing
+local oracle imports. CI also syntax-checks all independent JavaScript files,
+including Java-hosted oracles, in both verification jobs. These controls do not
+pretend to replace the executable adversarial or pinned-source checks.
+
 ## Existing manual or not-yet-CI-reachable probes
 
 **Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.

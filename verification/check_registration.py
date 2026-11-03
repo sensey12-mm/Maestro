@@ -78,6 +78,15 @@ def load(root):
     require(data['new_checked_sources'] == ['verification/check_registration.py',
                                             'verification/oracle_matrix.py'],
             'New verification sources require explicit registry review')
+    additions = data.get('new_registered_files')
+    require(isinstance(additions, list) and len(additions) == len(set(additions))
+            and set(data['new_checked_sources']) <= set(additions)
+            and {'verification/ARCHITECTURE.md', 'verification/INDEX.md',
+                 'verification/verification_registry.json'} <= set(additions)
+            and all(p.startswith('verification/') and '..' not in Path(p).parts
+                    and Path(p).suffix in {'.md', '.py', '.json', '.tsv', '.cjs', '.java', '.gradle'}
+                    for p in additions),
+            'New verification files must be explicitly registered')
     migrations = data.get('migrations')
     require(isinstance(migrations, dict)
             and set(migrations) == {'verification/check_native_split_hooks.py'},
@@ -95,22 +104,54 @@ def load(root):
 
 
 def paths(root):
-    return {p.relative_to(root).as_posix() for p in (root / 'verification').rglob('*') if p.is_file()}
+    found = set()
+    for p in (root / 'verification').rglob('*'):
+        if p.is_symlink():
+            raise ValueError('Verification tree contains a symlink')
+        if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc':
+            found.add(p.relative_to(root).as_posix())
+    return found
 
 
 def check_paths(data, found):
     original = set(data['original_paths'])
     migrated = set(data['migrations'])
-    missing = original - found - migrated
-    require(not missing, 'Baseline verification file missing: ' + repr(sorted(missing)[:5]))
     require(not (migrated & found), 'Already migrated source unexpectedly returned')
     require(all(move['replacement'] in found for move in data['migrations'].values()),
             'Migrated source replacement missing')
-    expected_sources = {p for p in (original - migrated) | set(data['new_checked_sources'])
-                        if Path(p).suffix in SUFFIX}
+    expected = (original - migrated) | set(data['new_registered_files'])
+    require(not (expected - found), 'Baseline verification file missing: ' + repr(sorted(expected - found)[:5]))
+    require(not (found - expected), 'Unregistered verification file: ' + repr(sorted(found - expected)[:5]))
+    expected_sources = {p for p in expected if Path(p).suffix in SUFFIX}
     actual_sources = {p for p in found if Path(p).suffix in SUFFIX}
     require(actual_sources == expected_sources,
             'Unregistered verification source: ' + repr(sorted(actual_sources ^ expected_sources)))
+
+
+
+def check_python_sources(root, source_override=None):
+    folder = root / 'verification'
+    modules = {p.stem for p in folder.glob('*.py')}
+    for file in folder.glob('*.py'):
+        source = (source_override if file.name == 'source_oracle.py'
+                  and source_override is not None else file.read_text(encoding='utf-8'))
+        tree = ast.parse(source, filename=str(file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                module = node.module.split('.')[0]
+                if (module.endswith('_oracle') or module in {'oracle_matrix', 'check_registration'})
+                        and module not in modules:
+                    raise ValueError('Broken local Python oracle import in ' + file.name
+                                     + ': ' + module)
+
+
+def check_history_index(root, data, index_override=None):
+    report = ((root / 'verification/INDEX.md').read_text(encoding='utf-8')
+              if index_override is None else index_override)
+    references = re.findall(r'(?m)^- \[[^\]]+\]\(([^)]+\.md)\)$', report)
+    historical = {p[len('verification/'):] for p in data['original_paths'] if p.endswith('.md')}
+    require(set(references) == historical and len(references) == len(historical),
+            'Verification history index contains missing, duplicate or stale paths')
 
 
 def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
@@ -173,9 +214,11 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
             'Native preflight lost exact dependency integrity check')
 
 
-def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None):
+def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None, index_override=None):
     data = load(root)
     check_paths(data, paths(root) if found is None else found)
+    check_python_sources(root, source_override)
+    check_history_index(root, data, index_override)
     folder = root / 'verification/java/com/maestroai/training'
     java = {p.name: p.read_text(encoding='utf-8') for p in folder.glob('*.java')}
     if overrides:
@@ -210,7 +253,8 @@ class RegistryRegression(unittest.TestCase):
     def test_new_unregistered_tests_and_scripts_are_rejected(self):
         data, found = load(ROOT), paths(ROOT)
         for added in ('verification/java/com/maestroai/training/NewRegression.java',
-                      'verification/missing_oracle.cjs', 'verification/missing_gate.py'):
+                      'verification/missing_oracle.cjs', 'verification/missing_gate.py',
+                      'verification/unreviewed-report.md', 'verification/new_fixture.json'):
             with self.subTest(path=added), self.assertRaisesRegex(ValueError, 'Unregistered'):
                 check_paths(data, found | {added})
 
@@ -249,12 +293,30 @@ class RegistryRegression(unittest.TestCase):
         matrix = (ROOT / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
         missing = '("accuracy_miss_oracle.cjs",)'
         self.assertIn(missing, matrix)
-        with self.assertRaisesRegex(ValueError, 'invocation count'):
-            check(matrix_override=matrix.replace(missing, ''))
+        # Replace with a valid, duplicate entry; malformed Python would test
+        # the parser instead of a silently skipped independent oracle.
+        with self.assertRaisesRegex(ValueError, 'Unregistered Node oracle'):
+            check(matrix_override=matrix.replace(missing, '("source_oracle.cjs",)'))
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
             check(source_override=source.replace("commands_for('native', folder)",
                                                   "commands_for('pack', folder)"))
+
+    def test_history_index_preserves_every_original_report(self):
+        index = (ROOT / 'verification/INDEX.md').read_text(encoding='utf-8')
+        marker = '(PHASE510_DURABLE_TRUST_RECOVERY.md)'
+        self.assertIn(marker, index)
+        with self.assertRaisesRegex(ValueError, 'history index'):
+            check(index_override=index.replace(marker, '(missing-report.md)'))
+        with self.assertRaisesRegex(ValueError, 'history index'):
+            check(index_override=index + '\n- [duplicate](PHASE510_DURABLE_TRUST_RECOVERY.md)\n')
+
+    def test_python_import_breakage_rejected(self):
+        source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Broken local Python oracle import'):
+            check(source_override=source + '\nfrom missing_oracle import unsafe\n')
+        with self.assertRaises(SyntaxError):
+            check(source_override=source + '\ndef invalid(:\n')
 
     def test_native_preflight_migration_is_mapped_and_enforced(self):
         data, found = load(ROOT), paths(ROOT)

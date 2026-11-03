@@ -284,5 +284,12 @@
       "negative_command": "python3 verification/runtime_hook_oracle.py --self-test",
       "rationale": "The standalone 642-byte wrapper only checked the pinned dependency SHA before forwarding to the existing ABI/selector verifier. Both the exact dependency validation and negative tests are preserved in runtime_hook_oracle.py."
     }
-  }
+  },
+  "new_registered_files": [
+    "verification/ARCHITECTURE.md",
+    "verification/INDEX.md",
+    "verification/check_registration.py",
+    "verification/oracle_matrix.py",
+    "verification/verification_registry.json"
+  ]
 }
