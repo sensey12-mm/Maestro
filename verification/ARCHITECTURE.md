@@ -20,6 +20,9 @@ This is public-safe engineering documentation of this repository, not private pr
 | Required registration/path preservation | `check_registration.py` |
 | Synthetic benchmark (not live games) | `benchmarks/phase7_1_synthetic.json` |
 
+The workflow targets active `Maestro4567` and isolated `Maestro-2.0` pushes,
+main pushes, and pull requests to main or the verification-review branch.
+Deleted historical development branch triggers are intentionally retired.
 The release `publish` job must continue to depend on **both** independent native and pack jobs, and verify an artifact from the exact same source commit. The registration audit checks direct/transitive Java reachability, independent Python-to-Node invocation and Java-embedded oracle source references; static reachability alone cannot establish actual runtime execution. The separate pinned native and pack CI profiles exercise the registrations. Required CI actually runs these profiles.
 
 ## First executable-architecture consolidation
