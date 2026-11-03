@@ -70,7 +70,9 @@ its exact execution order, now grouped into own mechanics, public competitive
 evidence, synthetic benchmarking, live-public integration and runtime provenance.
 The baseline built-in synthetic assertions remain at their original position.
 The registration guard checks that each group is invoked from `main`, and
-negative tests reject a disconnected group or missing class invocation.
+the 103 originally executed Java regression calls remain registered in
+`verification_registry.json` in their source-proven order. Negative tests
+reject a disconnected group, a missing class invocation, or an unreviewed reorder.
 
 ## Existing manual or not-yet-CI-reachable probes
 

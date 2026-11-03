@@ -189,12 +189,44 @@ def check_history_index(root, data, index_override=None):
             'Verification history index contains missing, duplicate or stale paths')
 
 
+def standalone_order(java):
+    """Expand the existing responsibility groups in their actual main-call order.
+
+    This preserves scenario ordering while permitting responsibly reviewed
+    additions to the registry, rather than imposing a permanent test count.
+    """
+    clean = JAVA_NONCODE.sub(' ', java)
+    groups = {}
+    for match in re.finditer(r'private\s+static\s+void\s+(run\w+Regressions)\(\)\s+throws\s+Exception\s*\{', clean):
+        end = clean.find('\n    }', match.end())
+        require(end != -1, 'Unclosed standalone regression group: ' + match.group(1))
+        groups[match.group(1)] = re.findall(
+            r'\b([A-Z]\w+Regression\.(?:run|inventory)\(\);)',
+            clean[match.end():end])
+    require('public static void main(' in clean, 'Missing standalone regression entrypoint')
+    main = clean.split('public static void main(', 1)[1]
+    tokens = re.findall(
+        r'\b([A-Z]\w+Regression\.(?:run|inventory)\(\);)|(run\w+Regressions)\(\);',
+        main)
+    order = []
+    for call, group in tokens:
+        if group:
+            require(group in groups and groups[group], 'Referenced standalone group unavailable: ' + group)
+            order.extend(groups[group])
+        else:
+            order.append(call)
+    return order
+
+
 def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require("mainClass = 'com.maestroai.training.StandaloneRegression'" in gradle
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle,
             'Required Java entry point missing from Gradle')
     # The runner is grouped by responsibility; a dead group must not appear
     # registered merely because its method still contains class references.
+    actual_order = standalone_order(java.get('StandaloneRegression.java', ''))
+    require(actual_order == data['standalone_regression_order'],
+            'Original ordered Java regression coverage changed')
     standalone = JAVA_NONCODE.sub(' ', java.get('StandaloneRegression.java', ''))
     main = standalone.split('public static void main(', 1)
     require(len(main) == 2, 'Standalone regression main missing')
@@ -313,6 +345,15 @@ class RegistryRegression(unittest.TestCase):
         # Names left as comments do not count as executable calls.
         with self.assertRaisesRegex(ValueError, 'not reachable'):
             check(overrides={p.name: content.replace(marker, '// ' + marker)})
+
+    def test_java_regression_sequence_reordering_is_rejected(self):
+        p = ROOT / 'verification/java/com/maestroai/training/StandaloneRegression.java'
+        source = p.read_text(encoding='utf-8')
+        a = '        PublicReplayCorpusRegression.run();\n        CompetitiveFormatNormalizerRegression.run();'
+        b = '        CompetitiveFormatNormalizerRegression.run();\n        PublicReplayCorpusRegression.run();'
+        self.assertIn(a, source)
+        with self.assertRaisesRegex(ValueError, 'ordered Java regression coverage'):
+            check(overrides={p.name: source.replace(a, b)})
 
     def test_disconnected_regression_group_rejected(self):
         p = ROOT / 'verification/java/com/maestroai/training/StandaloneRegression.java'
