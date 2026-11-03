@@ -180,6 +180,47 @@ def check_python_sources(root, source_override=None):
                                      + ': ' + module)
 
 
+def check_python_execution(root, workflow, source_override=None):
+    """Require every verification Python module to reach a required CI root.
+
+    Static import reachability is a registration check, not proof of executing
+    every code path: executable suite tests and native source checks still run.
+    """
+    folder = root / 'verification'
+    scripts = {p.stem for p in folder.glob('*.py')}
+    direct = {name for name in re.findall(
+        r'(?m)^\s+python3 verification/([a-z_0-9]+)\.py(?:\s|$)', workflow)}
+    require(direct <= scripts, 'Public CI references nonexistent Python verification script')
+    imports = {}
+    for file in folder.glob('*.py'):
+        source = (source_override if source_override is not None
+                  and file.name == 'source_oracle.py'
+                  else file.read_text(encoding='utf-8'))
+        tree = ast.parse(source, filename=str(file))
+        targets = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                imported = node.module.split('.')[0]
+                if imported in scripts:
+                    targets.add(imported)
+            elif isinstance(node, ast.Import):
+                for entry in node.names:
+                    imported = entry.name.split('.')[0]
+                    if imported in scripts:
+                        targets.add(imported)
+        imports[file.stem] = targets
+    reached, frontier = set(), list(direct)
+    while frontier:
+        name = frontier.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        frontier.extend(imports[name] - reached)
+    require(reached == scripts,
+            'Python verification script unreachable from required CI entry points: '
+            + ', '.join(sorted(scripts - reached)))
+
+
 def check_history_index(root, data, index_override=None):
     report = ((root / 'verification/INDEX.md').read_text(encoding='utf-8')
               if index_override is None else index_override)
@@ -308,6 +349,7 @@ def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_ov
               if matrix_override is None else matrix_override)
     workflow = ((root / '.github/workflows/verify.yml').read_text(encoding='utf-8')
                 if workflow_override is None else workflow_override)
+    check_python_execution(root, workflow, source_override)
     native_hook = ((root / 'verification/runtime_hook_oracle.py').read_text(encoding='utf-8')
                    if hook_override is None else hook_override)
     check_runners(data, java, source, gradle, matrix, workflow, native_hook)
@@ -409,6 +451,20 @@ class RegistryRegression(unittest.TestCase):
             check(index_override=index.replace(marker, '(missing-report.md)'))
         with self.assertRaisesRegex(ValueError, 'history index'):
             check(index_override=index + '\n- [duplicate](PHASE510_DURABLE_TRUST_RECOVERY.md)\n')
+
+    def test_python_execution_disconnection_is_rejected(self):
+        source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
+        marker = 'from addon_reload_oracle import addon_sources'
+        self.assertIn(marker, source)
+        with self.assertRaisesRegex(ValueError, 'Python verification script unreachable'):
+            check(source_override=source.replace(marker, 'from urllib.request import urlopen'))
+        workflow = (ROOT / '.github/workflows/verify.yml').read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Python verification script unreachable'):
+            check(workflow_override=workflow.replace(
+                'python3 verification/check_publish_artifact.py --self-test',
+                'echo skip-verification-script').replace(
+                'python3 verification/check_publish_artifact.py build/verified-artifact/',
+                'echo skip-publication-verifier'))
 
     def test_python_import_breakage_rejected(self):
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')

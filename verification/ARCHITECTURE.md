@@ -58,8 +58,10 @@ attribution or historical conclusions. It is checked against the exact origin
 inventory, rejecting missing, duplicate and stale links. Newly added reports,
 fixtures and scripts must be explicitly registered, not merely present on disk.
 
-All Python verification files are parsed for syntax and checked for missing
-local oracle imports. CI also syntax-checks all independent JavaScript files,
+All Python verification files are parsed for syntax, checked for missing
+local oracle imports, and required to remain reachable from an actual CI
+entry point through the static import graph. Twelve of twelve Python scripts
+are currently registered by that rule; deliberate disconnections fail CI. CI also syntax-checks all independent JavaScript files,
 including Java-hosted oracles, in both verification jobs. These controls do not
 pretend to replace the executable adversarial or pinned-source checks.
 
