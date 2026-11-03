@@ -73,6 +73,10 @@ allprojects {
             // Cap only this verification child; never alter production JVM flags.
             minHeapSize = '512m'
             maxHeapSize = '3g'
+            // Keep compilation/build on Temurin; only the pinned, source-only
+            // Graal JS execution child uses its dedicated optimizing JDK.
+            def sourceJava = System.getenv('MAESTRO_SOURCE_JAVA')
+            if (sourceJava) executable = sourceJava
             classpath = p.sourceSets.verification.output +
                     p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
                     p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath

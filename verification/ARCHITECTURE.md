@@ -147,9 +147,25 @@ still mandate `publish.needs: [verify, pack_source]` and same-commit
 artifact validation. Full source acceptance is never replaced by
 timing instrumentation.
 
-**Post-tuning durations must be compared from exact-commit CI logs**
-before claiming a speedup; no inference from the allocation flags alone
-is sufficient.
+The first bounded-heap trial, [41703275931](https://github.com/sensey12-mm/Maestro/actions/runs/41703275931),
+confirmed the full pack profile still succeeded but took approximately
+34 minutes; the heap adjustment alone therefore **did not demonstrate a
+speedup** relative to the older ~20-minute pack baseline. The next
+controlled test uses GraalVM Community JDK 21 **only for the
+`sourceVerification` JavaExec child**, leaving compilation, standalone
+regressions, installer checks and the published mod build on Temurin 21.
+Official GraalJS embedding documentation notes that suppressing the
+interpreter-only warning does not enable runtime compilation:
+https://github.com/oracle/graaljs/blob/master/docs/user/FAQ.md .
+The verified action SHA sets up both JDKs; the shell restores the original
+`JAVA_HOME` for Gradle, and `MAESTRO_SOURCE_JAVA` selects the isolated
+GraalVM child. The repository gate rejects missing launcher isolation,
+unexpected release-job Graal settings, and bypassed `publish` dependencies.
+
+**Post-optimization durations must be compared from exact-commit CI logs**
+before claiming a speedup. If the relocated Graal classes still cannot
+use the host optimizer, the run must make that limitation explicit rather
+than claiming compiler-based acceleration.
 
 ## Future consolidation contract
 

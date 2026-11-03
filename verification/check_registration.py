@@ -348,6 +348,9 @@ def check_source_java_execution(root, java, gradle):
     require(gradle.count("p.tasks.register('sourceVerification', JavaExec)") == 1
             and "minHeapSize = '512m'" in gradle
             and "maxHeapSize = '3g'" in gradle
+            and "def sourceJava = System.getenv('MAESTRO_SOURCE_JAVA')" in gradle
+            and "if (sourceJava) executable = sourceJava" in gradle
+            and 'CI_SOURCE_JVM vendor=' in content
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle
             and "if (p.hasProperty('verificationPack')) args 'pack'" in gradle
             and "if (p.hasProperty('verificationLayoutOnly')) args 'layout-only'" in gradle,
@@ -609,6 +612,10 @@ class RegistryRegression(unittest.TestCase):
         gradle = (ROOT / 'verification/verification.init.gradle').read_text()
         with self.assertRaisesRegex(ValueError, 'Source-only performance'):
             check_with_gradle = gradle.replace("maxHeapSize = '3g'", "maxHeapSize = '256m'")
+            check_source_java_execution(ROOT, {path.name: original}, check_with_gradle)
+        with self.assertRaisesRegex(ValueError, 'Source-only performance'):
+            check_with_gradle = gradle.replace(
+                "if (sourceJava) executable = sourceJava", "if (sourceJava) println(sourceJava)")
             check_source_java_execution(ROOT, {path.name: original}, check_with_gradle)
 
     def test_python_execution_disconnection_is_rejected(self):

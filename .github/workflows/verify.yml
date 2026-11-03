@@ -25,6 +25,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
+      - name: Preserve Temurin build JVM for Gradle compilation
+        run: echo "MAESTRO_BUILD_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
       - name: Check local-file safeguards and Gradle notices
         run: |
           python3 verification/check_repository.py --self-test
@@ -44,8 +46,17 @@ jobs:
         run: |
           python3 verification/runtime_hook_oracle.py --self-test
           python3 verification/runtime_hook_oracle.py --verify-pinned
+      - name: Provision GraalVM 21 only for embedded JavaScript verification
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: graalvm-community
+          java-version: '21'
       - name: Verify pinned native simulator source and relocated engine
         run: |
+          export MAESTRO_SOURCE_JAVA="$JAVA_HOME/bin/java"
+          export JAVA_HOME="$MAESTRO_BUILD_JAVA_HOME"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          "$MAESTRO_SOURCE_JAVA" -version
           node --version
           python3 verification/source_oracle.py --self-test
           timeout --signal=TERM --kill-after=30s 95m python3 verification/source_oracle.py --native
@@ -84,6 +95,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
+      - name: Preserve Temurin build JVM for Gradle compilation
+        run: echo "MAESTRO_BUILD_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
       - name: Check pack-source repository safeguards
         run: |
           python3 verification/check_repository.py --self-test
@@ -93,8 +106,17 @@ jobs:
           for oracle in verification/*.cjs; do node --check "$oracle"; done
       - name: Prepare pinned Cobblemon dependency and Graal verification classes
         run: bash gradlew --no-daemon -I verification/verification.init.gradle remapJar verificationClasses --stacktrace
+      - name: Provision GraalVM 21 only for embedded JavaScript verification
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: graalvm-community
+          java-version: '21'
       - name: Verify pinned pack-source and relocated engine
         run: |
+          export MAESTRO_SOURCE_JAVA="$JAVA_HOME/bin/java"
+          export JAVA_HOME="$MAESTRO_BUILD_JAVA_HOME"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          "$MAESTRO_SOURCE_JAVA" -version
           node --version
           python3 verification/source_oracle.py --self-test
           timeout --signal=TERM --kill-after=30s 48m python3 verification/source_oracle.py --pack

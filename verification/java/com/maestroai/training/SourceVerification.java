@@ -56,6 +56,8 @@ public final class SourceVerification {
     public static void main(String[] args) throws Exception {
         Path simulator = Path.of(args[0]).toAbsolutePath();
         long ciStart = System.nanoTime();
+        System.out.println("CI_SOURCE_JVM vendor=" + System.getProperty("java.vendor")
+                + " version=" + System.getProperty("java.version"));
         OwnXerneasRegression.prepare(Path.of(args[1]));
         if (args.length > 2) {
             PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);

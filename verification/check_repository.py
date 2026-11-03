@@ -124,6 +124,37 @@ def check_workflow(source):
     for name, section in (('verify', native), ('pack_source', pack)):
         if section.count('for oracle in verification/*.cjs; do node --check "$oracle"; done\n') != 1:
             raise ValueError('Mandatory independent Node syntax and path gate missing in ' + name)
+    # CI may accelerate JavaScript only in its source-verification children.
+    # The production JAR build and standalone checks must retain Temurin 21.
+    graal = (
+        '      - name: Provision GraalVM 21 only for embedded JavaScript verification\n'
+        '        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3\n'
+        '        with:\n'
+        '          distribution: graalvm-community\n'
+        "          java-version: '21'\n"
+    )
+    isolated = (
+        '          export MAESTRO_SOURCE_JAVA="$JAVA_HOME/bin/java"\n'
+        '          export JAVA_HOME="$MAESTRO_BUILD_JAVA_HOME"\n'
+        '          export PATH="$JAVA_HOME/bin:$PATH"\n'
+        '          "$MAESTRO_SOURCE_JAVA" -version\n'
+    )
+    for name, job in (('native', native), ('pack', pack)):
+        first_build = ('      - name: Build and run standalone regressions'
+                       if name == 'native' else
+                       '      - name: Prepare pinned Cobblemon dependency and Graal verification classes')
+        source_start = ('      - name: Verify pinned native simulator source and relocated engine'
+                        if name == 'native' else
+                        '      - name: Verify pinned pack-source and relocated engine')
+        if (job.count(graal) != 1 or job.count(isolated) != 1
+                or job.count('echo "MAESTRO_BUILD_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"') != 1
+                or not (job.find(first_build) < job.find(graal)
+                        < job.find(source_start))
+                or 'distribution: temurin\n          java-version: \'21\'\n' not in job):
+            raise ValueError('Verification-only GraalVM JDK must preserve Temurin build and full source execution')
+    if 'distribution: graalvm-community' in publish or 'MAESTRO_SOURCE_JAVA' in publish:
+        raise ValueError('Release job must not use the source-only GraalVM launcher')
+
     if (required_native not in native or required_pack not in pack
             or 'python3 verification/source_oracle.py --self-test\n' not in native
             or 'python3 verification/source_oracle.py --self-test\n' not in pack
@@ -266,6 +297,23 @@ class SafeguardRegression(unittest.TestCase):
                       source[publish_at:].replace(marker, marker + extra, 1))
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, 'Verified JAR'):
                 check_workflow(broken)
+
+    def test_verification_only_graal_launcher_cannot_replace_build_or_release_gate(self):
+        original = (ROOT / '.github/workflows/verify.yml').read_text()
+        for old, new in (
+                ('distribution: graalvm-community', 'distribution: temurin'),
+                ('export JAVA_HOME="$MAESTRO_BUILD_JAVA_HOME"', 'export JAVA_HOME="$HOME"'),
+                ('export MAESTRO_SOURCE_JAVA="$JAVA_HOME/bin/java"',
+                 'export MAESTRO_SOURCE_JAVA="$HOME/unknown-java"'),
+                ('echo "MAESTRO_BUILD_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"',
+                 'echo "MAESTRO_BUILD_JAVA_HOME=/tmp" >> "$GITHUB_ENV"')):
+            self.assertIn(old, original)
+            with self.subTest(change=old), self.assertRaisesRegex(
+                    ValueError, 'Verification-only GraalVM JDK'):
+                check_workflow(original.replace(old, new, 1))
+        with self.assertRaisesRegex(ValueError, 'publication must depend'):
+            check_workflow(original.replace(
+                '    needs: [verify, pack_source]', '    needs: [verify]', 1))
 
     def test_exact_commit_jar_artifact_is_gated_by_simulator(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
