@@ -3,6 +3,7 @@
 
 This does not pretend that separately listed manual probes run in CI.
 """
+import ast
 import json
 from pathlib import Path
 import re
@@ -13,10 +14,32 @@ ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = '8d6f193fec55554c41b4d16dbfc226d9b88e83ff'
 SUFFIX = {'.java', '.cjs', '.py'}
 CALL = re.compile(r'\b([A-Z][A-Za-z0-9_]*Regression)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(')
-NODE = re.compile(r"['\"]verification/([a-z][a-z0-9_]*\.cjs)['\"]")
-# Java regression sources load these as text into a pinned native engine.
-# They are not independent Node CLI invocations, but are CI exercised.
+# Ignore non-executable Java comments, string literals and text blocks.
+# A call name in a comment must NEVER satisfy a required registration.
+JAVA_NONCODE = re.compile(
+    r"//[^\n]*|/\*[\s\S]*?\*/|\"\"\"[\s\S]*?\"\"\"|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'"
+)
+# Java source also loads selected Node oracles as literals into Graal.
 EMBEDDED = re.compile(r"['\"]verification/([a-z][a-z0-9_]*\.cjs)['\"]")
+
+
+def invoked_cjs(source):
+    """Count actual bounded Node subprocess calls, not comments or strings."""
+    invoked = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id != 'bounded_run' or not node.args or not isinstance(node.args[0], ast.List):
+            continue
+        elements = node.args[0].elts
+        if len(elements) < 2 or not all(isinstance(x, ast.Constant) for x in elements[:2]):
+            continue
+        if elements[0].value != 'node' or not isinstance(elements[1].value, str):
+            continue
+        filename = elements[1].value
+        if filename.startswith('verification/') and filename.endswith('.cjs'):
+            invoked.add(Path(filename).name)
+    return invoked
 
 
 def require(ok, why):
@@ -63,7 +86,8 @@ def check_runners(data, java, source, gradle):
     require(len(manual_java) == len(data['java_manual_not_ci'])
             and manual_java <= regressions,
             'Invalid Java manual-probe registry')
-    calls = {name[:-5]: set(CALL.findall(content)) for name, content in java.items()}
+    calls = {name[:-5]: set(CALL.findall(JAVA_NONCODE.sub(' ', content)))
+             for name, content in java.items()}
     reached, todo = set(), ['StandaloneRegression', 'SourceVerification']
     while todo:
         name = todo.pop()
@@ -80,7 +104,7 @@ def check_runners(data, java, source, gradle):
             + ', '.join(sorted(reached & manual_java)))
 
     node = {Path(p).name for p in data['original_paths'] if p.endswith('.cjs')}
-    invoked = set(NODE.findall(source))
+    invoked = invoked_cjs(source)
     embedded = {filename for name in reached for filename in
                 EMBEDDED.findall(java[name + '.java']) if name + '.java' in java}
     # Java sometimes imports the same oracle also launched directly by
@@ -142,6 +166,9 @@ class RegistryRegression(unittest.TestCase):
         self.assertIn(marker, content)
         with self.assertRaisesRegex(ValueError, 'not reachable'):
             check(overrides={p.name: content.replace(marker, '')})
+        # Names left as comments do not count as executable calls.
+        with self.assertRaisesRegex(ValueError, 'not reachable'):
+            check(overrides={p.name: content.replace(marker, '// ' + marker)})
 
     def test_removed_indirect_phase7_regression_call_is_rejected(self):
         p = ROOT / 'verification/java/com/maestroai/training/Phase7SelfPlayRegression.java'
@@ -165,6 +192,10 @@ class RegistryRegression(unittest.TestCase):
         self.assertIn(marker, content)
         with self.assertRaisesRegex(ValueError, 'Unregistered Node oracle'):
             check(source_override=content.replace(marker, "''"))
+        # A comment naming the dropped source is not an executable oracle.
+        with self.assertRaisesRegex(ValueError, 'Unregistered Node oracle'):
+            check(source_override=content.replace(marker, "''")
+                  + "\n# " + marker + "\n")
 
     def test_history_is_not_a_file_count_target(self):
         self.assertEqual(load(ROOT)['origin_commit'], ORIGIN)
