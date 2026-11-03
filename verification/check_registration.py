@@ -105,8 +105,12 @@ def check_runners(data, java, source, gradle):
 
     node = {Path(p).name for p in data['original_paths'] if p.endswith('.cjs')}
     invoked = invoked_cjs(source)
-    embedded = {filename for name in reached for filename in
-                EMBEDDED.findall(java[name + '.java']) if name + '.java' in java}
+    # Only quoted Java string tokens represent resource loading. A comment
+    # mentioning a file must never satisfy an oracle registration.
+    embedded = {filename for name in reached if name + '.java' in java
+                for token in JAVA_NONCODE.findall(java[name + '.java'])
+                if token.startswith(('"', "'"))
+                for filename in EMBEDDED.findall(token)}
     # Java sometimes imports the same oracle also launched directly by
     # the independent Node runner. Sharing a source is valid; losing an
     # explicit Java-only entry path is not.
@@ -185,6 +189,10 @@ class RegistryRegression(unittest.TestCase):
         self.assertIn(marker, content)
         with self.assertRaisesRegex(ValueError, 'Java-embedded Node oracle'):
             check(overrides={p.name: content.replace(marker, 'verification/fake_xerneas_oracle.cjs')})
+        # The deleted import cannot be resurrected by mentioning it in a comment.
+        with self.assertRaisesRegex(ValueError, 'Java-embedded Node oracle'):
+            check(overrides={p.name: content.replace(marker, 'verification/fake_xerneas_oracle.cjs')
+                  + '\n// ' + marker + '\n'})
 
     def test_removed_node_oracle_call_is_rejected(self):
         content = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
