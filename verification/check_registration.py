@@ -63,11 +63,32 @@ def required_oracle_profiles(source):
     tree = ast.parse(source)
     imported = any(isinstance(n, ast.ImportFrom) and n.module == 'oracle_matrix'
                    and 'commands_for' in [a.name for a in n.names] for n in tree.body)
-    invoked = [n.args[0].value for n in ast.walk(tree)
-               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-               and n.func.id == 'commands_for' and n.args
-               and isinstance(n.args[0], ast.Constant)]
-    require(imported and sorted(invoked) == ['native', 'pack'],
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == 'commands_for']
+    executed = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.For) or not isinstance(node.iter, ast.Call):
+            continue
+        call = node.iter
+        if call not in calls or not call.args or not isinstance(call.args[0], ast.Constant):
+            continue
+        if not isinstance(node.target, ast.Name):
+            continue
+        target = node.target.id
+        # A bare profile reference is not coverage: the command must be passed
+        # to bounded_run with check=True within that exact iteration.
+        for statement in node.body:
+            if (isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Call)
+                    and isinstance(statement.value.func, ast.Name)
+                    and statement.value.func.id == 'bounded_run'
+                    and statement.value.args
+                    and isinstance(statement.value.args[0], ast.Name)
+                    and statement.value.args[0].id == target
+                    and any(kw.arg == 'check' and isinstance(kw.value, ast.Constant)
+                            and kw.value.value is True for kw in statement.value.keywords)):
+                executed.append(call.args[0].value)
+    require(imported and len(calls) == 2 and sorted(executed) == ['native', 'pack'],
             'Required independent native/pack source runner invocation missing')
 
 
@@ -333,6 +354,11 @@ class RegistryRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
             check(source_override=source.replace("commands_for('native', folder)",
                                                   "commands_for('pack', folder)"))
+        # A profile remaining in the loop but never invoking the independent
+        # subprocess is not a verified oracle, even with a complete manifest.
+        self.assertIn('bounded_run(command, check=True)', source)
+        with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
+            check(source_override=source.replace('bounded_run(command, check=True)', 'pass', 1))
 
     def test_history_index_preserves_every_original_report(self):
         index = (ROOT / 'verification/INDEX.md').read_text(encoding='utf-8')
