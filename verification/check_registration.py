@@ -321,7 +321,7 @@ class RegistryRegression(unittest.TestCase):
         self.assertIn(missing, matrix)
         # Replace with a valid, duplicate entry; malformed Python would test
         # the parser instead of a silently skipped independent oracle.
-        with self.assertRaisesRegex(ValueError, 'Unregistered Node oracle'):
+        with self.assertRaisesRegex(ValueError, 'profile order'):
             check(matrix_override=matrix.replace(missing, '("source_oracle.cjs",)'))
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
