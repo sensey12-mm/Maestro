@@ -83,17 +83,18 @@ def check_runners(data, java, source, gradle):
     invoked = set(NODE.findall(source))
     embedded = {filename for name in reached for filename in
                 EMBEDDED.findall(java[name + '.java']) if name + '.java' in java}
+    # Java sometimes imports the same oracle also launched directly by
+    # the independent Node runner. Sharing a source is valid; losing an
+    # explicit Java-only entry path is not.
     expected_embedded = set(data['node_embedded_java'])
     require(len(expected_embedded) == len(data['node_embedded_java'])
-            and expected_embedded == embedded,
-            'Java-embedded Node oracle registration changed: '
-            + repr(sorted(expected_embedded ^ embedded)))
+            and expected_embedded <= embedded and not (expected_embedded & invoked),
+            'Java-only embedded Node oracle registration changed: '
+            + repr(sorted(expected_embedded - embedded)))
     require(invoked <= node and embedded <= node,
             'Python/Java runner references missing Node oracle')
-    require(not (invoked & embedded),
-            'Independent Node invocation incorrectly overlaps Java-embedded oracle')
-    require(node == invoked | embedded,
-            'Unregistered Node oracle: ' + repr(sorted(node - invoked - embedded)))
+    require(node == invoked | expected_embedded,
+            'Unregistered Node oracle: ' + repr(sorted(node - invoked - expected_embedded)))
     require('sourceVerification' in source and 'selected_profiles' in source
             and 'bounded_run' in source,
             'Native/pack execution linkage missing')
