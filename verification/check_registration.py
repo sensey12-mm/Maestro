@@ -200,16 +200,22 @@ def check_python_execution(root, workflow, source_override=None):
                   else file.read_text(encoding='utf-8'))
         tree = ast.parse(source, filename=str(file))
         targets = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                imported = node.module.split('.')[0]
-                if imported in scripts:
-                    targets.add(imported)
-            elif isinstance(node, ast.Import):
-                for entry in node.names:
-                    imported = entry.name.split('.')[0]
+        # Imports inside self-test classes do not make an otherwise unused
+        # production verification path reachable. The source runner must
+        # independently import the three external archive consumers.
+        for top_level in tree.body:
+            if isinstance(top_level, ast.ClassDef):
+                continue
+            for node in ast.walk(top_level):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    imported = node.module.split('.')[0]
                     if imported in scripts:
                         targets.add(imported)
+                elif isinstance(node, ast.Import):
+                    for entry in node.names:
+                        imported = entry.name.split('.')[0]
+                        if imported in scripts:
+                            targets.add(imported)
         imports[file.stem] = targets
     reached, frontier = set(), list(direct)
     while frontier:
