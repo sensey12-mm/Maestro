@@ -216,3 +216,7 @@ cleanup; the registration checker rejects removal of their safeguards.
 The optimization targets actual serial CI overhead without reducing the
 number or order of independent Node or Java checks. Any claimed wall-clock
 improvement must be confirmed from exact-commit GitHub Actions timestamps.
+
+### Cancellation-safe source orchestration
+
+The GitHub Actions outer timeout uses SIGTERM. The native Python coordinator now catches that signal and enters the same fail-closed process-group cleanup as a failed Node oracle. It restores the prior signal disposition on normal exit and on errors, including failed child launch. A synthetic interrupted-run regression requires termination and reaping of the detached Gradle group. This is necessary because the overlapping Java verifier runs in a new session and would otherwise survive an outer coordinator timeout.

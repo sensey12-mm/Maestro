@@ -438,7 +438,9 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
             and "status = process.wait(timeout=limit)" in source
             and "raise subprocess.CalledProcessError(status, command)" in source
             and "os.killpg(process.pid, signal.SIGTERM)" in source
-            and "os.killpg(process.pid, signal.SIGKILL)" in source,
+            and "os.killpg(process.pid, signal.SIGKILL)" in source
+            and "signal.signal(signal.SIGTERM, interrupted)" in source
+            and "signal.signal(signal.SIGTERM, original_termination)" in source,
             'Native overlapping verification must await both statuses and cancel failed children')
     for moved in data['migrations'].values():
         require(all(workflow.count(moved[key] + '\n') == 1
@@ -562,6 +564,7 @@ class RegistryRegression(unittest.TestCase):
                 ('with parallel_native_source_gradle(native_gradle):', 'if True:'),
                 ('status = process.wait(timeout=limit)', 'status = 0'),
                 ('os.killpg(process.pid, signal.SIGTERM)', 'pass'),
+                ('signal.signal(signal.SIGTERM, interrupted)', 'pass'),
                 ('raise subprocess.CalledProcessError(status, command)', 'pass')):
             with self.subTest(fragment=before):
                 with self.assertRaisesRegex(ValueError, 'overlapping verification'):

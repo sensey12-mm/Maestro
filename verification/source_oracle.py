@@ -123,7 +123,18 @@ def parallel_native_source_gradle(command, limit=5400):
     if (not isinstance(command, list) or command[:2] != ['bash', 'gradlew']
             or 'sourceVerification' not in command or limit <= 0):
         raise ValueError('Unsafe overlapping source verification process')
-    process = subprocess.Popen(command, start_new_session=True)
+    # Outer CI timeout sends SIGTERM to this coordinator. Forward that
+    # interruption into the cleanup path so the detached Gradle process group
+    # is never allowed to outlive the disposable verification source tree.
+    original_termination = signal.getsignal(signal.SIGTERM)
+    def interrupted(_signum, _frame):
+        raise InterruptedError('CI source verification interrupted')
+    signal.signal(signal.SIGTERM, interrupted)
+    try:
+        process = subprocess.Popen(command, start_new_session=True)
+    except BaseException:
+        signal.signal(signal.SIGTERM, original_termination)
+        raise
     try:
         yield
         status = process.wait(timeout=limit)
@@ -150,6 +161,8 @@ def parallel_native_source_gradle(command, limit=5400):
                     process.kill()
                 process.wait(timeout=10)
         raise
+    finally:
+        signal.signal(signal.SIGTERM, original_termination)
 
 
 class SourceGuards(unittest.TestCase):
@@ -244,6 +257,20 @@ class SourceGuards(unittest.TestCase):
                         raise RuntimeError('synthetic Node failure')
                 terminate.assert_called_once_with(3719, signal.SIGTERM)
                 running.wait.assert_called_once_with(timeout=10)
+
+    def test_ci_sigterm_interrupts_and_reaps_detached_gradle(self):
+        command = ['bash', 'gradlew', 'sourceVerification']
+        running = mock.Mock(pid=3719)
+        running.poll.return_value = None
+        running.wait.return_value = -signal.SIGTERM
+        old_handler = signal.getsignal(signal.SIGTERM)
+        with mock.patch('source_oracle.subprocess.Popen', return_value=running):
+            with mock.patch('source_oracle.os.killpg') as terminate:
+                with self.assertRaisesRegex(InterruptedError, 'interrupted'):
+                    with parallel_native_source_gradle(command):
+                        signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+                terminate.assert_called_once_with(3719, signal.SIGTERM)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), old_handler)
 
     def test_gradle_timeout_sends_term_then_kill_and_reaps(self):
         command = ['bash', 'gradlew', 'sourceVerification']
