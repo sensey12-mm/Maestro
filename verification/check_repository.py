@@ -51,6 +51,8 @@ def check_workflow(source):
             raise ValueError('Missing Maestro-6 Phase 6 CI trigger')
         if event == 'push' and 'Maestro4567' not in branches:
             raise ValueError('Missing Maestro4567 integration CI trigger')
+        if event == 'push' and 'Maestro-2.0' not in branches:
+            raise ValueError('Missing Maestro-2.0 verification CI trigger')
         # Required verify must be scheduled for every main PR/push, including
         # README-only changes. Workflow-level path skips leave required checks pending.
         if re.search(r'(?m)^ +(paths|paths-ignore):', block):
@@ -59,7 +61,7 @@ def check_workflow(source):
     # Exact commit isolation belongs to immutable GitHub run / artifact SHAs,
     # enforced below; serializing/cancelling branch supersession is safe.
     if ("group: verify-${{ github.event.pull_request.number || github.ref }}" not in source
-            or "cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567' }}" not in source
+            or "cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567' || github.ref == 'refs/heads/Maestro-2.0' }}" not in source
             or "&& github.sha || 'shared'" in source):
         raise ValueError('Maestro4567 requires branch-scoped superseded-run cancellation')
     if 'python3 verification/check_repository.py\n' not in source or 'python3 verification/check_repository.py --self-test\n' not in source:
@@ -87,6 +89,10 @@ def check_workflow(source):
                        'python3 verification/source_oracle.py --native\n')
     required_pack = ('timeout --signal=TERM --kill-after=30s 48m '
                      'python3 verification/source_oracle.py --pack\n')
+    for job_name, section in (('verify', native), ('pack_source', pack)):
+        if (section.count('python3 verification/check_registration.py --self-test\n') != 1
+                or section.count('python3 verification/check_registration.py\n') != 1):
+            raise ValueError('Verification registration safeguard missing from ' + job_name)
     if (required_native not in native or required_pack not in pack
             or 'python3 verification/source_oracle.py --self-test\n' not in native
             or 'python3 verification/source_oracle.py --self-test\n' not in pack
@@ -161,10 +167,10 @@ class SafeguardRegression(unittest.TestCase):
                 with self.subTest(event=event), self.assertRaises(ValueError):
                     check_workflow(source.replace('  ' + event + ':', replacement, 1))
         with self.assertRaises(ValueError):
-            check_workflow(source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567]', 'branches: [other]'))
+            check_workflow(source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567, Maestro-2.0]', 'branches: [other]'))
     def test_dedicated_integration_branch_cannot_be_skipped(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
-        broken = source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567]',
+        broken = source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567, Maestro-2.0]',
                                 'branches: [main, Maestro457, Maestro-6]')
         with self.assertRaisesRegex(ValueError, 'Maestro4567'):
             check_workflow(broken)
@@ -260,6 +266,21 @@ class SafeguardRegression(unittest.TestCase):
                 '      - name: Skip candidate verification',1).replace(
                 'python3 verification/check_publish_artifact.py build/verified-artifact/',
                 'echo skip',1))
+
+    def test_registration_checker_is_mandatory_in_both_jobs(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        check_workflow(source)
+        for command in ('python3 verification/check_registration.py --self-test\n',
+                        'python3 verification/check_registration.py\n'):
+            for start_marker, end_marker in (('  verify:\n', '  pack_source:\n'),
+                                              ('  pack_source:\n', '  publish:\n')):
+                start = source.index(start_marker)
+                end = source.index(end_marker, start)
+                changed = source[:start] + source[start:end].replace(command, '', 1) + source[end:]
+                with self.subTest(command=command, job=start_marker), self.assertRaisesRegex(ValueError, 'registration'):
+                    check_workflow(changed)
+        with self.assertRaisesRegex(ValueError, 'Maestro-2.0'):
+            check_workflow(source.replace('Maestro4567, Maestro-2.0]', 'Maestro4567]', 1))
 
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)

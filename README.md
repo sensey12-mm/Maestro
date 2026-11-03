@@ -130,3 +130,6 @@ binding, calibrated probabilities, legal actions, and tactical/live promotion.
 Phase 7's Legacy-choice capture is opt-in and never changes the selected action.
 See `verification/PHASE457_INTEGRATION_STATUS.md` for exact upstream commits,
 cross-phase acceptance tests, and remaining Phase 6 prerequisites.
+
+
+Verification architecture and original-file custody inventory: [verification/ARCHITECTURE.md](verification/ARCHITECTURE.md). Before running the verification suite, run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`.
