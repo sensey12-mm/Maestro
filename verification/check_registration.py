@@ -14,6 +14,9 @@ ORIGIN = '8d6f193fec55554c41b4d16dbfc226d9b88e83ff'
 SUFFIX = {'.java', '.cjs', '.py'}
 CALL = re.compile(r'\b([A-Z][A-Za-z0-9_]*Regression)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(')
 NODE = re.compile(r"['\"]verification/([a-z][a-z0-9_]*\.cjs)['\"]")
+# Java regression sources load these as text into a pinned native engine.
+# They are not independent Node CLI invocations, but are CI exercised.
+EMBEDDED = re.compile(r"['\"]verification/([a-z][a-z0-9_]*\.cjs)['\"]")
 
 
 def require(ok, why):
@@ -77,14 +80,20 @@ def check_runners(data, java, source, gradle):
             + ', '.join(sorted(reached & manual_java)))
 
     node = {Path(p).name for p in data['original_paths'] if p.endswith('.cjs')}
-    manual_node = set(data['node_manual_not_ci'])
     invoked = set(NODE.findall(source))
-    require(len(manual_node) == len(data['node_manual_not_ci'])
-            and manual_node <= node and not (manual_node & invoked),
-            'Invalid Node manual-probe registry')
-    require(invoked <= node, 'Node runner references missing source oracle')
-    require(node == invoked | manual_node,
-            'Unregistered Node oracle: ' + repr(sorted(node - invoked - manual_node)))
+    embedded = {filename for name in reached for filename in
+                EMBEDDED.findall(java[name + '.java']) if name + '.java' in java}
+    expected_embedded = set(data['node_embedded_java'])
+    require(len(expected_embedded) == len(data['node_embedded_java'])
+            and expected_embedded == embedded,
+            'Java-embedded Node oracle registration changed: '
+            + repr(sorted(expected_embedded ^ embedded)))
+    require(invoked <= node and embedded <= node,
+            'Python/Java runner references missing Node oracle')
+    require(not (invoked & embedded),
+            'Independent Node invocation incorrectly overlaps Java-embedded oracle')
+    require(node == invoked | embedded,
+            'Unregistered Node oracle: ' + repr(sorted(node - invoked - embedded)))
     require('sourceVerification' in source and 'selected_profiles' in source
             and 'bounded_run' in source,
             'Native/pack execution linkage missing')
@@ -141,6 +150,14 @@ class RegistryRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'not reachable'):
             check(overrides={p.name: content.replace(marker, 'UnregisteredFixture.run(')})
 
+    def test_removed_java_embedded_oracle_link_is_rejected(self):
+        p = ROOT / 'verification/java/com/maestroai/training/OwnXerneasRegression.java'
+        content = p.read_text(encoding='utf-8')
+        marker = 'verification/own_xerneas_oracle.cjs'
+        self.assertIn(marker, content)
+        with self.assertRaisesRegex(ValueError, 'Java-embedded Node oracle'):
+            check(overrides={p.name: content.replace(marker, 'verification/fake_xerneas_oracle.cjs')})
+
     def test_removed_node_oracle_call_is_rejected(self):
         content = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
         marker = "'verification/accuracy_miss_oracle.cjs'"
@@ -161,7 +178,7 @@ def main():
     data = check()
     print('Verification registrations OK: 256 original paths, '
           + str(len(data['java_manual_not_ci'])) + ' explicit manual Java probes, '
-          + str(len(data['node_manual_not_ci'])) + ' explicit manual Node oracles')
+          + str(len(data['node_embedded_java'])) + ' Java-embedded source oracles')
     return 0
 
 

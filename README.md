@@ -22,7 +22,7 @@ The last command requires Node.js 20 or newer. It checks the exact downloaded de
 
 The repository safeguard checks exercise local-file ignore rules, required build inputs, LICENSE-trigger coverage and the retained Gradle Apache notices. Ignore rules help prevent accidental staging; they do not replace review of newly added files.
 
-Verification classes are excluded from the mod JAR. CI checks Java21 classes, expected resources/notices and unwanted archive entries; it publishes no artifacts. Experimental Shadow analysis remains observational; these tests do not promote it to live decisions or demonstrate battle win rates.
+Verification classes are excluded from the mod JAR. CI checks Java21 classes, expected resources/notices and unwanted archive entries. After both independent source profiles pass, a separate release gate publishes an exact-commit JAR with checksum; this does not constitute installed Minecraft acceptance. Experimental Shadow analysis remains observational; these tests do not promote it to live decisions or demonstrate battle win rates.
 
 Runtime move attestation covers every ID in the conditional mechanics calculator, including Geomancy, Thunder, Psystrike, Fire Blast and Spectral Thief. Native verification checks the calculator's complete ID set against the actual operation tables and exercises original registrations, altered definitions, foreign callbacks and irreversible receipt expiration. Unused custom moves may coexist without receiving operation coverage. These configuration checks preserve the separate actor, legality and evidence prerequisites; they do not establish additional move behavior or Minecraft acceptance.
 

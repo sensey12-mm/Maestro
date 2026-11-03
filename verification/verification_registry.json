@@ -269,7 +269,7 @@
     "RaidReloadRegression",
     "RuntimeCaptureRegression"
   ],
-  "node_manual_not_ci": [
+  "node_embedded_java": [
     "geomancy_continuity_oracle.cjs",
     "own_first_web_oracle.cjs",
     "own_xerneas_oracle.cjs",

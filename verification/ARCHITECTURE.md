@@ -20,15 +20,15 @@ This is public-safe engineering documentation of this repository, not private pr
 | Required registration/path preservation | `check_registration.py` |
 | Synthetic benchmark (not live games) | `benchmarks/phase7_1_synthetic.json` |
 
-The release `publish` job must continue to depend on **both** independent native and pack jobs, and verify an artifact from the exact same source commit. The registration audit checks direct/transitive Java reachability and source-oracle references; it does not establish runtime execution from static text alone. Required CI actually runs these profiles.
+The release `publish` job must continue to depend on **both** independent native and pack jobs, and verify an artifact from the exact same source commit. The registration audit checks direct/transitive Java reachability, independent Python-to-Node invocation and Java-embedded oracle source references; static reachability alone cannot establish actual runtime execution. The separate pinned native and pack CI profiles exercise the registrations. Required CI actually runs these profiles.
 
 ## Existing manual or not-yet-CI-reachable probes
 
 **Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.
 
-**Node:** `geomancy_continuity_oracle.cjs`, `own_first_web_oracle.cjs`, `own_xerneas_oracle.cjs`, `policy_oracle.cjs`.
+**Java-embedded Node oracles (CI-exercised indirectly):** `geomancy_continuity_oracle.cjs` through `GeomancyContinuityRegression`, `own_first_web_oracle.cjs` through `OwnFirstWebRegression`, `own_xerneas_oracle.cjs` through `OwnXerneasRegression`, and `policy_oracle.cjs` through `ModifierTacticalRegression`. They are loaded as source into the pinned simulator's Java/Graal harness, not launched directly from Python. The registration checker protects their Java-to-JavaScript links.
 
-These files remain preserved and explicitly identified rather than falsely described as CI-executed. Some depend on separately provisioned native fixtures or on one another. Their correct integration requires reviewing real dependencies, positive and adversarial cases, and the independent simulator evidence boundary. Do not manufacture inputs merely to obtain a green registry.
+The five Java files above remain outside required CI roots. `AddonReloadRegression` and `RaidReloadRegression` are subordinate to the currently unregistered `RuntimeCaptureRegression`; the remaining two are separate host probes. Their correct integration requires reviewing required inputs, positive and adversarial cases, and the independent simulator evidence boundary. Do not manufacture inputs merely to obtain a green registry.
 
 ## Future consolidation contract
 
