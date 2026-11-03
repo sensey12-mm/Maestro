@@ -151,12 +151,15 @@ The first bounded-heap trial, [41703275931](https://github.com/sensey12-mm/Maest
 confirmed the full pack profile still succeeded but took approximately
 34 minutes; the heap adjustment alone therefore **did not demonstrate a
 speedup** relative to the older ~20-minute pack baseline. The next
-controlled test uses GraalVM Community JDK 21 **only for the
+controlled test uses Oracle GraalVM JDK 21 **only for the
 `sourceVerification` JavaExec child**, leaving compilation, standalone
 regressions, installer checks and the published mod build on Temurin 21.
 Official GraalJS embedding documentation notes that suppressing the
 interpreter-only warning does not enable runtime compilation:
 https://github.com/oracle/graaljs/blob/master/docs/user/FAQ.md .
+The pinned setup-java action SHA supports `distribution: graalvm` (Oracle)
+but not `graalvm-community`; the first trial failed before any Graal
+source work began because that newer identifier was unsupported.
 The verified action SHA sets up both JDKs; the shell restores the original
 `JAVA_HOME` for Gradle, and `MAESTRO_SOURCE_JAVA` selects the isolated
 GraalVM child. The repository gate rejects missing launcher isolation,

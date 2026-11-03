@@ -130,7 +130,7 @@ def check_workflow(source):
         '      - name: Provision GraalVM 21 only for embedded JavaScript verification\n'
         '        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3\n'
         '        with:\n'
-        '          distribution: graalvm-community\n'
+        '          distribution: graalvm\n'
         "          java-version: '21'\n"
     )
     isolated = (
@@ -152,7 +152,7 @@ def check_workflow(source):
                         < job.find(source_start))
                 or 'distribution: temurin\n          java-version: \'21\'\n' not in job):
             raise ValueError('Verification-only GraalVM JDK must preserve Temurin build and full source execution')
-    if 'distribution: graalvm-community' in publish or 'MAESTRO_SOURCE_JAVA' in publish:
+    if 'distribution: graalvm' in publish or 'MAESTRO_SOURCE_JAVA' in publish:
         raise ValueError('Release job must not use the source-only GraalVM launcher')
 
     if (required_native not in native or required_pack not in pack
@@ -301,7 +301,7 @@ class SafeguardRegression(unittest.TestCase):
     def test_verification_only_graal_launcher_cannot_replace_build_or_release_gate(self):
         original = (ROOT / '.github/workflows/verify.yml').read_text()
         for old, new in (
-                ('distribution: graalvm-community', 'distribution: temurin'),
+                ('distribution: graalvm', 'distribution: temurin'),
                 ('export JAVA_HOME="$MAESTRO_BUILD_JAVA_HOME"', 'export JAVA_HOME="$HOME"'),
                 ('export MAESTRO_SOURCE_JAVA="$JAVA_HOME/bin/java"',
                  'export MAESTRO_SOURCE_JAVA="$HOME/unknown-java"'),
