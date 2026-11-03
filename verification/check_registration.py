@@ -139,8 +139,8 @@ def check_python_sources(root, source_override=None):
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 module = node.module.split('.')[0]
-                if (module.endswith('_oracle') or module in {'oracle_matrix', 'check_registration'})
-                        and module not in modules:
+                if ((module.endswith('_oracle') or module in {'oracle_matrix', 'check_registration'})
+                        and module not in modules):
                     raise ValueError('Broken local Python oracle import in ' + file.name
                                      + ': ' + module)
 
