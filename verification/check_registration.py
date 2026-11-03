@@ -346,8 +346,8 @@ class RegistryRegression(unittest.TestCase):
 
     def test_oracle_order_and_independent_profile_scope_are_locked(self):
         matrix = (ROOT / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
-        left = '    ("source_oracle.cjs",)\n    ("move_attestation_oracle.cjs",)'
-        right = '    ("move_attestation_oracle.cjs",)\n    ("source_oracle.cjs",)'
+        left = '    ("source_oracle.cjs",),\n    ("move_attestation_oracle.cjs",),'
+        right = '    ("move_attestation_oracle.cjs",),\n    ("source_oracle.cjs",),'
         self.assertIn(left, matrix)
         with self.assertRaisesRegex(ValueError, 'profile order'):
             check(matrix_override=matrix.replace(left, right))
