@@ -78,11 +78,17 @@ reject a disconnected group, a missing class invocation, or an unreviewed reorde
 
 ## Existing manual or not-yet-CI-reachable probes
 
-**Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.
+**Only optional, not CI-reachable Java host probe:** `FabricModeRegression`. This fixture depends on a suitable Fabric/raid host and cannot be treated as installed Minecraft acceptance.
+
+**Full-pack CI-hosted Java regressions:** `PackSourceRegression` launches `BootProfileRegression` and `RuntimeCaptureRegression` in separate Java subprocesses and checks their exit status. `RuntimeCaptureRegression` then exercises `AddonReloadRegression` and `RaidReloadRegression`. All four were confirmed by source analysis as reachable from the existing required full pack-source job, without adding redundant executions.
 
 **Java-embedded Node oracles (CI-exercised indirectly):** `geomancy_continuity_oracle.cjs` through `GeomancyContinuityRegression`, `own_first_web_oracle.cjs` through `OwnFirstWebRegression`, `own_xerneas_oracle.cjs` through `OwnXerneasRegression`, and `policy_oracle.cjs` through `ModifierTacticalRegression`. They are loaded as source into the pinned simulator's Java/Graal harness, not launched directly from Python. The registration checker protects their Java-to-JavaScript links.
 
-The five Java files above remain outside required CI roots. `AddonReloadRegression` and `RaidReloadRegression` are subordinate to the currently unregistered `RuntimeCaptureRegression`; the remaining two are separate host probes. Their correct integration requires reviewing required inputs, positive and adversarial cases, and the independent simulator evidence boundary. Do not manufacture inputs merely to obtain a green registry.
+The registry models both direct Java test calls and the exact Java child-process
+class-name launch path. It rejects missing boot/runtime host launches or missing
+fail-closed exit status checks. `FabricModeRegression` remains explicitly
+not runnable as part of the synthetic source-only CI and requires a suitable
+installed runtime; this does not establish gameplay acceptance.
 
 ## Future consolidation contract
 

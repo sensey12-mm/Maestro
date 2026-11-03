@@ -17,6 +17,7 @@ ORIGIN = '8d6f193fec55554c41b4d16dbfc226d9b88e83ff'
 ORIGIN_INVENTORY_SHA256 = '80108f5ab57d4bd17dfeea533a8907d1388c4fc5922de4ca98f1e25b9e09d9f9'
 SUFFIX = {'.java', '.cjs', '.py'}
 CALL = re.compile(r'\b([A-Z][A-Za-z0-9_]*Regression)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(')
+HOST_CLASS = re.compile(r'\b([A-Z][A-Za-z0-9_]*Regression)\.class\.getName\(\)')
 # Ignore non-executable Java comments, string literals and text blocks.
 # A call name in a comment must NEVER satisfy a required registration.
 JAVA_NONCODE = re.compile(
@@ -281,8 +282,20 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require(len(manual_java) == len(data['java_manual_not_ci'])
             and manual_java <= regressions,
             'Invalid Java manual-probe registry')
-    calls = {name[:-5]: set(CALL.findall(JAVA_NONCODE.sub(' ', content)))
-             for name, content in java.items()}
+    # Pack-source launchers use ProcessBuilder with Class.getName instead of
+    # a direct Java call. Include those children, but require their exit codes
+    # to remain checked rather than silently skipping hosted regressions.
+    pack = JAVA_NONCODE.sub(' ', java.get('PackSourceRegression.java', ''))
+    require(all(needle in pack for needle in (
+        'BootProfileRegression.class.getName()',
+        'RuntimeCaptureRegression.class.getName()',
+        'check(child.waitFor()==0',
+        'check(runtime.waitFor()==0',
+        'new ProcessBuilder(')),
+        'Pinned full-pack Java hosted-regression execution or exit status gate missing')
+    calls = {name[:-5]: (set(CALL.findall(clean)) | set(HOST_CLASS.findall(clean)))
+             for name, content in java.items()
+             for clean in [JAVA_NONCODE.sub(' ', content)]}
     reached, todo = set(), ['StandaloneRegression', 'SourceVerification']
     while todo:
         name = todo.pop()
@@ -404,6 +417,17 @@ class RegistryRegression(unittest.TestCase):
         self.assertIn(marker, source)
         with self.assertRaisesRegex(ValueError, 'ordered Java regression coverage'):
             check(overrides={p.name: source.replace(marker, '        // group disconnected')})
+
+    def test_hosted_java_regressions_and_exit_checks_are_required(self):
+        p = ROOT / 'verification/java/com/maestroai/training/PackSourceRegression.java'
+        original = p.read_text(encoding='utf-8')
+        self.assertIn('RuntimeCaptureRegression.class.getName()', original)
+        with self.assertRaisesRegex(ValueError, 'hosted-regression'):
+            check(overrides={p.name: original.replace(
+                'RuntimeCaptureRegression.class.getName()', 'RuntimeCaptureRegression.class.getSimpleName()')})
+        with self.assertRaisesRegex(ValueError, 'exit status gate'):
+            check(overrides={p.name: original.replace(
+                'check(runtime.waitFor()==0', 'check(true')})
 
     def test_removed_indirect_phase7_regression_call_is_rejected(self):
         p = ROOT / 'verification/java/com/maestroai/training/Phase7SelfPlayRegression.java'

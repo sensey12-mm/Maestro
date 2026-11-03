@@ -264,11 +264,7 @@
     "verification/oracle_matrix.py"
   ],
   "java_manual_not_ci": [
-    "AddonReloadRegression",
-    "BootProfileRegression",
-    "FabricModeRegression",
-    "RaidReloadRegression",
-    "RuntimeCaptureRegression"
+    "FabricModeRegression"
   ],
   "node_embedded_java": [
     "geomancy_continuity_oracle.cjs",
