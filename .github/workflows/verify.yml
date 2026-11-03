@@ -1,7 +1,7 @@
 name: Verify MaestroAI
 on:
   push:
-    branches: [main, Maestro457, Maestro-6, Maestro4567]
+    branches: [main, Maestro4567]
   pull_request:
     branches: [main]
 permissions:
@@ -10,7 +10,7 @@ concurrency:
   # One verification generation per branch/PR: obsolete commits cancel.
   # Exact-commit verification and publication remain mandatory on the final SHA.
   group: verify-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro4567' }}
 jobs:
   verify:
     runs-on: ubuntu-latest
