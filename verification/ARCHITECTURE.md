@@ -179,3 +179,14 @@ than claiming compiler-based acceleration.
 5. Keep private HQ documentation, battle logs, credentials and custody evidence outside this public repository. The repository safeguard rejects private-repository URLs in public verification content, CI secrets, writable token permissions, and persisted checkout credentials. Source CI and simulator checks cannot certify Minecraft acceptance.
 
 The original file count is a **baseline, not a reduction target**. Retain independent checks when they provide separate evidence or failure isolation.
+
+### GraalVM 25 verification-only runtime experiment
+
+Oracle's current Truffle runtime documentation states that **GraalVM 25**
+provides optimizing execution for compatible polyglot runtimes, while JDK 21
+can fall back to the interpreter. A controlled follow-up changes **only**
+the isolated, source-verification GraalVM launcher from JDK 21 to JDK 25;
+Gradle compilation and packaging remain Temurin Java 21. The full Java and
+Node regression profiles, class-provenance checks and exact-commit release
+checks remain mandatory. The actual speedup or runtime compatibility must be
+measured from GitHub job logs and may fail closed.
