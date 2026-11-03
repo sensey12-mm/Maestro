@@ -306,6 +306,54 @@ def check_pinned_public_archive_wiring(root, runner, overrides=None):
                 'Duplicated unaudited public archive downloader reintroduced: ' + name)
 
 
+def check_source_java_execution(root, java, gradle):
+    """Check performance edits cannot silently bypass independent Graal checks.
+
+    Static order/call registration complements full native + pack CI execution.
+    Timings and JVM heap bounds are verification-only, not production settings.
+    """
+    name = 'SourceVerification.java'
+    content = java[name]
+    expected = (
+        'BlockedHitRegression', 'HealingRecoilRegression',
+        'RecoilContinuationRegression', 'PivotOutcomeRegression',
+        'AccuracyMissRegression', 'ResidualRecoveryRegression',
+        'SandstormRegression', 'WeatherSuppressionRegression',
+        'WeatherSpeedRegression', 'UtilityUmbrellaRegression',
+        'WeatherAbilityRegression', 'ToxicEntryRegression',
+        'RosterAbilityRegression', 'DownloadEntryRegression',
+        'WeatherEntryRegression', 'ColdWeatherRegression',
+        'WeatherSetterRegression', 'OwnMegaYRegression',
+        'OwnZMoveRegression', 'OwnReentryRegression',
+        'OwnXerneasRegression', 'GeomancyContinuityRegression',
+        'OwnFirstWebRegression', 'StatusSpeedRegression',
+        'PsychicTerrainRegression', 'ModifierCompositionRegression',
+    )
+    observed = tuple(re.findall(r'(?m)^\s*(\w+Regression)\.differential\(engine\);\s*$', content))
+    require(observed == expected,
+            'Graal native differential coverage/order altered by CI performance edit')
+    for marker in (
+        'DispatchIntegrationRegression.run(Path.of(args[1]));',
+        'PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);',
+        'MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);',
+        'OwnXerneasRegression.attestation(engine);',
+        'NativeRegistryRegression.prepare(engine,probe,publicBattle,modules,resources);',
+        'profile("native-differentials", ciStart);',
+        'profile("native-move-attestation", ciStart);',
+        'profile("native-complete", ciStart);',
+        'profile("pack-complete", ciStart);',
+    ):
+        require(content.count(marker) == 1,
+                'Graal attestation/pack gate or timing marker removed: ' + marker)
+    require(gradle.count("p.tasks.register('sourceVerification', JavaExec)") == 1
+            and "minHeapSize = '512m'" in gradle
+            and "maxHeapSize = '3g'" in gradle
+            and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle
+            and "if (p.hasProperty('verificationPack')) args 'pack'" in gradle
+            and "if (p.hasProperty('verificationLayoutOnly')) args 'layout-only'" in gradle,
+            'Source-only performance tuning or native/pack argument isolation removed')
+
+
 def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require("mainClass = 'com.maestroai.training.StandaloneRegression'" in gradle
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle,
@@ -412,6 +460,7 @@ def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_ov
     check_python_execution(root, workflow, source_override)
     native_hook = ((root / 'verification/runtime_hook_oracle.py').read_text(encoding='utf-8')
                    if hook_override is None else hook_override)
+    check_source_java_execution(root, java, gradle)
     check_runners(data, java, source, gradle, matrix, workflow, native_hook)
     return data
 
@@ -539,6 +588,28 @@ class RegistryRegression(unittest.TestCase):
             check(consumer_overrides={path.name: original.replace(
                 'load_pinned_public_jar(home, URL, SHA256, 8 * 1024 * 1024',
                 'some_other_downloader(home, URL, SHA256, 8 * 1024 * 1024')})
+
+    def test_graal_native_suite_and_performance_boundary_are_required(self):
+        path = ROOT / 'verification/java/com/maestroai/training/SourceVerification.java'
+        original = path.read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Graal native differential coverage/order'):
+            check(overrides={path.name: original.replace(
+                'ModifierCompositionRegression.differential(engine);',
+                'ModifierCompositionRegression.runNothing(engine);')})
+        with self.assertRaisesRegex(ValueError, 'Graal attestation/pack gate'):
+            check(overrides={path.name: original.replace(
+                'MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);',
+                'System.out.println("skipped");')})
+        with self.assertRaisesRegex(ValueError, 'Graal attestation/pack gate'):
+            check(overrides={path.name: original.replace(
+                'profile("native-move-attestation", ciStart);',
+                'System.out.println("unprofiled");')})
+        # The source-only heap change may not leak into other Gradle Java tasks
+        # or weaken pack layout / independent native invocation.
+        gradle = (ROOT / 'verification/verification.init.gradle').read_text()
+        with self.assertRaisesRegex(ValueError, 'Source-only performance'):
+            check_with_gradle = gradle.replace("maxHeapSize = '3g'", "maxHeapSize = '256m'")
+            check_source_java_execution(ROOT, {path.name: original}, check_with_gradle)
 
     def test_python_execution_disconnection_is_rejected(self):
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')

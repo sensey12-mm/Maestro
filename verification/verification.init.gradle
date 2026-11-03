@@ -68,6 +68,11 @@ allprojects {
         }
         p.tasks.register('sourceVerification', JavaExec) {
             dependsOn p.tasks.named('verificationClasses'), p.tasks.named('remapJar')
+            // Baseline CI spent ~31m in this relocated/interpreted Graal suite,
+            // ~22m after modifier composition and before move attestation PASS.
+            // Cap only this verification child; never alter production JVM flags.
+            minHeapSize = '512m'
+            maxHeapSize = '3g'
             classpath = p.sourceSets.verification.output +
                     p.files(p.tasks.named('remapJar').flatMap { it.archiveFile }) +
                     p.configurations.compileClasspath + p.configurations.verificationRuntimeClasspath

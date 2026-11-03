@@ -55,8 +55,13 @@ public final class SourceVerification {
 
     public static void main(String[] args) throws Exception {
         Path simulator = Path.of(args[0]).toAbsolutePath();
+        long ciStart = System.nanoTime();
         OwnXerneasRegression.prepare(Path.of(args[1]));
-        if (args.length > 2) { PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3); return; }
+        if (args.length > 2) {
+            PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);
+            profile("pack-complete", ciStart);
+            return;
+        }
         DispatchIntegrationRegression.run(Path.of(args[1]));
         Path resources = Path.of("src/main/resources/com/maestroai/training");
         var expected = new TreeMap<String,String>();
@@ -71,6 +76,7 @@ public final class SourceVerification {
                 .build()) {
             engine.eval("js", "var process={cwd:()=>''};");
             engine.eval("js", Files.readString(simulator.resolve("index.js")));
+            profile("native-bootstrap", ciStart);
             verifyNativeRecovery(engine);
             BlockedHitRegression.differential(engine);
             HealingRecoilRegression.differential(engine);
@@ -99,6 +105,7 @@ public final class SourceVerification {
             StatusSpeedRegression.differential(engine);
             PsychicTerrainRegression.differential(engine);
             ModifierCompositionRegression.differential(engine);
+            profile("native-differentials", ciStart);
             engine.eval("js", "var verificationStream=new BS.BattleStream(); battleMap.set('synthetic-verification',verificationStream);"
                     + "verificationStream.write('>start '+JSON.stringify({format:{mod:'cobblemon',gameType:'singles',gen:9,"
                     + "ruleset:['Obtainable','+Past','+Unobtainable'],effectType:'Format'}}));");
@@ -118,7 +125,9 @@ public final class SourceVerification {
                 observed.put(value.getKey(), HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data)));
             }
             if (!observed.equals(expected)) throw new AssertionError("Initialized source components differ: "+observed);
+            profile("native-pre-attestation", ciStart);
             MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);
+            profile("native-move-attestation", ciStart);
             var sourceDomain = new RuntimeDomain(new RuntimeDomain.Snapshot(
                     clean.get("mod").getAsString().equals("cobblemon") && clean.get("gen").getAsInt()==9
                             && clean.get("gameType").getAsString().equals("singles"),
@@ -172,7 +181,17 @@ public final class SourceVerification {
             if(capture.get().get("registryEquivalent").getAsBoolean())
                 throw new AssertionError("Foreign closure accepted from equal source text");
             System.out.println("Relocated Graal source verification PASS: exact component hashes, private-state guards, changed callback rejection and reset");
+            profile("native-complete", ciStart);
         }
+    }
+    private static long lastProfileNs;
+    private static void profile(String stage, long started) {
+        long now = System.nanoTime();
+        long previous = lastProfileNs == 0 ? started : lastProfileNs;
+        System.out.println("CI_SOURCE_PROFILE " + stage
+                + " total_ms=" + ((now-started)/1_000_000)
+                + " interval_ms=" + ((now-previous)/1_000_000));
+        lastProfileNs = now;
     }
     static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8))); }

@@ -118,6 +118,39 @@ per-phase records and signed-custody tests require distinct failure domains.
 No measured semantic duplication justified merging those checks, and no
 historical report was renamed or deleted.
 
+## CI performance optimization: measured baseline and guarded tuning
+
+The last fully passing pre-tuning run was
+[41696027339](https://github.com/sensey12-mm/Maestro/actions/runs/41696027339)
+at `a5e579374b1fe40d75c774ac75727e03e413337a`. Its UTC
+runner timestamps show:
+- Native `verify`: ~34m23s overall; the `sourceVerification` Gradle
+  subprocess took ~30m54s. A ~22m10s gap occurred between modifier
+  composition completion and selected-move attestation completion.
+- Independent `pack_source`: ~19m55s overall; the full first
+  `sourceVerification` invocation took ~18m02s. A ~4m20s gap occurred in
+  that profile's selected-move attestation.
+- `publish` took seconds and was already gated by successful completion
+  of both profiles; the independent 25 native and six pack Node oracles
+  were not the main delay. Timings reflect CI wall clock, not CPU profiles.
+
+A bounded `512m` initial / `3g` maximum heap is applied **only to
+the disposable `sourceVerification` JavaExec**, not production Minecraft
+or Shadow runtime. This targets potential interpreter/GC pressure but does
+not prove its cause. `CI_SOURCE_PROFILE` timing markers now isolate native
+bootstrap, complete differential suite, move attestation, and final
+source checks, plus pack completion. The registration gate and its
+negative-mutation tests require the original 26 differential calls in
+order, full selected-move attestation, pack and native entry paths,
+and the verified-only JVM scope. The existing repository safeguards
+still mandate `publish.needs: [verify, pack_source]` and same-commit
+artifact validation. Full source acceptance is never replaced by
+timing instrumentation.
+
+**Post-tuning durations must be compared from exact-commit CI logs**
+before claiming a speedup; no inference from the allocation flags alone
+is sufficient.
+
 ## Future consolidation contract
 
 1. Establish how each component is reached, its fixtures, and positive, privacy and adversarial coverage.
