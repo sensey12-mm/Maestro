@@ -9,9 +9,13 @@ The pinned build targets Minecraft 1.21.1, Java 21, Cobblemon Fabric 1.7.3 (buil
 ```sh
 python3 verification/check_repository.py --self-test
 python3 verification/check_repository.py
-bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression
+python3 verification/check_registration.py --self-test
+python3 verification/check_registration.py
+bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression phase7Benchmark
 python3 verification/check_jar.py --self-test
 python3 verification/check_jar.py
+python3 verification/runtime_hook_oracle.py --self-test
+python3 verification/runtime_hook_oracle.py --verify-pinned
 python3 verification/source_oracle.py --self-test
 python3 verification/source_oracle.py
 ```

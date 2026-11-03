@@ -83,6 +83,6 @@ The five Java files above remain outside required CI roots. `AddonReloadRegressi
 2. Connect new tests to the existing appropriate suite; review and update the inventory so new source files cannot silently appear.
 3. Before relocating/removing an original file, extend the reviewed migration mapping with its original path and Git blob, replacement, preserved coverage and independent-oracle rationale. Unrecognized migrations still fail closed and require reviewed guard amendments and negative tests.
 4. Run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`, then all existing CI gates. Verify `verify`, `pack_source`, and `publish` for the **exact commit**.
-5. Keep private HQ documentation, battle logs, credentials and custody evidence outside this public repository. Source CI and simulator checks cannot certify Minecraft acceptance.
+5. Keep private HQ documentation, battle logs, credentials and custody evidence outside this public repository. The repository safeguard rejects private-repository URLs in public verification content, CI secrets, writable token permissions, and persisted checkout credentials. Source CI and simulator checks cannot certify Minecraft acceptance.
 
 The original file count is a **baseline, not a reduction target**. Retain independent checks when they provide separate evidence or failure isolation.

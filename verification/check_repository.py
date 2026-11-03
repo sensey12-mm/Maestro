@@ -38,8 +38,30 @@ def check_ignore(source):
             raise ValueError('Local files exposed or required repository inputs ignored')
 
 
+def check_public_boundary(root):
+    """Do not let public verification inputs link to private source records."""
+    # Source-bounded technical docs may mention that private evidence exists;
+    # no direct private repository URL should leave this public tree.
+    private_target = 'sensey12-mm/' + 'Headquarters'
+    prefixes = ('github.com/', 'api.github.com/repos/',
+                'raw.githubusercontent.com/')
+    candidates = [root / 'README.md', root / '.github/workflows/verify.yml']
+    candidates.extend(p for p in (root / 'verification').rglob('*')
+                      if p.is_file() and p.suffix in {'.md', '.py', '.java', '.cjs',
+                                                       '.json', '.tsv', '.gradle'})
+    for path in candidates:
+        contents = path.read_text(encoding='utf-8').lower()
+        if any((prefix + private_target).lower() in contents for prefix in prefixes):
+            raise ValueError('Public verification references a private-repository URL')
+
+
 def check_workflow(source):
     # Deliberately supports only the checked-in block layout, not arbitrary YAML.
+    if ('permissions:\n  contents: read\n' not in source
+            or source.count('persist-credentials: false') != 3
+            or source.count('actions/checkout@11d5960a326750d5838078e36cf38b85af677262') != 3
+            or 'secrets.' in source or 'pull_request_target:' in source):
+        raise ValueError('Public CI may not escalate permissions, retain credentials or use secrets')
     for event in ('push', 'pull_request'):
         match = re.search(r'(?m)^  ' + event + r':\n((?:^    .*\n|^      .*\n)+)', source)
         block = match.group(1) if match else ''
@@ -308,6 +330,29 @@ class SafeguardRegression(unittest.TestCase):
             with self.subTest(job=start), self.assertRaisesRegex(ValueError, 'Node syntax'):
                 check_workflow(broken)
 
+    def test_public_ci_permissions_and_private_data_boundary(self):
+        source = (ROOT / '.github/workflows/verify.yml').read_text()
+        check_workflow(source)
+        for candidate in (
+            source.replace('contents: read', 'contents: write', 1),
+            source.replace('persist-credentials: false', 'persist-credentials: true', 1),
+            source + '\n# ${{ secrets.NOT_ALLOWED }}\n',
+            source + '\npull_request_target:\n',
+        ):
+            with self.subTest(candidate=candidate[-50:]), self.assertRaisesRegex(ValueError, 'Public CI'):
+                check_workflow(candidate)
+        check_public_boundary(ROOT)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'verification').mkdir()
+            (root / '.github/workflows').mkdir(parents=True)
+            (root / 'README.md').write_text('public source only', encoding='utf-8')
+            (root / '.github/workflows/verify.yml').write_text('public workflow', encoding='utf-8')
+            (root / 'verification/README.md').write_text(
+                'https://github.com/sensey12-mm/' + 'Headquarters', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'private-repository'):
+                check_public_boundary(root)
+
     def test_benchmark_docs_keep_synthetic_fixture_and_exclude_handoff(self):
         check_benchmark_docs(ROOT)
         with tempfile.TemporaryDirectory() as d:
@@ -357,6 +402,7 @@ def main():
     check_workflow((ROOT / '.github/workflows/verify.yml').read_text())
     check_wrapper(ROOT)
     check_benchmark_docs(ROOT)
+    check_public_boundary(ROOT)
     print('Repository safeguards and Gradle notices OK')
     return 0
 
