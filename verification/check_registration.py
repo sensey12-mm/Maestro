@@ -112,7 +112,8 @@ def load(root):
                 and re.fullmatch('[0-9a-f]{40}', sha) is not None,
                 'Invalid historical path or Git blob identity')
     require(data['new_checked_sources'] == ['verification/check_registration.py',
-                                            'verification/oracle_matrix.py'],
+                                            'verification/oracle_matrix.py',
+                                            'verification/pinned_public_archive.py'],
             'New verification sources require explicit registry review')
     additions = data.get('new_registered_files')
     require(isinstance(additions, list) and len(additions) == len(set(additions))
@@ -260,6 +261,45 @@ def standalone_order(java):
     return order
 
 
+
+def check_pinned_public_archive_wiring(root, runner, overrides=None):
+    """All three public archive consumers must use the same checked transport.
+
+    This is a static registration boundary; the real source profiles and
+    synthetic mocked tests exercise each caller's independent evidence checks.
+    """
+    require('from pinned_public_archive import PinnedPublicArchiveGuards' in runner
+            and 'loadTestsFromTestCase(PinnedPublicArchiveGuards)' in runner,
+            'Pinned public archive adversarial tests no longer run in source CI')
+    expected = {
+        'addon_reload_oracle.py':
+            "load_pinned_public_jar(home, URL, SHA256, 8 * 1024 * 1024, 'addon')",
+        'raid_condition_oracle.py':
+            "load_pinned_public_jar(home, URL, SHA256, 16 * 1024 * 1024, 'raid addon')",
+        'pack_loader_oracle.py':
+            "load_pinned_public_jar(home, PACK_JAR_URL, PACK_JAR_SHA256, 32 * 1024 * 1024, 'installer')",
+    }
+    for name, expression in expected.items():
+        path = root / 'verification' / name
+        code = (overrides[name] if overrides is not None and name in overrides
+                else path.read_text(encoding='utf-8'))
+        parsed = ast.parse(code, filename=str(path))
+        imported = any(isinstance(n, ast.ImportFrom)
+                       and n.module == 'pinned_public_archive'
+                       and any(x.name == 'load_pinned_public_jar' for x in n.names)
+                       for n in parsed.body)
+        calls = [ast.dump(n, include_attributes=False) for n in ast.walk(parsed)
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                 and n.func.id == 'load_pinned_public_jar']
+        original = ast.dump(ast.parse(expression, mode='eval').body,
+                            include_attributes=False)
+        require(imported and calls == [original],
+                'Independent public pinned archive consumer wiring changed: ' + name)
+        require(not any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                        and n.func.attr == 'urlopen' for n in ast.walk(parsed)),
+                'Duplicated unaudited public archive downloader reintroduced: ' + name)
+
+
 def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require("mainClass = 'com.maestroai.training.StandaloneRegression'" in gradle
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle,
@@ -345,7 +385,7 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
             'Native preflight lost exact dependency integrity check')
 
 
-def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None, index_override=None):
+def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None, index_override=None, consumer_overrides=None):
     data = load(root)
     check_paths(data, paths(root) if found is None else found)
     check_python_sources(root, source_override)
@@ -357,6 +397,7 @@ def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_ov
     source = (root / 'verification/source_oracle.py').read_text(encoding='utf-8')
     if source_override is not None:
         source = source_override
+    check_pinned_public_archive_wiring(root, source, consumer_overrides)
     gradle = (root / 'verification/verification.init.gradle').read_text(encoding='utf-8')
     matrix = ((root / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
               if matrix_override is None else matrix_override)
@@ -475,6 +516,23 @@ class RegistryRegression(unittest.TestCase):
             check(index_override=index.replace(marker, '(missing-report.md)'))
         with self.assertRaisesRegex(ValueError, 'history index'):
             check(index_override=index + '\n- [duplicate](PHASE510_DURABLE_TRUST_RECOVERY.md)\n')
+
+    def test_pinned_archive_consumer_and_adversarial_registration(self):
+        script = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'adversarial tests'):
+            check(source_override=script.replace(
+                'loadTestsFromTestCase(PinnedPublicArchiveGuards)',
+                'loadTestsFromTestCase(OracleMatrixGuards)'))
+        path = ROOT / 'verification/addon_reload_oracle.py'
+        original = path.read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'consumer wiring changed'):
+            check(consumer_overrides={path.name: original.replace(
+                'load_pinned_public_jar(home, URL, SHA256, 8 * 1024 * 1024',
+                'load_pinned_public_jar(home, URL, SHA256, 80 * 1024 * 1024')})
+        with self.assertRaisesRegex(ValueError, 'consumer wiring changed'):
+            check(consumer_overrides={path.name: original.replace(
+                'load_pinned_public_jar(home, URL, SHA256, 8 * 1024 * 1024',
+                'some_other_downloader(home, URL, SHA256, 8 * 1024 * 1024')})
 
     def test_python_execution_disconnection_is_rejected(self):
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')

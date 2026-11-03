@@ -4,7 +4,7 @@ No addon expression is shipped in the mod or synthesized from production hashes.
 """
 import hashlib
 import io
-import urllib.request
+from pinned_public_archive import load_pinned_public_jar
 import zipfile
 
 URL = 'https://mediafilez.forgecdn.net/files/7961/235/zamega-fabric-1.7.3.jar'
@@ -15,17 +15,7 @@ GROUPS = {'scripts': 'script', 'held_items': 'heldItem', 'abilities': 'ability',
 
 
 def addon_sources(home, resources):
-    target = home / 'caches/maestro-verification' / (SHA256 + '.jar')
-    if not target.exists():
-        with urllib.request.urlopen(URL, timeout=60) as response:
-            data = response.read(8 * 1024 * 1024 + 1)
-        if hashlib.sha256(data).hexdigest() != SHA256:
-            raise ValueError('Public addon checksum mismatch')
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-    data = target.read_bytes()
-    if hashlib.sha256(data).hexdigest() != SHA256:
-        raise ValueError('Cached public addon checksum mismatch')
+    _, data = load_pinned_public_jar(home, URL, SHA256, 8 * 1024 * 1024, 'addon')
     result, wires = {}, {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         for name in archive.namelist():

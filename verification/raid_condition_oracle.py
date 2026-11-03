@@ -4,7 +4,7 @@ The upstream expressions stay in temporary verification input, never our JAR.
 """
 import hashlib
 import io
-import urllib.request
+from pinned_public_archive import load_pinned_public_jar
 import zipfile
 
 URL = ('https://cursemaven.com/curse/maven/cobblemonraiddens-1349231/'
@@ -15,17 +15,7 @@ IDS = {'cheerattack', 'cheerdefense', 'raidboss', 'shield'}
 
 
 def raid_sources(home, resources):
-    target = home / 'caches/maestro-verification' / (SHA256 + '.jar')
-    if not target.exists():
-        with urllib.request.urlopen(URL, timeout=60) as response:
-            data = response.read(16 * 1024 * 1024 + 1)
-        if hashlib.sha256(data).hexdigest() != SHA256:
-            raise ValueError('Public raid addon checksum mismatch')
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-    data = target.read_bytes()
-    if hashlib.sha256(data).hexdigest() != SHA256:
-        raise ValueError('Cached public raid addon checksum mismatch')
+    _, data = load_pinned_public_jar(home, URL, SHA256, 16 * 1024 * 1024, 'raid addon')
     result, wires = {}, {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         class_pins = dict(line.split('\t') for line in

@@ -14,6 +14,7 @@ import urllib.request
 import re
 import zipfile
 from oracle_matrix import commands_for, OracleMatrixGuards
+from pinned_public_archive import PinnedPublicArchiveGuards
 
 DEPENDENCY_SHA256 = 'f7c25955176badc444ad6211fc556514fedbdba776227f105fe899f8819d74e3'
 PACK_REVISION = '2a6d0efb8a45652769c4fdecb8c6e26bbd7aabc9'
@@ -248,6 +249,7 @@ def main():
             unittest.defaultTestLoader.loadTestsFromTestCase(HookOracleRegression),
             unittest.defaultTestLoader.loadTestsFromTestCase(InstallerGuards),
             unittest.defaultTestLoader.loadTestsFromTestCase(OracleMatrixGuards),
+            unittest.defaultTestLoader.loadTestsFromTestCase(PinnedPublicArchiveGuards),
         ))
         return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
     do_native,do_pack=selected_profiles(sys.argv[1:])

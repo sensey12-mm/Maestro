@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-import urllib.request
+from pinned_public_archive import load_pinned_public_jar
 import zipfile
 import unittest
 
@@ -37,16 +37,8 @@ def cached_library(home, group, artifact, version):
 
 
 def installer_jar(home):
-    target = home / 'caches/maestro-verification' / (PACK_JAR_SHA256 + '.jar')
-    if not target.exists():
-        with urllib.request.urlopen(PACK_JAR_URL, timeout=60) as response:
-            data = response.read(32 * 1024 * 1024 + 1)
-        if hashlib.sha256(data).hexdigest() != PACK_JAR_SHA256:
-            raise ValueError('Public installer checksum mismatch')
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-    if hashlib.sha256(target.read_bytes()).hexdigest() != PACK_JAR_SHA256:
-        raise ValueError('Cached public installer checksum mismatch')
+    target, _ = load_pinned_public_jar(home, PACK_JAR_URL, PACK_JAR_SHA256,
+                                       32 * 1024 * 1024, 'installer')
     return target
 
 

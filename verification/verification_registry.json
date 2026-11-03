@@ -261,7 +261,8 @@
   },
   "new_checked_sources": [
     "verification/check_registration.py",
-    "verification/oracle_matrix.py"
+    "verification/oracle_matrix.py",
+    "verification/pinned_public_archive.py"
   ],
   "java_manual_not_ci": [
     "FabricModeRegression"
@@ -286,7 +287,8 @@
     "verification/INDEX.md",
     "verification/check_registration.py",
     "verification/oracle_matrix.py",
-    "verification/verification_registry.json"
+    "verification/verification_registry.json",
+    "verification/pinned_public_archive.py"
   ],
   "node_profiles": {
     "native": [

@@ -90,6 +90,34 @@ fail-closed exit status checks. `FabricModeRegression` remains explicitly
 not runnable as part of the synthetic source-only CI and requires a suitable
 installed runtime; this does not establish gameplay acceptance.
 
+## Batch 2 — shared pinned public archive acquisition
+
+The published Mega Showdown installer, ZA Mega addon and Raid Dens addon had
+three repeated network/cache/hash implementations. The common plumbing now
+lives in `pinned_public_archive.py`; each caller keeps its independent,
+unchanged public URL, SHA-256, download limit (32/8/16 MiB respectively),
+archive-class provenance checks, factory inventories, wire normalization and
+full-pack behavioral oracle. The central transport enforces exact cached and
+downloaded sizes, SHA-256, HTTPS, cache-symlink rejection, bounded reads,
+atomic cache writes and no silent network recovery from a tampered cache.
+
+Five new offline adversarial tests cover valid first download and reuse,
+bad/oversized downloads, corrupt cached bytes, symlink/invalid specifications,
+and exact pin/limit contracts for all three independent callers. The source
+self-test suite executes them in both native and pack jobs; registration
+tests reject disconnected tests, changed consumer pins or reintroduced
+separate downloaders.
+
+Other apparently related verification tools are intentionally **not merged**:
+`check_jar.py` checks the locally built JAR against compiled classes and
+resources; `check_publish_artifact.py` separately gates candidate integrity
+after both jobs; `phase5_verify_download.py` independently verifies a ZIP
+with an externally supplied SHA-256 without granting installation approval.
+Similarly native-vs-pack Node oracles, Java/Graal source observations,
+per-phase records and signed-custody tests require distinct failure domains.
+No measured semantic duplication justified merging those checks, and no
+historical report was renamed or deleted.
+
 ## Future consolidation contract
 
 1. Establish how each component is reached, its fixtures, and positive, privacy and adversarial coverage.
