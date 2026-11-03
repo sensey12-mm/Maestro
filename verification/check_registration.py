@@ -73,7 +73,8 @@ def check_runners(data, java, source, gradle):
     require(not missing_java, 'Java regressions not reachable from CI runner: '
             + ', '.join(sorted(missing_java)))
     require(not (reached & manual_java),
-            'Java probe became CI-reachable; classify the new coverage')
+            'Java probe became CI-reachable; classify the new coverage: '
+            + ', '.join(sorted(reached & manual_java)))
 
     node = {Path(p).name for p in data['original_paths'] if p.endswith('.cjs')}
     manual_node = set(data['node_manual_not_ci'])
