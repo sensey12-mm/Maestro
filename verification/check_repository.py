@@ -47,8 +47,8 @@ def check_workflow(source):
         branches = [name.strip() for name in branch_match.group(1).split(',')] if branch_match else []
         if 'main' not in branches:
             raise ValueError('Missing main branch verification')
-        if any(retired in branches for retired in ('Maestro457', 'Maestro-3', 'Maestro-4', 'Maestro-5', 'Maestro-6', 'Maestro-7')):
-            raise ValueError('Deleted development branch retained in CI triggers')
+        if event == 'push' and 'Maestro-6' not in branches:
+            raise ValueError('Missing Maestro-6 Phase 6 CI trigger')
         if event == 'push' and 'Maestro4567' not in branches:
             raise ValueError('Missing Maestro4567 integration CI trigger')
         # Required verify must be scheduled for every main PR/push, including
@@ -59,7 +59,7 @@ def check_workflow(source):
     # Exact commit isolation belongs to immutable GitHub run / artifact SHAs,
     # enforced below; serializing/cancelling branch supersession is safe.
     if ("group: verify-${{ github.event.pull_request.number || github.ref }}" not in source
-            or "cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro4567' }}" not in source
+            or "cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/Maestro-6' || github.ref == 'refs/heads/Maestro4567' }}" not in source
             or "&& github.sha || 'shared'" in source):
         raise ValueError('Maestro4567 requires branch-scoped superseded-run cancellation')
     if 'python3 verification/check_repository.py\n' not in source or 'python3 verification/check_repository.py --self-test\n' not in source:
@@ -161,20 +161,11 @@ class SafeguardRegression(unittest.TestCase):
                 with self.subTest(event=event), self.assertRaises(ValueError):
                     check_workflow(source.replace('  ' + event + ':', replacement, 1))
         with self.assertRaises(ValueError):
-            check_workflow(source.replace('branches: [main, Maestro4567]', 'branches: [other]'))
-    def test_deleted_branch_workflow_trigger_is_rejected(self):
-        source = (ROOT / '.github/workflows/verify.yml').read_text()
-        for deleted in ('Maestro457', 'Maestro-3', 'Maestro-4', 'Maestro-5', 'Maestro-6', 'Maestro-7'):
-            altered = source.replace('branches: [main, Maestro4567]',
-                                     'branches: [main, ' + deleted + ', Maestro4567]', 1)
-            with self.subTest(branch=deleted), self.assertRaisesRegex(
-                    ValueError, 'Deleted development branch'):
-                check_workflow(altered)
-
+            check_workflow(source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567]', 'branches: [other]'))
     def test_dedicated_integration_branch_cannot_be_skipped(self):
         source = (ROOT / '.github/workflows/verify.yml').read_text()
-        broken = source.replace('branches: [main, Maestro4567]',
-                                'branches: [main]')
+        broken = source.replace('branches: [main, Maestro457, Maestro-6, Maestro4567]',
+                                'branches: [main, Maestro457, Maestro-6]')
         with self.assertRaisesRegex(ValueError, 'Maestro4567'):
             check_workflow(broken)
 
