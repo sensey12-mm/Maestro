@@ -67,7 +67,7 @@ def require(ok, why):
 
 def load(root):
     data = json.loads((root / 'verification/verification_registry.json').read_text(encoding='utf-8'))
-    require(data.get('schema') == 1 and data.get('origin_commit') == ORIGIN,
+    require(data.get('schema') == 2 and data.get('origin_commit') == ORIGIN,
             'Verification inventory schema or source baseline altered')
     origins = data['original_paths']
     require(len(origins) == 256, 'Original 256-file inventory cannot be silently truncated')
@@ -78,6 +78,19 @@ def load(root):
     require(data['new_checked_sources'] == ['verification/check_registration.py',
                                             'verification/oracle_matrix.py'],
             'New verification sources require explicit registry review')
+    migrations = data.get('migrations')
+    require(isinstance(migrations, dict)
+            and set(migrations) == {'verification/check_native_split_hooks.py'},
+            'Unreviewed source-file migration')
+    for origin, move in migrations.items():
+        require(origin in origins and move.get('original_blob') == origins[origin],
+                'Migrated original Git blob identity changed')
+        require(move.get('replacement') == 'verification/runtime_hook_oracle.py'
+                and len(move.get('rationale', '')) > 40,
+                'Migration justification or replacement missing')
+        require(move.get('coverage_command') == 'python3 verification/runtime_hook_oracle.py --verify-pinned'
+                and move.get('negative_command') == 'python3 verification/runtime_hook_oracle.py --self-test',
+                'Migration CI coverage mapping changed')
     return data
 
 
@@ -87,16 +100,20 @@ def paths(root):
 
 def check_paths(data, found):
     original = set(data['original_paths'])
-    missing = original - found
+    migrated = set(data['migrations'])
+    missing = original - found - migrated
     require(not missing, 'Baseline verification file missing: ' + repr(sorted(missing)[:5]))
-    expected_sources = {p for p in original | set(data['new_checked_sources'])
+    require(not (migrated & found), 'Already migrated source unexpectedly returned')
+    require(all(move['replacement'] in found for move in data['migrations'].values()),
+            'Migrated source replacement missing')
+    expected_sources = {p for p in (original - migrated) | set(data['new_checked_sources'])
                         if Path(p).suffix in SUFFIX}
     actual_sources = {p for p in found if Path(p).suffix in SUFFIX}
     require(actual_sources == expected_sources,
             'Unregistered verification source: ' + repr(sorted(actual_sources ^ expected_sources)))
 
 
-def check_runners(data, java, source, gradle, matrix):
+def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require("mainClass = 'com.maestroai.training.StandaloneRegression'" in gradle
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle,
             'Required Java entry point missing from Gradle')
@@ -146,9 +163,17 @@ def check_runners(data, java, source, gradle, matrix):
     require('sourceVerification' in source and 'selected_profiles' in source
             and 'bounded_run' in source,
             'Native/pack execution linkage missing')
+    for moved in data['migrations'].values():
+        require(all(workflow.count(moved[key] + '\n') == 1
+                    for key in ('coverage_command', 'negative_command')),
+                'Moved ABI preflight missing from mandatory CI job')
+    require('def preflight_exact_pinned_dependency():' in native_hook
+            and 'verified = checked_bytes(jar.read_bytes(), DEPENDENCY_SHA256)' in native_hook
+            and 'verify_pinned_hooks(verified)' in native_hook,
+            'Native preflight lost exact dependency integrity check')
 
 
-def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None):
+def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None):
     data = load(root)
     check_paths(data, paths(root) if found is None else found)
     folder = root / 'verification/java/com/maestroai/training'
@@ -161,7 +186,11 @@ def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_ov
     gradle = (root / 'verification/verification.init.gradle').read_text(encoding='utf-8')
     matrix = ((root / 'verification/oracle_matrix.py').read_text(encoding='utf-8')
               if matrix_override is None else matrix_override)
-    check_runners(data, java, source, gradle, matrix)
+    workflow = ((root / '.github/workflows/verify.yml').read_text(encoding='utf-8')
+                if workflow_override is None else workflow_override)
+    native_hook = ((root / 'verification/runtime_hook_oracle.py').read_text(encoding='utf-8')
+                   if hook_override is None else hook_override)
+    check_runners(data, java, source, gradle, matrix, workflow, native_hook)
     return data
 
 
@@ -226,6 +255,25 @@ class RegistryRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
             check(source_override=source.replace("commands_for('native', folder)",
                                                   "commands_for('pack', folder)"))
+
+    def test_native_preflight_migration_is_mapped_and_enforced(self):
+        data, found = load(ROOT), paths(ROOT)
+        old = 'verification/check_native_split_hooks.py'
+        self.assertEqual(data['migrations'][old]['original_blob'], data['original_paths'][old])
+        self.assertNotIn(old, found)
+        with self.assertRaisesRegex(ValueError, 'unexpectedly returned'):
+            check_paths(data, found | {old})
+        with self.assertRaisesRegex(ValueError, 'replacement missing'):
+            check_paths(data, found - {'verification/runtime_hook_oracle.py'})
+        source = (ROOT / '.github/workflows/verify.yml').read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'preflight missing'):
+            check(workflow_override=source.replace(
+                'python3 verification/runtime_hook_oracle.py --verify-pinned', 'echo skip-preflight'))
+        hook = (ROOT / 'verification/runtime_hook_oracle.py').read_text(encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'dependency integrity'):
+            check(hook_override=hook.replace(
+                'verified = checked_bytes(jar.read_bytes(), DEPENDENCY_SHA256)',
+                'verified = jar.read_bytes()'))
 
     def test_history_is_not_a_file_count_target(self):
         self.assertEqual(load(ROOT)['origin_commit'], ORIGIN)

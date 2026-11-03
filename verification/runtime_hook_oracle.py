@@ -6,6 +6,8 @@ not that Fabric applied a Mixin, delivered an event or ran a Minecraft battle.
 """
 from __future__ import annotations
 import io
+import os
+from pathlib import Path
 import struct
 import unittest
 import zipfile
@@ -195,5 +197,27 @@ class HookOracleRegression(unittest.TestCase):
             verify_pinned_hooks(b"not-a-pinned-jar")
 
 
+def preflight_exact_pinned_dependency():
+    """Exact dependency SHA and ABI checks; formerly a redundant CLI wrapper."""
+    # Delayed import: source_oracle's self-tests import the hook module.
+    from source_oracle import checked_bytes, cache_dependency, DEPENDENCY_SHA256
+    home = Path(os.environ.get("GRADLE_USER_HOME", str(Path.home() / ".gradle")))
+    jar = cache_dependency(home)
+    verified = checked_bytes(jar.read_bytes(), DEPENDENCY_SHA256)
+    verify_pinned_hooks(verified)
+    print("Phase 6.19 exact Cobblemon dispatch ABI preflight PASS; Mixin injection requires Minecraft testing")
+
+
+def main(argv):
+    if argv in ([], ['--self-test']):
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(HookOracleRegression)
+        return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
+    if argv == ['--verify-pinned']:
+        preflight_exact_pinned_dependency()
+        return 0
+    raise ValueError('Usage: runtime_hook_oracle.py [--self-test|--verify-pinned]')
+
+
 if __name__ == "__main__":
-    unittest.main()
+    import sys
+    raise SystemExit(main(sys.argv[1:]))

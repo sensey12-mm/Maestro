@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "origin_commit": "8d6f193fec55554c41b4d16dbfc226d9b88e83ff",
   "original_paths": {
     "verification/accuracy_miss_oracle.cjs": "513888d06eef6cca1071a09efa1708581d2cbc06",
@@ -275,5 +275,14 @@
     "own_first_web_oracle.cjs",
     "own_xerneas_oracle.cjs",
     "policy_oracle.cjs"
-  ]
+  ],
+  "migrations": {
+    "verification/check_native_split_hooks.py": {
+      "original_blob": "747aed043e76a69917581083f8e453bec8550eba",
+      "replacement": "verification/runtime_hook_oracle.py",
+      "coverage_command": "python3 verification/runtime_hook_oracle.py --verify-pinned",
+      "negative_command": "python3 verification/runtime_hook_oracle.py --self-test",
+      "rationale": "The standalone 642-byte wrapper only checked the pinned dependency SHA before forwarding to the existing ABI/selector verifier. Both the exact dependency validation and negative tests are preserved in runtime_hook_oracle.py."
+    }
+  }
 }

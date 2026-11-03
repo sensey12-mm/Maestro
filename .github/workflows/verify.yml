@@ -41,8 +41,8 @@ jobs:
           python3 verification/phase5_minecraft_log_gate.py --self-test
       - name: Verify exact Cobblemon native dispatch Mixin ABI
         run: |
-          python3 verification/runtime_hook_oracle.py
-          python3 verification/check_native_split_hooks.py
+          python3 verification/runtime_hook_oracle.py --self-test
+          python3 verification/runtime_hook_oracle.py --verify-pinned
       - name: Verify pinned native simulator source and relocated engine
         run: |
           node --version

@@ -33,6 +33,18 @@ missing, malformed or unregistered source oracles and missing native/pack runner
 invocations. The individual JavaScript oracles remain separate to preserve
 independence and debugging.
 
+## ABI preflight consolidation and migration custody
+
+The former `check_native_split_hooks.py` duplicated entry-point plumbing
+without providing an independent oracle: it pinned the dependency SHA and
+called `runtime_hook_oracle.verify_pinned_hooks`. That behavior is now
+`runtime_hook_oracle.py --verify-pinned`, while `--self-test` runs the
+retained bytecode and descriptor adversarial tests. CI requires **both**.
+`verification_registry.json` records the original location and Git blob,
+the replacement, a reason and both positive/negative coverage commands.
+Missing originals are rejected unless explicitly registered as reviewed
+migrations; missing replacements and broken CI mappings also fail closed.
+
 ## Existing manual or not-yet-CI-reachable probes
 
 **Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.
@@ -45,7 +57,7 @@ The five Java files above remain outside required CI roots. `AddonReloadRegressi
 
 1. Establish how each component is reached, its fixtures, and positive, privacy and adversarial coverage.
 2. Connect new tests to the existing appropriate suite; review and update the inventory so new source files cannot silently appear.
-3. Before relocating/removing an original file, map its original path and Git blob identity to its replacement, preserved coverage, and independent-oracle rationale. The current checker intentionally refuses missing original paths until an auditable migration mechanism is implemented.
+3. Before relocating/removing an original file, extend the reviewed migration mapping with its original path and Git blob, replacement, preserved coverage and independent-oracle rationale. Unrecognized migrations still fail closed and require reviewed guard amendments and negative tests.
 4. Run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`, then all existing CI gates. Verify `verify`, `pack_source`, and `publish` for the **exact commit**.
 5. Keep private HQ documentation, battle logs, credentials and custody evidence outside this public repository. Source CI and simulator checks cannot certify Minecraft acceptance.
 
