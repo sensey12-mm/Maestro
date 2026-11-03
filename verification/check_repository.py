@@ -131,7 +131,7 @@ def check_workflow(source):
         '        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3\n'
         '        with:\n'
         '          distribution: graalvm\n'
-        "          java-version: '25'\n"
+        "          java-version: '21'\n"
     )
     isolated = (
         '          export MAESTRO_SOURCE_JAVA="$JAVA_HOME/bin/java"\n'

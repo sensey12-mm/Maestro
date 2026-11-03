@@ -190,3 +190,7 @@ Gradle compilation and packaging remain Temurin Java 21. The full Java and
 Node regression profiles, class-provenance checks and exact-commit release
 checks remain mandatory. The actual speedup or runtime compatibility must be
 measured from GitHub job logs and may fail closed.
+
+### Java 25 compatibility result
+
+Exact-commit GitHub CI for `9b2b4cdffbccc7f3ba5c562288a5d1d171350e78` rejected the JDK 25 experiment: the unmodified Cobblemon relocated Truffle bytecode calls `sun.misc.Unsafe.ensureClassInitialized`, which no longer exists on JDK 25. The isolated JavaScript verifier is therefore restored to the already-passing GraalVM JDK 21. The project remains Java 21; no production source changed. This experiment is explicitly **not** a claimed speedup.
