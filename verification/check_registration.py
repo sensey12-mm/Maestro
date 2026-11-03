@@ -89,7 +89,7 @@ def check_runners(data, java, source, gradle):
     expected_embedded = set(data['node_embedded_java'])
     require(len(expected_embedded) == len(data['node_embedded_java'])
             and expected_embedded <= embedded and not (expected_embedded & invoked),
-            'Java-only embedded Node oracle registration changed: '
+            'Java-embedded Node oracle registration changed: '
             + repr(sorted(expected_embedded - embedded)))
     require(invoked <= node and embedded <= node,
             'Python/Java runner references missing Node oracle')
