@@ -382,10 +382,10 @@ class RegistryRegression(unittest.TestCase):
         content = p.read_text(encoding='utf-8')
         marker = 'Phase7BenchmarkRegression.run();'
         self.assertIn(marker, content)
-        with self.assertRaisesRegex(ValueError, 'not reachable'):
+        with self.assertRaisesRegex(ValueError, 'ordered Java regression coverage'):
             check(overrides={p.name: content.replace(marker, '')})
         # Names left as comments do not count as executable calls.
-        with self.assertRaisesRegex(ValueError, 'not reachable'):
+        with self.assertRaisesRegex(ValueError, 'ordered Java regression coverage'):
             check(overrides={p.name: content.replace(marker, '// ' + marker)})
 
     def test_java_regression_sequence_reordering_is_rejected(self):
@@ -402,7 +402,7 @@ class RegistryRegression(unittest.TestCase):
         source = p.read_text(encoding='utf-8')
         marker = '        runBenchmarkRegressions();'
         self.assertIn(marker, source)
-        with self.assertRaisesRegex(ValueError, 'group disconnected'):
+        with self.assertRaisesRegex(ValueError, 'ordered Java regression coverage'):
             check(overrides={p.name: source.replace(marker, '        // group disconnected')})
 
     def test_removed_indirect_phase7_regression_call_is_rejected(self):
