@@ -333,8 +333,8 @@ public final class StandaloneRegression {
         check(CobblemonMechanics.move("geomancy").boosts().equals(Map.of("spa",2,"spd",2,"spe",2)));
         check(!MaestroOwnMoveAudit.completelySimulated("uturn"));
     }
-    public static void main(String[] args)throws Exception {
-        // Catch production policy host signature drift before the native profiles.
+    /** Ordered original regression calls: runOwnMechanicsRegressions; failures propagate without recovery. */
+    private static void runOwnMechanicsRegressions() throws Exception {
         LegacyPolicyRegression.run();
         MoveAttestationRegression.inventory();
         BlockedHitRegression.run();
@@ -363,6 +363,102 @@ public final class StandaloneRegression {
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();
+    }
+
+    /** Ordered original regression calls: runPublicCompetitiveRegressions; failures propagate without recovery. */
+    private static void runPublicCompetitiveRegressions() throws Exception {
+        PublicReplayCorpusRegression.run();
+        CompetitiveFormatNormalizerRegression.run();
+        PublicCompetitiveTendenciesRegression.run();
+        PublicHeldOutEvaluationRegression.run();
+        CompetitiveEvidenceHardeningRegression.run();
+        PublicCompetitiveShadowContractRegression.run();
+        PublicReplayProvenanceRegression.run();
+        PublicReplayCustodyRegression.run();
+        PublicSignedCustodyRegression.run();
+        PublicCustodyTrustStoreRegression.run();
+        PublicHistoricalRoleArchiveProvisionerRegression.run();
+        PublicPhase5CommissioningAuditRegression.run();
+        PublicCompetitiveCoverageAuditRegression.run();
+        PublicCompetitiveRobustnessAuditRegression.run();
+        PublicOpponentBuildHypothesesRegression.run();
+        PublicSpeciesBuildLegalityRegression.run();
+        PublicFormBuildReconciliationRegression.run();
+        PublicBuildEvidenceConsistencyRegression.run();
+        PublicBuildCandidateFilterRegression.run();
+        PublicBuildCandidateRobustnessRegression.run();
+        PublicCompetitiveConsumerContractRegression.run();
+        PublicCompetitiveHandoffAuditRegression.run();
+        PublicShadowBuildHandoffRegression.run();
+    }
+
+    /** Ordered original regression calls: runBenchmarkRegressions; failures propagate without recovery. */
+    private static void runBenchmarkRegressions() throws Exception {
+        Phase7BenchmarkRegression.run();
+        Phase7LegacyImportRegression.run();
+        LegacyChoiceCaptureRegression.run();
+        Phase7CorpusRegression.run();
+        Phase7TrustedIntakeRegression.run();
+        Phase7RegressionGateRegression.run();
+        Phase7StratifiedAuditRegression.run();
+        Phase7ShadowReplayRegression.run();
+        Phase7SelfPlayRegression.run();
+    }
+
+    /** Ordered original regression calls: runLiveEvidenceRegressions; failures propagate without recovery. */
+    private static void runLiveEvidenceRegressions() throws Exception {
+        Integration457Regression.run();
+        Integration4567Regression.run();
+        ShadowPromotionPreparationRegression.run();
+        ShadowLiveDecisionEngineRegression.run();
+        PublicLiveOpponentSnapshotRegression.run();
+        ShadowFullAuthorityRegression.run();
+        ShadowPromotion7Regression.run();
+        IntegrationRuntimeReadinessGateRegression.run();
+        ShadowCompetitiveRuntimeBridgeRegression.run();
+        PublicOpponentIdentityContinuityRegression.run();
+        ShadowOpponentIdentityIntegrationRegression.run();
+        NativeOpponentSideProvenanceRegression.run();
+        ShadowLiveCompetitiveConsumerSafetyRegression.run();
+        NativeOpponentPokemonContinuityRegression.run();
+        NativeOpponentRevealRecipientEvidenceRegression.run();
+        Phase6FinalClosureRegression.run();
+        PublicCompetitiveLiveShadowConsumerRegression.run();
+        PublicHistoricalRoleLiveOverlayRegression.run();
+        PublicHistoricalRoleOperatorActivationRegression.run();
+    }
+
+    /** Ordered original regression calls: runRuntimeProvenanceRegressions; failures propagate without recovery. */
+    private static void runRuntimeProvenanceRegressions() throws Exception {
+        OfflineShadowTacticalAdapterRegression.run();
+        OfflineShadowProvenanceGateRegression.run();
+        OfflineShadowResponseScenariosRegression.run();
+        OfflineShadowCoverageAuditRegression.run();
+        Phase66OfflineIntegrationRegression.run();
+        OfflineRuntimeEvidenceContractRegression.run();
+        OfflineEvidenceProducerLeaseRegression.run();
+        ReadOnlyShadowObservationBridgeRegression.run();
+        NativeOwnActionEvidenceRegression.run();
+        NativeOwnSwitchEvidenceRegression.run();
+        NativeOwnActionFusionRegression.run();
+        CrossStreamEvidenceReadinessRegression.run();
+        ExpandedPublicEventGuardRegression.run();
+        PublicBatchEnvelopeGuardRegression.run();
+        PublicSplitRoutingGateRegression.run();
+        NativeSplitRecipientCustodyRegression.run();
+        NativeSplitDispatchObservationRegression.run();
+        NativeDispatchHistoryCorrelationRegression.run();
+        NativeEvidenceEndToEndGateRegression.run();
+        RuntimeObservationAcceptanceHarnessRegression.run();
+        NativeSidedDispatchReachabilityRegression.run();
+        AcceptanceGateRegression.run();
+        OwnChoiceRecoveryRegression.run();
+        RuntimeEvidenceRegression.run();
+    }
+
+    public static void main(String[] args)throws Exception {
+        // Catch production policy host signature drift before the native profiles.
+        runOwnMechanicsRegressions();
         ownMechanicsExecutionAudit();
         maestroWholeRosterCoverage();
         calyrexMoveCoverage();
@@ -414,81 +510,10 @@ public final class StandaloneRegression {
         check(!limited.complete() && limited.nodes() == 1 && limited.preferred().equals("move:attack"));
         reject(() -> new ShadowSearchEngine.Branch("move", "attack", List.of(
                 new ShadowSearchEngine.Outcome("synthetic", .5, 1, 0, "leaf"))));
-        PublicReplayCorpusRegression.run();
-        CompetitiveFormatNormalizerRegression.run();
-        PublicCompetitiveTendenciesRegression.run();
-        PublicHeldOutEvaluationRegression.run();
-        CompetitiveEvidenceHardeningRegression.run();
-        PublicCompetitiveShadowContractRegression.run();
-        PublicReplayProvenanceRegression.run();
-        PublicReplayCustodyRegression.run();
-        PublicSignedCustodyRegression.run();
-        PublicCustodyTrustStoreRegression.run();
-        PublicHistoricalRoleArchiveProvisionerRegression.run();
-        PublicPhase5CommissioningAuditRegression.run();
-        PublicCompetitiveCoverageAuditRegression.run();
-        PublicCompetitiveRobustnessAuditRegression.run();
-        PublicOpponentBuildHypothesesRegression.run();
-        PublicSpeciesBuildLegalityRegression.run();
-        PublicFormBuildReconciliationRegression.run();
-        PublicBuildEvidenceConsistencyRegression.run();
-        PublicBuildCandidateFilterRegression.run();
-        PublicBuildCandidateRobustnessRegression.run();
-        PublicCompetitiveConsumerContractRegression.run();
-        PublicCompetitiveHandoffAuditRegression.run();
-        PublicShadowBuildHandoffRegression.run();
-        Phase7BenchmarkRegression.run();
-        Phase7LegacyImportRegression.run();
-        LegacyChoiceCaptureRegression.run();
-        Phase7CorpusRegression.run();
-        Phase7TrustedIntakeRegression.run();
-        Phase7RegressionGateRegression.run();
-        Phase7StratifiedAuditRegression.run();
-        Phase7ShadowReplayRegression.run();
-        Phase7SelfPlayRegression.run();
-        Integration457Regression.run();
-        Integration4567Regression.run();
-        ShadowPromotionPreparationRegression.run();
-        ShadowLiveDecisionEngineRegression.run();
-        PublicLiveOpponentSnapshotRegression.run();
-        ShadowFullAuthorityRegression.run();
-        ShadowPromotion7Regression.run();
-        IntegrationRuntimeReadinessGateRegression.run();
-        ShadowCompetitiveRuntimeBridgeRegression.run();
-        PublicOpponentIdentityContinuityRegression.run();
-        ShadowOpponentIdentityIntegrationRegression.run();
-        NativeOpponentSideProvenanceRegression.run();
-        ShadowLiveCompetitiveConsumerSafetyRegression.run();
-        NativeOpponentPokemonContinuityRegression.run();
-        NativeOpponentRevealRecipientEvidenceRegression.run();
-        Phase6FinalClosureRegression.run();
-        PublicCompetitiveLiveShadowConsumerRegression.run();
-        PublicHistoricalRoleLiveOverlayRegression.run();
-        PublicHistoricalRoleOperatorActivationRegression.run();
-        OfflineShadowTacticalAdapterRegression.run();
-        OfflineShadowProvenanceGateRegression.run();
-        OfflineShadowResponseScenariosRegression.run();
-        OfflineShadowCoverageAuditRegression.run();
-        Phase66OfflineIntegrationRegression.run();
-        OfflineRuntimeEvidenceContractRegression.run();
-        OfflineEvidenceProducerLeaseRegression.run();
-        ReadOnlyShadowObservationBridgeRegression.run();
-        NativeOwnActionEvidenceRegression.run();
-        NativeOwnSwitchEvidenceRegression.run();
-        NativeOwnActionFusionRegression.run();
-        CrossStreamEvidenceReadinessRegression.run();
-        ExpandedPublicEventGuardRegression.run();
-        PublicBatchEnvelopeGuardRegression.run();
-        PublicSplitRoutingGateRegression.run();
-        NativeSplitRecipientCustodyRegression.run();
-        NativeSplitDispatchObservationRegression.run();
-        NativeDispatchHistoryCorrelationRegression.run();
-        NativeEvidenceEndToEndGateRegression.run();
-        RuntimeObservationAcceptanceHarnessRegression.run();
-        NativeSidedDispatchReachabilityRegression.run();
-        AcceptanceGateRegression.run();
-        OwnChoiceRecoveryRegression.run();
-        RuntimeEvidenceRegression.run();
+        runPublicCompetitiveRegressions();
+        runBenchmarkRegressions();
+        runLiveEvidenceRegressions();
+        runRuntimeProvenanceRegressions();
         System.out.println("Standalone synthetic regressions PASS: " + checks + " checks");
     }
 }

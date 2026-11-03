@@ -58,6 +58,15 @@ local oracle imports. CI also syntax-checks all independent JavaScript files,
 including Java-hosted oracles, in both verification jobs. These controls do not
 pretend to replace the executable adversarial or pinned-source checks.
 
+## Java regression runner by responsibility
+
+`StandaloneRegression` retains every original adversarial regression class and
+its exact execution order, now grouped into own mechanics, public competitive
+evidence, synthetic benchmarking, live-public integration and runtime provenance.
+The baseline built-in synthetic assertions remain at their original position.
+The registration guard checks that each group is invoked from `main`, and
+negative tests reject a disconnected group or missing class invocation.
+
 ## Existing manual or not-yet-CI-reachable probes
 
 **Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.

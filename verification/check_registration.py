@@ -158,6 +158,16 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
     require("mainClass = 'com.maestroai.training.StandaloneRegression'" in gradle
             and "mainClass = 'com.maestroai.training.SourceVerification'" in gradle,
             'Required Java entry point missing from Gradle')
+    # The runner is grouped by responsibility; a dead group must not appear
+    # registered merely because its method still contains class references.
+    standalone = JAVA_NONCODE.sub(' ', java.get('StandaloneRegression.java', ''))
+    main = standalone.split('public static void main(', 1)
+    require(len(main) == 2, 'Standalone regression main missing')
+    for group in ('runOwnMechanicsRegressions', 'runPublicCompetitiveRegressions',
+                  'runBenchmarkRegressions', 'runLiveEvidenceRegressions',
+                  'runRuntimeProvenanceRegressions'):
+        require(group + '();' in main[1],
+                'Standalone regression group disconnected: ' + group)
     regressions = {name[:-5] for name in java if name.endswith('Regression.java')}
     manual_java = set(data['java_manual_not_ci'])
     require(len(manual_java) == len(data['java_manual_not_ci'])
@@ -268,6 +278,14 @@ class RegistryRegression(unittest.TestCase):
         # Names left as comments do not count as executable calls.
         with self.assertRaisesRegex(ValueError, 'not reachable'):
             check(overrides={p.name: content.replace(marker, '// ' + marker)})
+
+    def test_disconnected_regression_group_rejected(self):
+        p = ROOT / 'verification/java/com/maestroai/training/StandaloneRegression.java'
+        source = p.read_text(encoding='utf-8')
+        marker = '        runBenchmarkRegressions();'
+        self.assertIn(marker, source)
+        with self.assertRaisesRegex(ValueError, 'group disconnected'):
+            check(overrides={p.name: source.replace(marker, '        // group disconnected')})
 
     def test_removed_indirect_phase7_regression_call_is_rejected(self):
         p = ROOT / 'verification/java/com/maestroai/training/Phase7SelfPlayRegression.java'
