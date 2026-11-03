@@ -438,7 +438,6 @@ public final class StandaloneRegression {
         PublicCompetitiveHandoffAuditRegression.run();
         PublicShadowBuildHandoffRegression.run();
         Phase7BenchmarkRegression.run();
-        Phase7MechanicsAdapterRegression.run();
         Phase7LegacyImportRegression.run();
         LegacyChoiceCaptureRegression.run();
         Phase7CorpusRegression.run();

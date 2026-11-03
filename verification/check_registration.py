@@ -128,10 +128,18 @@ class RegistryRegression(unittest.TestCase):
     def test_removed_standalone_regression_call_is_rejected(self):
         p = ROOT / 'verification/java/com/maestroai/training/StandaloneRegression.java'
         content = p.read_text(encoding='utf-8')
-        marker = 'Phase7MechanicsAdapterRegression.run();'
+        marker = 'Phase7BenchmarkRegression.run();'
         self.assertIn(marker, content)
         with self.assertRaisesRegex(ValueError, 'not reachable'):
             check(overrides={p.name: content.replace(marker, '')})
+
+    def test_removed_indirect_phase7_regression_call_is_rejected(self):
+        p = ROOT / 'verification/java/com/maestroai/training/Phase7SelfPlayRegression.java'
+        content = p.read_text(encoding='utf-8')
+        marker = 'Phase7MechanicsAdapterRegression.run('
+        self.assertIn(marker, content)
+        with self.assertRaisesRegex(ValueError, 'not reachable'):
+            check(overrides={p.name: content.replace(marker, 'UnregisteredFixture.run(')})
 
     def test_removed_node_oracle_call_is_rejected(self):
         content = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
