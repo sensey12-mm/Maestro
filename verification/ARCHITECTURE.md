@@ -24,7 +24,7 @@ The release `publish` job must continue to depend on **both** independent native
 
 ## Existing manual or not-yet-CI-reachable probes
 
-**Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `OwnXerneasRegistrationRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.
+**Java:** `AddonReloadRegression`, `BootProfileRegression`, `FabricModeRegression`, `RaidReloadRegression`, `RuntimeCaptureRegression`.
 
 **Node:** `geomancy_continuity_oracle.cjs`, `own_first_web_oracle.cjs`, `own_xerneas_oracle.cjs`, `policy_oracle.cjs`.
 

@@ -266,7 +266,6 @@
     "AddonReloadRegression",
     "BootProfileRegression",
     "FabricModeRegression",
-    "OwnXerneasRegistrationRegression",
     "RaidReloadRegression",
     "RuntimeCaptureRegression"
   ],
