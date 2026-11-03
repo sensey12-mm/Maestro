@@ -4,14 +4,17 @@
 This does not pretend that separately listed manual probes run in CI.
 """
 import ast
+import hashlib
 import json
 from pathlib import Path
 import re
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = '8d6f193fec55554c41b4d16dbfc226d9b88e83ff'
+ORIGIN_INVENTORY_SHA256 = '80108f5ab57d4bd17dfeea533a8907d1388c4fc5922de4ca98f1e25b9e09d9f9'
 SUFFIX = {'.java', '.cjs', '.py'}
 CALL = re.compile(r'\b([A-Z][A-Za-z0-9_]*Regression)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(')
 # Ignore non-executable Java comments, string literals and text blocks.
@@ -79,6 +82,9 @@ def load(root):
             'Verification inventory schema or source baseline altered')
     origins = data['original_paths']
     require(len(origins) == 256, 'Original 256-file inventory cannot be silently truncated')
+    canonical = json.dumps(origins, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+    require(hashlib.sha256(canonical.encode('utf-8')).hexdigest() == ORIGIN_INVENTORY_SHA256,
+            'Original verification Git identity inventory changed')
     for name, sha in origins.items():
         require(name.startswith('verification/') and '..' not in Path(name).parts
                 and re.fullmatch('[0-9a-f]{40}', sha) is not None,
@@ -374,6 +380,18 @@ class RegistryRegression(unittest.TestCase):
             check(hook_override=hook.replace(
                 'verified = checked_bytes(jar.read_bytes(), DEPENDENCY_SHA256)',
                 'verified = jar.read_bytes()'))
+
+    def test_original_git_blob_inventory_is_cryptographically_locked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'verification').mkdir()
+            manifest = json.loads((ROOT / 'verification/verification_registry.json').read_text(encoding='utf-8'))
+            one_original = next(iter(manifest['original_paths']))
+            manifest['original_paths'][one_original] = '0' * 40
+            (root / 'verification/verification_registry.json').write_text(
+                json.dumps(manifest), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'Git identity inventory'):
+                load(root)
 
     def test_history_is_not_a_file_count_target(self):
         self.assertEqual(load(ROOT)['origin_commit'], ORIGIN)

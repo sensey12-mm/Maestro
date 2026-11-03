@@ -6,7 +6,7 @@ This is public-safe engineering documentation of this repository, not private pr
 
 - `Maestro-2.0` parent: `8d6f193fec55554c41b4d16dbfc226d9b88e83ff`.
 - Original `verification/` inventory: **256 files** (134 Java, 33 Node CJS, 11 Python, 75 Markdown, one JSON, one TSV and one Gradle initialisation script).
-- The original paths and immutable Git blob identities are preserved in `verification_registry.json`. These are historical identities, **not** hashes constraining future legitimate edits.
+- The original paths and immutable Git blob identities are preserved in `verification_registry.json` and the 256-entry historical mapping is independently SHA-256 locked by the registration gate. These are historical identities, **not** hashes constraining future legitimate edits.
 - Original exact-commit [CI #41645647716](https://github.com/sensey12-mm/Maestro/actions/runs/41645647716): `verify`, `pack_source` and `publish` completed successfully. This is not installed Minecraft acceptance.
 
 ## Verification responsibility and isolation
