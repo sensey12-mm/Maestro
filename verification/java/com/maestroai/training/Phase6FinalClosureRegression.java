@@ -130,14 +130,30 @@ final class Phase6FinalClosureRegression {
         for(String test:required)
             check(runner.contains(test+".run();"),
                     "all key offline/native/competitive/integration suites remain registered: "+test);
-        for(int phase=1;phase<=34;phase++){
-            String prefix="PHASE6"+phase+"_";
-            try(var files=Files.list(Path.of("verification"))){
-                check(files.anyMatch(p->p.getFileName().toString()
-                            .startsWith(prefix)
-                        && p.getFileName().toString().endsWith(".md")),
-                        "Phase 6."+phase+" retains a public source milestone note");
-            }
+        // Historical Phase 6 milestone notes were intentionally retired from
+        // the active verification tree. The independent Python registry
+        // checks their SHA-256-locked original Git blob map and immutable
+        // pre-cleanup commit; the Java closure audit confirms that EVERY
+        // Phase 6.1-6.35 report still has both custody records.
+        String registry=Files.readString(Path.of("verification/verification_registry.json"));
+        int originalsAt=registry.indexOf("\"original_paths\"");
+        int additionsAt=registry.indexOf("\"new_checked_sources\"",originalsAt);
+        int archivedAt=registry.indexOf("\"archived_reports\"");
+        check(originalsAt>=0 && additionsAt>originalsAt && archivedAt>additionsAt
+                    && registry.contains("\"report_archive_commit\": "
+                        +"\"eb13871aa3d083c9e50c14d20659bcbe3043bc32\""),
+                "historical Phase 6 report custody is pinned to the reviewed Git snapshot");
+        String originals=registry.substring(originalsAt,additionsAt);
+        String archived=registry.substring(archivedAt);
+        for(int phase=1;phase<=35;phase++){
+            String prefix="\"verification/PHASE6"+phase+"_";
+            check(originals.contains(prefix) && archived.contains(prefix),
+                    "Phase 6."+phase+" retains original Git identity and archived-report registration");
+        }
+        try(var current=Files.list(Path.of("verification"))){
+            check(current.noneMatch(p->p.getFileName().toString()
+                    .matches("PHASE6[0-9]+_.*\\.md")),
+                    "historic Phase 6 reports do not return as active duplicate files");
         }
         check(Files.exists(Path.of(
                     "src/main/java/com/maestroai/training/NativeOpponentRevealRecipientEvidence.java"))
