@@ -15,6 +15,12 @@ public final class StandaloneRegression {
             Map.entry("Marshadow", List.of("spectralthief", "closecombat", "shadowsneak", "rocktomb"))
     );
     private static int checks;
+    private static int completedRegressionGroups;
+    private static void requireRegisteredGroupsComplete() {
+        if (completedRegressionGroups != 5)
+            throw new AssertionError("Required Java regression group did not complete");
+        System.out.println("REGISTERED_JAVA_GROUPS_COMPLETE count=" + completedRegressionGroups);
+    }
     private static void check(boolean condition) {
         if (!condition) throw new AssertionError("Synthetic contract failed");
         checks++;
@@ -363,6 +369,7 @@ public final class StandaloneRegression {
         StatusSpeedRegression.run();
         PsychicTerrainRegression.run();
         ModifierCompositionRegression.run();
+        completedRegressionGroups++;
     }
 
     /** Ordered original regression calls: runPublicCompetitiveRegressions; failures propagate without recovery. */
@@ -390,6 +397,7 @@ public final class StandaloneRegression {
         PublicCompetitiveConsumerContractRegression.run();
         PublicCompetitiveHandoffAuditRegression.run();
         PublicShadowBuildHandoffRegression.run();
+        completedRegressionGroups++;
     }
 
     /** Ordered original regression calls: runBenchmarkRegressions; failures propagate without recovery. */
@@ -403,6 +411,7 @@ public final class StandaloneRegression {
         Phase7StratifiedAuditRegression.run();
         Phase7ShadowReplayRegression.run();
         Phase7SelfPlayRegression.run();
+        completedRegressionGroups++;
     }
 
     /** Ordered original regression calls: runLiveEvidenceRegressions; failures propagate without recovery. */
@@ -426,6 +435,7 @@ public final class StandaloneRegression {
         PublicCompetitiveLiveShadowConsumerRegression.run();
         PublicHistoricalRoleLiveOverlayRegression.run();
         PublicHistoricalRoleOperatorActivationRegression.run();
+        completedRegressionGroups++;
     }
 
     /** Ordered original regression calls: runRuntimeProvenanceRegressions; failures propagate without recovery. */
@@ -454,6 +464,7 @@ public final class StandaloneRegression {
         AcceptanceGateRegression.run();
         OwnChoiceRecoveryRegression.run();
         RuntimeEvidenceRegression.run();
+        completedRegressionGroups++;
     }
 
     public static void main(String[] args)throws Exception {
@@ -514,6 +525,7 @@ public final class StandaloneRegression {
         runBenchmarkRegressions();
         runLiveEvidenceRegressions();
         runRuntimeProvenanceRegressions();
+        requireRegisteredGroupsComplete();
         System.out.println("Standalone synthetic regressions PASS: " + checks + " checks");
     }
 }

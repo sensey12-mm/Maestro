@@ -170,6 +170,32 @@ before claiming a speedup. If the relocated Graal classes still cannot
 use the host optimizer, the run must make that limitation explicit rather
 than claiming compiler-based acceleration.
 
+## Required execution integrity and completion receipts
+
+The native and pack source-oracle loops now use a single fail-closed
+`run_complete_oracle_profile` executor. It checks the pinned 25/native and
+6/pack subprocess counts, runs every required command with a checked exit
+status, compares the complete ordered execution receipt and prints
+`SOURCE_ORACLE_PROFILE_COMPLETE` only when finished. Both `main` paths
+require its returned counts. The independent registration checker reviews the
+executor's normalized Python AST and the mandatory direct native/pack caller
+scopes; its adversarial tests reject early returns, skipped loop iterations,
+dead branches, removed assertions and selector reassignment.
+
+The Java standalone responsibility groups remain in their original execution
+order. Each group is restricted to direct, sequential regression calls followed
+by a completion increment. A runtime assertion verifies all five groups
+returned before printing `REGISTERED_JAVA_GROUPS_COMPLETE`. The static
+registration checker rejects conditional groups, hidden member calls, premature
+returns and missing completion gates. Pinned native Graal differential calls
+also must stay at the verified direct try-block depth without early exits.
+
+These are *verification-only* safety receipts, not claims of installed
+Minecraft testing or proof that arbitrary future code is correct. Intentional
+changes to these guarded execution structures require reviewer inspection,
+updated adversarial tests and exact-commit CI.
+
+
 ## Future consolidation contract
 
 1. Establish how each component is reached, its fixtures, and positive, privacy and adversarial coverage.

@@ -61,36 +61,95 @@ def declared_oracles(matrix, registry):
 
 
 def required_oracle_profiles(source):
+    """Fail closed on unreachable Python/Node runners, not mere call references.
+
+    The critical runner uses a canonical AST shape: comments/formatting may
+    change, but a skipped loop iteration, dead branch, early return or removed
+    completion receipt requires deliberate review of this independent gate.
+    """
     tree = ast.parse(source)
-    imported = any(isinstance(n, ast.ImportFrom) and n.module == 'oracle_matrix'
-                   and 'commands_for' in [a.name for a in n.names] for n in tree.body)
-    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
-             and isinstance(n.func, ast.Name) and n.func.id == 'commands_for']
-    executed = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.For) or not isinstance(node.iter, ast.Call):
-            continue
-        call = node.iter
-        if call not in calls or not call.args or not isinstance(call.args[0], ast.Constant):
-            continue
-        if not isinstance(node.target, ast.Name):
-            continue
-        target = node.target.id
-        # A bare profile reference is not coverage: the command must be passed
-        # to bounded_run with check=True within that exact iteration.
-        for statement in node.body:
-            if (isinstance(statement, ast.Expr)
-                    and isinstance(statement.value, ast.Call)
-                    and isinstance(statement.value.func, ast.Name)
-                    and statement.value.func.id == 'bounded_run'
-                    and statement.value.args
-                    and isinstance(statement.value.args[0], ast.Name)
-                    and statement.value.args[0].id == target
-                    and any(kw.arg == 'check' and isinstance(kw.value, ast.Constant)
-                            and kw.value.value is True for kw in statement.value.keywords)):
-                executed.append(call.args[0].value)
-    require(imported and len(calls) == 2 and sorted(executed) == ['native', 'pack'],
-            'Required independent native/pack source runner invocation missing')
+    executor = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                and n.name == 'run_complete_oracle_profile']
+    require(len(executor) == 1, 'Source profile completion executor missing')
+    # AST comparison excludes location, whitespace and comments.
+    reference = ast.parse('''def run_complete_oracle_profile(profile, simulator):
+    """Only attest a pinned profile after every subprocess has exited cleanly."""
+    limit = {'native': 25, 'pack': 6}.get(profile)
+    if limit is None:
+        raise ValueError('Incomplete or unknown source oracle profile')
+    expected = list(commands_for(profile, simulator))
+    if len(expected) != limit:
+        raise ValueError('Incomplete or unknown source oracle profile')
+    completed = []
+    for command in expected:
+        bounded_run(command, check=True)
+        completed.append(command)
+    if completed != expected:
+        raise AssertionError('Source-oracle execution was incomplete: ' + profile)
+    print('SOURCE_ORACLE_PROFILE_COMPLETE profile=' + profile
+          + ' count=' + str(len(completed)))
+    return len(completed)''').body[0]
+    require(ast.dump(executor[0], include_attributes=False)
+            == ast.dump(reference, include_attributes=False),
+            'Source-oracle completion control flow changed or bypassed')
+    mains = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'main']
+    require(len(mains) == 1, 'Required source oracle main unavailable')
+    main = mains[0]
+    requires = [
+        ('native', 'do_native', 25, 2),
+        ('pack', 'do_pack', 6, 1),
+    ]
+    for profile, flag, count, with_depth in requires:
+        branches = [n for n in main.body if isinstance(n, ast.If)
+                    and isinstance(n.test, ast.Name) and n.test.id == flag]
+        require(len(branches) == 1, 'Source profile direct branch missing: ' + profile)
+        branch = branches[0]
+        parents = {id(child): parent for parent in ast.walk(branch)
+                   for child in ast.iter_child_nodes(parent)}
+        expected_test = ("run_complete_oracle_profile('" + profile
+                         + "', " + ('folder' if profile == 'native' else 'simulator_root')
+                         + ') != ' + str(count))
+        guards = [n for n in ast.walk(branch) if isinstance(n, ast.If)
+                  and ast.unparse(n.test) == expected_test]
+        require(len(guards) == 1 and len(guards[0].body) == 1
+                and isinstance(guards[0].body[0], ast.Raise) and not guards[0].orelse,
+                'Source profile runtime receipt gate missing: ' + profile)
+        # Reject calls gated by additional if/while/for/try, even if a matching
+        # call expression survives in an unreachable subtree.
+        parent = parents[id(guards[0])]
+        depth = 0
+        while parent is not branch:
+            require(isinstance(parent, ast.With),
+                    'Source profile runner hidden by conditional control flow: ' + profile)
+            depth += 1
+            parent = parents[id(parent)]
+        require(depth == with_depth,
+                'Source profile mandatory scope or independent native process gate changed')
+        require(not any(isinstance(n, (ast.Return, ast.Continue, ast.Break))
+                        for n in ast.walk(branch)),
+                'Source profile contains an early exit: ' + profile)
+        require(not any(isinstance(n, ast.Raise) and n is not guards[0].body[0]
+                        for n in ast.walk(branch)),
+                'Source profile contains a bypassing raise: ' + profile)
+    # The only main() returns are the self-test result and normal completion.
+    require(len([n for n in ast.walk(main) if isinstance(n, ast.Return)]) == 2
+            and not any(isinstance(n, (ast.Break, ast.Continue))
+                        for n in ast.walk(main)),
+            'Source profile main gained an early return or control-flow exit')
+    assignments = [n for n in main.body if isinstance(n, ast.Assign)
+                   and len(n.targets) == 1 and isinstance(n.targets[0], ast.Tuple)
+                   and [elt.id for elt in n.targets[0].elts
+                        if isinstance(elt, ast.Name)] == ['do_native', 'do_pack']
+                   and isinstance(n.value, ast.Call)
+                   and isinstance(n.value.func, ast.Name)
+                   and n.value.func.id == 'selected_profiles']
+    require(len(assignments) == 1
+            and len([n for n in ast.walk(main)
+                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+                     and n.id in {'do_native', 'do_pack'}]) == 2,
+            'Source profile selectors reassigned or bypassed')
+
+
 
 
 def require(ok, why):
@@ -268,6 +327,47 @@ def standalone_order(java):
 
 
 
+def require_direct_java_regression_flow(java):
+    """A source reference is not execution: groups must be direct linear calls."""
+    clean = JAVA_NONCODE.sub(' ', java)
+    groups = ('runOwnMechanicsRegressions', 'runPublicCompetitiveRegressions',
+              'runBenchmarkRegressions', 'runLiveEvidenceRegressions',
+              'runRuntimeProvenanceRegressions')
+    for group in groups:
+        pattern = (r'private\s+static\s+void\s+' + group
+                   + r'\(\)\s+throws\s+Exception\s*\{([\s\S]*?)\n    \}')
+        matches = re.findall(pattern, clean)
+        require(len(matches) == 1 and re.fullmatch(
+            r'(?:\s*[A-Z]\w+Regression\.(?:run|inventory)\(\);)+'
+            r'\s*completedRegressionGroups\+\+;\s*', matches[0]) is not None,
+            'Java regression group is not direct, linear, and completion-counted: ' + group)
+    require('private static int completedRegressionGroups;' in clean,
+            'Java regression group completion counter missing')
+    completion = re.findall(
+        r'private\s+static\s+void\s+requireRegisteredGroupsComplete\(\)\s*'
+        r'\{([\s\S]*?)\n    \}', clean)
+    require(len(completion) == 1 and
+            re.search(r'if\s*\(completedRegressionGroups\s*!=\s*5\)\s*'
+                      r'throw\s+new\s+AssertionError\(', completion[0]) is not None,
+            'Java completed-regression-group runtime assertion missing')
+    main = re.findall(
+        r'public\s+static\s+void\s+main\([^)]*\)\s*throws\s+Exception\s*'
+        r'\{([\s\S]*?)\n    \}', clean)
+    require(len(main) == 1,
+            'Java standalone regression main absent or changed')
+    body = main[0]
+    require(not re.search(r'\b(?:if|for|while|do|switch|try|catch|finally|'
+                          r'return|break|continue|throw|System\.exit)\b', body),
+            'Java regression main contains a conditional or early-exit bypass')
+    expected = list(groups) + ['requireRegisteredGroupsComplete']
+    observed = re.findall(
+        r'\b(run\w+Regressions|requireRegisteredGroupsComplete)\(\);', body)
+    require(observed == expected and
+            body.index('requireRegisteredGroupsComplete();')
+            > body.index('runRuntimeProvenanceRegressions();'),
+            'Java regression completion is not the direct final group gate')
+
+
 def check_pinned_public_archive_wiring(root, runner, overrides=None):
     """All three public archive consumers must use the same checked transport.
 
@@ -332,6 +432,21 @@ def check_source_java_execution(root, java, gradle):
     observed = tuple(re.findall(r'(?m)^\s*(\w+Regression)\.differential\(engine\);\s*$', content))
     require(observed == expected,
             'Graal native differential coverage/order altered by CI performance edit')
+    # Existing differential calls run directly inside the native Graal try body,
+    # never in a newly inserted if(false)/loop/early-return subtree. Source
+    # registration alone would not detect that bypass.
+    clean = JAVA_NONCODE.sub(' ', content)
+    invocations = list(re.finditer(
+        r'(?m)^\s*\w+Regression\.differential\(engine\);', clean))
+    depths = [clean[:m.start()].count('{') - clean[:m.start()].count('}')
+              for m in invocations]
+    require(len(invocations) == len(expected) and all(depth == 3 for depth in depths),
+            'Graal native differential control flow hidden in nested branch')
+    native_scope = clean.find('try (var engine =')
+    require(native_scope >= 0 and native_scope < invocations[0].start()
+            and not re.search(r'\b(?:return|continue|break|System\.exit|Runtime\.getRuntime)\b',
+                              clean[native_scope:invocations[-1].end()]),
+            'Graal native differential control flow has an early exit')
     for marker in (
         'DispatchIntegrationRegression.run(Path.of(args[1]));',
         'PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);',
@@ -363,6 +478,7 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
             'Required Java entry point missing from Gradle')
     # The runner is grouped by responsibility; a dead group must not appear
     # registered merely because its method still contains class references.
+    require_direct_java_regression_flow(java.get('StandaloneRegression.java', ''))
     actual_order = standalone_order(java.get('StandaloneRegression.java', ''))
     require(actual_order == data['standalone_regression_order'],
             'Original ordered Java regression coverage changed')
@@ -499,6 +615,68 @@ class RegistryRegression(unittest.TestCase):
             with self.subTest(path=added), self.assertRaisesRegex(ValueError, 'Unregistered'):
                 check_paths(data, found | {added})
 
+    def test_required_python_source_oracles_reject_control_flow_bypasses(self):
+        source = (ROOT / 'verification/source_oracle.py').read_text()
+        loop = 'for command in expected:\n        bounded_run(command, check=True)'
+        self.assertIn(loop, source)
+        for name, mutant in (
+                ('continue before execution',
+                 source.replace(loop, 'for command in expected:\n        continue\n        bounded_run(command, check=True)')),
+                ('early return before execution',
+                 source.replace(loop, 'for command in expected:\n        return 25\n        bounded_run(command, check=True)')),
+                ('dead oracle execution',
+                 source.replace(loop, 'for command in expected:\n        if False:\n            bounded_run(command, check=True)')),
+                ('false native branch',
+                 source.replace('if do_native:', 'if False and do_native:')),
+                ('false pack branch',
+                 source.replace('if do_pack:', 'if False and do_pack:')),
+                ('premature main return',
+                 source.replace('if do_native:', 'return 0\n    if do_native:')),
+                ('dead receipt gate',
+                 source.replace("if run_complete_oracle_profile('native', folder) != 25:",
+                                "if False and run_complete_oracle_profile('native', folder) != 25:")),
+                ('silent completion assertion removal',
+                 source.replace('if completed != expected:', 'if False:')),
+                ('silent profile short circuit',
+                 source.replace("limit = {'native': 25, 'pack': 6}.get(profile)",
+                                'return 25\n    limit = {\'native\': 25, \'pack\': 6}.get(profile)')),
+        ):
+            with self.subTest(case=name):
+                self.assertNotEqual(mutant, source)
+                with self.assertRaisesRegex(ValueError, 'profile|completion|control flow'):
+                    check(source_override=mutant)
+
+    def test_required_java_groups_reject_dead_and_early_exit_paths(self):
+        path = ROOT / 'verification/java/com/maestroai/training/StandaloneRegression.java'
+        source = path.read_text()
+        for name, before, after in (
+                ('dead standalone group',
+                 '        runBenchmarkRegressions();',
+                 '        if (false) { runBenchmarkRegressions(); }'),
+                ('early return from main',
+                 '        runBenchmarkRegressions();',
+                 '        return;\n        runBenchmarkRegressions();'),
+                ('dead single regression',
+                 '        Phase7BenchmarkRegression.run();',
+                 '        if (false) { Phase7BenchmarkRegression.run(); }'),
+                ('early return inside group',
+                 '        Phase7BenchmarkRegression.run();',
+                 '        return;\n        Phase7BenchmarkRegression.run();'),
+                ('fake group completion without execution',
+                 '        Phase7BenchmarkRegression.run();',
+                 '        // Phase7BenchmarkRegression.run();'),
+                ('missing group receipt',
+                 '        completedRegressionGroups++;',
+                 '        // completedRegressionGroups++;'),
+                ('missing final receipt',
+                 '        requireRegisteredGroupsComplete();',
+                 '        // requireRegisteredGroupsComplete();'),
+        ):
+            with self.subTest(case=name):
+                self.assertIn(before, source)
+                with self.assertRaisesRegex(ValueError, 'Java regression|ordered Java'):
+                    check(overrides={path.name: source.replace(before, after, 1)})
+
     def test_removed_standalone_regression_call_is_rejected(self):
         p = ROOT / 'verification/java/com/maestroai/training/StandaloneRegression.java'
         content = p.read_text(encoding='utf-8')
@@ -524,7 +702,7 @@ class RegistryRegression(unittest.TestCase):
         source = p.read_text(encoding='utf-8')
         marker = '        runBenchmarkRegressions();'
         self.assertIn(marker, source)
-        with self.assertRaisesRegex(ValueError, 'ordered Java regression coverage'):
+        with self.assertRaisesRegex(ValueError, 'Java regression|ordered Java regression coverage'):
             check(overrides={p.name: source.replace(marker, '        // group disconnected')})
 
     def test_hosted_java_regressions_and_exit_checks_are_required(self):
@@ -567,7 +745,7 @@ class RegistryRegression(unittest.TestCase):
                 ('signal.signal(signal.SIGTERM, interrupted)', 'pass'),
                 ('raise subprocess.CalledProcessError(status, command)', 'pass')):
             with self.subTest(fragment=before):
-                with self.assertRaisesRegex(ValueError, 'overlapping verification'):
+                with self.assertRaisesRegex(ValueError, 'Source profile|overlapping verification'):
                     check(source_override=source.replace(before, after))
 
     def test_removed_node_oracle_call_is_rejected(self):
@@ -579,13 +757,13 @@ class RegistryRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'profile order'):
             check(matrix_override=matrix.replace(missing, '("source_oracle.cjs",)'))
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
-        with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
-            check(source_override=source.replace("commands_for('native', folder)",
-                                                  "commands_for('pack', folder)"))
-        # A profile remaining in the loop but never invoking the independent
-        # subprocess is not a verified oracle, even with a complete manifest.
+        with self.assertRaisesRegex(ValueError, 'Source profile'):
+            check(source_override=source.replace("run_complete_oracle_profile('native', folder)",
+                                                  "run_complete_oracle_profile('pack', folder)"))
+        # A profile reference alone is not execution: the executor must run
+        # every subprocess and check its successful completion receipt.
         self.assertIn('bounded_run(command, check=True)', source)
-        with self.assertRaisesRegex(ValueError, 'runner invocation missing'):
+        with self.assertRaisesRegex(ValueError, 'completion control flow'):
             check(source_override=source.replace('bounded_run(command, check=True)', 'pass', 1))
 
     def test_history_index_preserves_every_original_report(self):
@@ -639,6 +817,20 @@ class RegistryRegression(unittest.TestCase):
             check_with_gradle = gradle.replace(
                 "if (sourceJava) executable = sourceJava", "if (sourceJava) println(sourceJava)")
             check_source_java_execution(ROOT, {path.name: original}, check_with_gradle)
+
+    def test_native_graal_differentials_reject_dead_branches_and_early_exit(self):
+        path = ROOT / 'verification/java/com/maestroai/training/SourceVerification.java'
+        original = path.read_text()
+        marker = '            ModifierCompositionRegression.differential(engine);'
+        self.assertIn(marker, original)
+        for name, replacement in (
+                ('dead nested branch', '            if (false) {\n' + marker + '\n            }'),
+                ('unconditional early return', '            return;\n' + marker),
+                ('premature process exit', '            System.exit(0);\n' + marker),
+        ):
+            with self.subTest(case=name):
+                with self.assertRaisesRegex(ValueError, 'Graal native differential control flow'):
+                    check(overrides={path.name: original.replace(marker, replacement)})
 
     def test_python_execution_disconnection_is_rejected(self):
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')

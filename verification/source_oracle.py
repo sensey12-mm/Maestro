@@ -113,6 +113,25 @@ def bounded_run(command, limit=5400, check=True):
     subprocess.run(command, check=True, timeout=limit)
 
 
+def run_complete_oracle_profile(profile, simulator):
+    """Only attest a pinned profile after every subprocess has exited cleanly."""
+    limit = {'native': 25, 'pack': 6}.get(profile)
+    if limit is None:
+        raise ValueError('Incomplete or unknown source oracle profile')
+    expected = list(commands_for(profile, simulator))
+    if len(expected) != limit:
+        raise ValueError('Incomplete or unknown source oracle profile')
+    completed = []
+    for command in expected:
+        bounded_run(command, check=True)
+        completed.append(command)
+    if completed != expected:
+        raise AssertionError('Source-oracle execution was incomplete: ' + profile)
+    print('SOURCE_ORACLE_PROFILE_COMPLETE profile=' + profile
+          + ' count=' + str(len(completed)))
+    return len(completed)
+
+
 @contextmanager
 def parallel_native_source_gradle(command, limit=5400):
     """Overlap read-only Node oracles with independent native Java verification.
@@ -224,6 +243,33 @@ class SourceGuards(unittest.TestCase):
         with self.assertRaises(ValueError): bounded_run(['bash'], 0)
         with self.assertRaises(subprocess.TimeoutExpired):
             bounded_run(['bash','-c','sleep 0.2'], 0.01)
+
+    def test_source_oracle_execution_receipts_require_all_real_invocations(self):
+        for profile, size in (('native', 25), ('pack', 6)):
+            with self.subTest(profile=profile):
+                with mock.patch.object(sys.modules[__name__], 'bounded_run') as execute:
+                    self.assertEqual(run_complete_oracle_profile(profile, '/fixture'), size)
+                    self.assertEqual(execute.call_count, size)
+                    self.assertTrue(all(c.kwargs == {'check': True}
+                                        for c in execute.call_args_list))
+                    self.assertEqual(
+                        [c.args[0] for c in execute.call_args_list],
+                        list(commands_for(profile, '/fixture')))
+        with mock.patch.object(sys.modules[__name__], 'bounded_run',
+                               side_effect=RuntimeError('synthetic oracle failure')) as execute:
+            with self.assertRaisesRegex(RuntimeError, 'synthetic oracle failure'):
+                run_complete_oracle_profile('native', '/fixture')
+            execute.assert_called_once()
+        with self.assertRaisesRegex(ValueError, 'Incomplete or unknown'):
+            run_complete_oracle_profile('skip', '/fixture')
+
+    def test_source_oracle_execution_receipts_reject_incomplete_matrix(self):
+        with mock.patch.object(sys.modules[__name__], 'commands_for',
+                               return_value=iter([['node', 'verification/missing.cjs']])):
+            with mock.patch.object(sys.modules[__name__], 'bounded_run') as execute:
+                with self.assertRaisesRegex(ValueError, 'Incomplete or unknown'):
+                    run_complete_oracle_profile('native', '/fixture')
+                execute.assert_not_called()
 
     def test_parallel_source_runs_require_both_successful_exit_statuses(self):
         command = ['bash', 'gradlew', 'sourceVerification']
@@ -391,8 +437,8 @@ def main():
                              'sourceVerification', '-PverificationSource=' + folder,
                              '-PverificationDependency=' + str(cache_dependency(home)), '--stacktrace']
             with parallel_native_source_gradle(native_gradle):
-                for command in commands_for('native', folder):
-                    bounded_run(command, check=True)
+                if run_complete_oracle_profile('native', folder) != 25:
+                    raise AssertionError('Incomplete native source-oracle execution')
     if do_pack:
         assets = pack_sources(Path('src/main/resources/com/maestroai/training'))
         with tempfile.TemporaryDirectory(prefix='maestroai-pack-source-') as folder:
@@ -410,8 +456,8 @@ def main():
             raid=raid_sources(home, Path('src/main/resources/com/maestroai/training'))
             (Path(folder)/'raid-condition-fixtures.json').write_text(json.dumps(raid))
             (Path(folder)/'pack-native-fixtures.json').write_text(json.dumps(pack_native_sources(home, Path('src/main/resources/com/maestroai/training'))))
-            for command in commands_for('pack', simulator_root):
-                bounded_run(command, check=True)
+            if run_complete_oracle_profile('pack', simulator_root) != 6:
+                raise AssertionError('Incomplete pack source-oracle execution')
             bounded_run(['bash', 'gradlew', '--no-daemon', '-I', 'verification/verification.init.gradle',
                             'sourceVerification', '-PverificationSource=' + str(simulator_root),
                             '-PverificationDependency=' + str(cache_dependency(home)), '-PverificationPack=true', '--stacktrace'], check=True)
