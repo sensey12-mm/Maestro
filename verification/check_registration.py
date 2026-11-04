@@ -855,7 +855,7 @@ class RegistryRegression(unittest.TestCase):
             check(overrides={path.name: original.replace(
                 'ModifierCompositionRegression.differential(engine);',
                 'ModifierCompositionRegression.runNothing(engine);')})
-        with self.assertRaisesRegex(ValueError, 'Graal attestation/pack gate'):
+        with self.assertRaisesRegex(ValueError, 'Graal source dispatch control flow'):
             check(overrides={path.name: original.replace(
                 'MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);',
                 'System.out.println("skipped");')})
