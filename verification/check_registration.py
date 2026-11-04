@@ -131,11 +131,26 @@ def required_oracle_profiles(source):
         require(not any(isinstance(n, ast.Raise) and n is not guards[0].body[0]
                         for n in ast.walk(branch)),
                 'Source profile contains a bypassing raise: ' + profile)
-    # The only main() returns are the self-test result and normal completion.
+    # Require the exact self-test selector. An unconditional self-test return
+    # must never turn --native/--pack into a green no-op.
+    selftests = [n for n in main.body if isinstance(n, ast.If)
+                 and ast.unparse(n.test) == "sys.argv[1:] == ['--self-test']"]
+    require(len(selftests) == 1
+            and len([n for n in ast.walk(selftests[0])
+                     if isinstance(n, ast.Return)]) == 1,
+            'Source profile self-test selector bypassed')
+    # The only main() returns are the self-test result and normal completion,
+    # and only the two registered profile receipts may raise inside main.
     require(len([n for n in ast.walk(main) if isinstance(n, ast.Return)]) == 2
+            and len([n for n in main.body if isinstance(n, ast.Return)]) == 1
+            and len([n for n in ast.walk(main) if isinstance(n, ast.Raise)]) == 2
             and not any(isinstance(n, (ast.Break, ast.Continue))
                         for n in ast.walk(main)),
             'Source profile main gained an early return or control-flow exit')
+    require(not any(isinstance(n, ast.Call) and ast.unparse(n.func)
+                    in {'sys.exit', 'os._exit', 'exit', 'quit', 'builtins.exit'}
+                    for n in ast.walk(main)),
+            'Source profile main contains a silent process exit')
     assignments = [n for n in main.body if isinstance(n, ast.Assign)
                    and len(n.targets) == 1 and isinstance(n.targets[0], ast.Tuple)
                    and [elt.id for elt in n.targets[0].elts
@@ -632,6 +647,12 @@ class RegistryRegression(unittest.TestCase):
                  source.replace('if do_pack:', 'if False and do_pack:')),
                 ('premature main return',
                  source.replace('if do_native:', 'return 0\n    if do_native:')),
+                ('forced self-test-only path',
+                 source.replace("if sys.argv[1:] == ['--self-test']:", 'if True:')),
+                ('forced process exit',
+                 source.replace('if do_native:', 'sys.exit(0)\n    if do_native:')),
+                ('silent successful exception exit',
+                 source.replace('if do_native:', 'raise SystemExit(0)\n    if do_native:')),
                 ('dead receipt gate',
                  source.replace("if run_complete_oracle_profile('native', folder) != 25:",
                                 "if False and run_complete_oracle_profile('native', folder) != 25:")),
