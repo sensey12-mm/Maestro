@@ -132,8 +132,11 @@ not installed Minecraft acceptance or permission to activate Shadow tactics.
 Phase 5.21 remains signed, public-replay-only and explicitly denies current battle
 binding, calibrated probabilities, legal actions, and tactical/live promotion.
 Phase 7's Legacy-choice capture is opt-in and never changes the selected action.
-See `verification/PHASE457_INTEGRATION_STATUS.md` for exact upstream commits,
-cross-phase acceptance tests, and remaining Phase 6 prerequisites.
+The detailed original Phase 4/5/7 integration report is preserved at the
+[immutable pre-cleanup public Git commit](https://github.com/sensey12-mm/Maestro/blob/eb13871aa3d083c9e50c14d20659bcbe3043bc32/verification/PHASE457_INTEGRATION_STATUS.md);
+it is a historical source-level milestone, not an active verification input.
+Cross-phase acceptance tests and prerequisites remain enforced in executable
+verification and documented in the live verification architecture.
 
 
 Verification architecture, consolidated pinned ABI preflight, ordered native/pack oracle matrix and original-file custody inventory: [verification/ARCHITECTURE.md](verification/ARCHITECTURE.md). Before running the verification suite, run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`.

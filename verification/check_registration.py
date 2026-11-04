@@ -192,12 +192,28 @@ def load(root):
     additions = data.get('new_registered_files')
     require(isinstance(additions, list) and len(additions) == len(set(additions))
             and set(data['new_checked_sources']) <= set(additions)
-            and {'verification/ARCHITECTURE.md', 'verification/INDEX.md',
+            and {'verification/ARCHITECTURE.md',
                  'verification/verification_registry.json'} <= set(additions)
+            and 'verification/INDEX.md' not in additions
             and all(p.startswith('verification/') and '..' not in Path(p).parts
                     and Path(p).suffix in {'.md', '.py', '.json', '.tsv', '.cjs', '.java', '.gradle'}
                     for p in additions),
             'New verification files must be explicitly registered')
+    # Historical milestone reports have been removed from the working tree,
+    # not erased. The immutable original-path/blob registry is kept intact.
+    archive = data.get('archived_reports')
+    original_reports = {p for p in origins if p.endswith('.md')
+                        and p != 'verification/benchmarks/README.md'}
+    require(isinstance(archive, list) and len(archive) == 74
+            and len(set(archive)) == 74
+            and archive == sorted(original_reports),
+            'Historical milestone archive is incomplete or altered')
+    require(data.get('report_archive_commit') ==
+            'eb13871aa3d083c9e50c14d20659bcbe3043bc32',
+            'Pinned historical report archive commit changed')
+    require(all(origins[p] and re.fullmatch('[0-9a-f]{40}', origins[p])
+                for p in archive),
+            'Historical milestone original blob identity missing')
     migrations = data.get('migrations')
     require(isinstance(migrations, dict)
             and set(migrations) == {'verification/check_native_split_hooks.py'},
@@ -227,10 +243,16 @@ def paths(root):
 def check_paths(data, found):
     original = set(data['original_paths'])
     migrated = set(data['migrations'])
+    archived = set(data['archived_reports'])
     require(not (migrated & found), 'Already migrated source unexpectedly returned')
+    require(not (archived & found),
+            'Archived historical milestone report reintroduced: '
+            + repr(sorted(archived & found)[:5]))
+    require('verification/INDEX.md' not in found,
+            'Obsolete milestone history index reintroduced')
     require(all(move['replacement'] in found for move in data['migrations'].values()),
             'Migrated source replacement missing')
-    expected = (original - migrated) | set(data['new_registered_files'])
+    expected = (original - migrated - archived) | set(data['new_registered_files'])
     require(not (expected - found), 'Baseline verification file missing: ' + repr(sorted(expected - found)[:5]))
     require(not (found - expected), 'Unregistered verification file: ' + repr(sorted(found - expected)[:5]))
     expected_sources = {p for p in expected if Path(p).suffix in SUFFIX}
@@ -303,13 +325,22 @@ def check_python_execution(root, workflow, source_override=None):
             + ', '.join(sorted(scripts - reached)))
 
 
-def check_history_index(root, data, index_override=None):
-    report = ((root / 'verification/INDEX.md').read_text(encoding='utf-8')
-              if index_override is None else index_override)
-    references = re.findall(r'(?m)^- \[[^\]]+\]\(([^)]+\.md)\)$', report)
-    historical = {p[len('verification/'):] for p in data['original_paths'] if p.endswith('.md')}
-    require(set(references) == historical and len(references) == len(historical),
-            'Verification history index contains missing, duplicate or stale paths')
+def check_historical_archive(data, found):
+    """Retain exact pre-cleanup Git identities, not active milestone files."""
+    archive = set(data['archived_reports'])
+    originals = data['original_paths']
+    require(len(archive) == 74
+            and archive == {p for p in originals if p.endswith('.md')
+                            and p != 'verification/benchmarks/README.md'},
+            'Historical milestone archive path custody changed')
+    require(not (archive & found), 'Archived historical milestone report reintroduced')
+    require('verification/INDEX.md' not in found,
+            'Obsolete milestone history index reintroduced')
+    require({'verification/ARCHITECTURE.md',
+             'verification/benchmarks/README.md'} <= found,
+            'Required executable verification documentation missing')
+
+
 
 
 def standalone_order(java):
@@ -618,11 +649,11 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
             'Native preflight lost exact dependency integrity check')
 
 
-def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None, index_override=None, consumer_overrides=None):
+def check(root=ROOT, found=None, overrides=None, source_override=None, matrix_override=None, workflow_override=None, hook_override=None, consumer_overrides=None):
     data = load(root)
     check_paths(data, paths(root) if found is None else found)
     check_python_sources(root, source_override)
-    check_history_index(root, data, index_override)
+    check_historical_archive(data, paths(root) if found is None else found)
     folder = root / 'verification/java/com/maestroai/training'
     java = {p.name: p.read_text(encoding='utf-8') for p in folder.glob('*.java')}
     if overrides:
@@ -648,12 +679,13 @@ class RegistryRegression(unittest.TestCase):
     def test_live_inventory_and_reachability(self):
         check()
 
-    def test_original_java_and_documentation_cannot_vanish(self):
+    def test_original_java_and_essential_documentation_cannot_vanish(self):
         data = load(ROOT)
         found = paths(ROOT)
         for removed in ('verification/verification.init.gradle',
                         'verification/java/com/maestroai/training/Phase7MechanicsAdapterRegression.java',
-                        'verification/PHASE635_FINAL_PHASE6_CLOSURE_AND_ACCEPTANCE.md'):
+                        'verification/benchmarks/README.md',
+                        'verification/ARCHITECTURE.md'):
             with self.subTest(path=removed), self.assertRaisesRegex(ValueError, 'missing'):
                 check_paths(data, found - {removed})
 
@@ -822,14 +854,48 @@ class RegistryRegression(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'completion control flow'):
             check(source_override=source.replace('bounded_run(command, check=True)', 'pass', 1))
 
-    def test_history_index_preserves_every_original_report(self):
-        index = (ROOT / 'verification/INDEX.md').read_text(encoding='utf-8')
-        marker = '(PHASE510_DURABLE_TRUST_RECOVERY.md)'
-        self.assertIn(marker, index)
-        with self.assertRaisesRegex(ValueError, 'history index'):
-            check(index_override=index.replace(marker, '(missing-report.md)'))
-        with self.assertRaisesRegex(ValueError, 'history index'):
-            check(index_override=index + '\n- [duplicate](PHASE510_DURABLE_TRUST_RECOVERY.md)\n')
+    def test_original_report_blobs_remain_pinned_outside_active_verification(self):
+        data, found = load(ROOT), paths(ROOT)
+        archive = set(data['archived_reports'])
+        self.assertEqual(len(archive), 74)
+        self.assertFalse(archive & found)
+        self.assertEqual(
+            archive,
+            {p for p in data['original_paths'] if p.endswith('.md')
+             and p != 'verification/benchmarks/README.md'})
+        self.assertEqual(data['report_archive_commit'],
+                         'eb13871aa3d083c9e50c14d20659bcbe3043bc32')
+        self.assertNotIn('verification/INDEX.md', found)
+        self.assertIn('verification/benchmarks/README.md', found)
+        self.assertIn('verification/ARCHITECTURE.md', found)
+        check_historical_archive(data, found)
+
+    def test_removed_milestone_and_obsolete_index_cannot_reappear(self):
+        data, found = load(ROOT), paths(ROOT)
+        for path in ('verification/PHASE510_DURABLE_TRUST_RECOVERY.md',
+                     'verification/PHASE635_FINAL_PHASE6_CLOSURE_AND_ACCEPTANCE.md',
+                     'verification/SHADOW_PROMOTION7_RELEASE.md'):
+            with self.subTest(path=path):
+                self.assertIn(path, data['archived_reports'])
+                with self.assertRaisesRegex(ValueError, 'Archived historical'):
+                    check_paths(data, found | {path})
+        with self.assertRaisesRegex(ValueError, 'Obsolete milestone history index'):
+            check_paths(data, found | {'verification/INDEX.md'})
+
+    def test_archived_report_manifest_tampering_fails_closed(self):
+        import copy
+        data = load(ROOT)
+        original = set(data['archived_reports'])
+        modified = copy.deepcopy(data)
+        modified['archived_reports'].pop()
+        with self.assertRaisesRegex(ValueError, 'archive path custody'):
+            check_historical_archive(modified, paths(ROOT))
+        modified = copy.deepcopy(data)
+        modified['archived_reports'][-1] = 'verification/UNKNOWN.md'
+        with self.assertRaisesRegex(ValueError, 'archive path custody'):
+            check_historical_archive(modified, paths(ROOT))
+        self.assertEqual(set(data['archived_reports']), original)
+
 
     def test_pinned_archive_consumer_and_adversarial_registration(self):
         script = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')

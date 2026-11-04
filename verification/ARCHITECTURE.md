@@ -52,11 +52,20 @@ migrations; missing replacements and broken CI mappings also fail closed.
 
 ## Historical verification navigation and regression hygiene
 
-[Verification history index](INDEX.md) groups all 75 original
-public-safe reports by responsibility without changing their original text,
-attribution or historical conclusions. It is checked against the exact origin
-inventory, rejecting missing, duplicate and stale links. Newly added reports,
-fixtures and scripts must be explicitly registered, not merely present on disk.
+**Archived, not discarded:** the 74 original public milestone reports
+were reviewed against private HQ's existing Phase Parts and current integration
+navigation. Their distinct technical findings and evidence limitations now have
+concise continuity summaries in HQ; protected authored originals were not
+rewritten. The public reports and the former INDEX.md remain byte-for-byte
+accessible in the [immutable pre-cleanup Git snapshot](https://github.com/sensey12-mm/Maestro/tree/eb13871aa3d083c9e50c14d20659bcbe3043bc32/verification).
+Their 74 original Git blob IDs remain in this repository's independently
+SHA-256-locked `verification_registry.json` original-path inventory. The
+explicit `archived_reports` list and `report_archive_commit` pin the intentional
+migration from active files to historic Git objects. The surviving original
+`benchmarks/README.md` is required because it describes runnable Phase 7
+synthetic verification. No report placeholders or redundant milestone index
+remain in the working tree. Any unregistered report reintroduction or missing
+essential verification instruction fails the registration gate.
 
 All Python verification files are parsed for syntax, checked for missing
 local oracle imports, and required to remain reachable from an actual CI
@@ -114,9 +123,11 @@ resources; `check_publish_artifact.py` separately gates candidate integrity
 after both jobs; `phase5_verify_download.py` independently verifies a ZIP
 with an externally supplied SHA-256 without granting installation approval.
 Similarly native-vs-pack Node oracles, Java/Graal source observations,
-per-phase records and signed-custody tests require distinct failure domains.
-No measured semantic duplication justified merging those checks, and no
-historical report was renamed or deleted.
+historical phase reports remain available at the pinned Git snapshot, while
+signed-custody tests retain independent failure domains.
+No measured semantic duplication justified merging the executable checks.
+Only the 74 obsolete active milestone Markdown files and their derived index
+were retired from the working tree; their immutable Git history remains intact.
 
 ## CI performance optimization: measured baseline and guarded tuning
 
@@ -200,7 +211,7 @@ updated adversarial tests and exact-commit CI.
 
 1. Establish how each component is reached, its fixtures, and positive, privacy and adversarial coverage.
 2. Connect new tests to the existing appropriate suite; review and update the inventory so new source files cannot silently appear.
-3. Before relocating/removing an original file, extend the reviewed migration mapping with its original path and Git blob, replacement, preserved coverage and independent-oracle rationale. Unrecognized migrations still fail closed and require reviewed guard amendments and negative tests.
+3. Before relocating/removing original executable verification code, extend the reviewed migration map with its original path/blob, replacement, preserved coverage and independent-oracle rationale. The 74 intentionally removed historical reports instead use the separate immutable archive list and original blob map; new source removals must never be disguised as document archives. Unrecognized migrations fail closed and need negative tests.
 4. Run `python3 verification/check_registration.py --self-test` and `python3 verification/check_registration.py`, then all existing CI gates. Verify `verify`, `pack_source`, and `publish` for the **exact commit**.
 5. Keep private HQ documentation, battle logs, credentials and custody evidence outside this public repository. The repository safeguard rejects private-repository URLs in public verification content, CI secrets, writable token permissions, and persisted checkout credentials. Source CI and simulator checks cannot certify Minecraft acceptance.
 
