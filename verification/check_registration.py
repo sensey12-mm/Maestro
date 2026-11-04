@@ -462,6 +462,28 @@ def check_source_java_execution(root, java, gradle):
             and not re.search(r'\b(?:return|continue|break|System\.exit|Runtime\.getRuntime)\b',
                               clean[native_scope:invocations[-1].end()]),
             'Graal native differential control flow has an early exit')
+    # Native and pack Java entry points have different required scopes.
+    # They must not survive registration only as text inside false branches.
+    entrypoints = (
+        ('DispatchIntegrationRegression.run(Path.of(args[1]));', 2),
+        ('PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);', 3),
+        ('MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);', 3),
+        ('OwnXerneasRegression.attestation(engine);', 3),
+    )
+    for invocation, depth in entrypoints:
+        require(clean.count(invocation) == 1
+                and clean[:clean.index(invocation)].count('{')
+                - clean[:clean.index(invocation)].count('}') == depth,
+                'Graal source dispatch control flow hidden or bypassed: ' + invocation)
+    pack_branch = clean.find('if (args.length > 2) {')
+    pack_run = clean.find(entrypoints[1][0])
+    pack_return = clean.find('return;', pack_run)
+    native_run = clean.find(entrypoints[0][0])
+    require(0 <= pack_branch < pack_run < pack_return < native_run
+            and clean.count('return;') == 1
+            and 'System.exit(' not in clean
+            and 'Runtime.getRuntime().halt(' not in clean,
+            'Graal source dispatch control flow bypasses native or pack verification')
     for marker in (
         'DispatchIntegrationRegression.run(Path.of(args[1]));',
         'PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);',
@@ -521,6 +543,19 @@ def check_runners(data, java, source, gradle, matrix, workflow, native_hook):
         'check(runtime.waitFor()==0',
         'new ProcessBuilder(')),
         'Pinned full-pack Java hosted-regression execution or exit status gate missing')
+    # Host-side child regressions must remain in the actual non-layout pack
+    # execution branch. Merely preserving ProcessBuilder/waitFor text is insufficient.
+    pack_source = JAVA_NONCODE.sub(' ', java.get('PackSourceRegression.java', ''))
+    require('if(!layoutOnly) {' in pack_source,
+            'Hosted Java pack verification non-layout branch removed')
+    for marker in ('BootProfileRegression.class.getName()',
+                   'RuntimeCaptureRegression.class.getName()',
+                   'check(child.waitFor()==0',
+                   'check(runtime.waitFor()==0'):
+        require(pack_source.count(marker) == 1
+                and pack_source[:pack_source.index(marker)].count('{')
+                - pack_source[:pack_source.index(marker)].count('}') == 3,
+                'Hosted Java pack regression hidden in dead control flow: ' + marker)
     calls = {name[:-5]: (set(CALL.findall(clean)) | set(HOST_CLASS.findall(clean)))
              for name, content in java.items()
              for clean in [JAVA_NONCODE.sub(' ', content)]}
@@ -852,6 +887,38 @@ class RegistryRegression(unittest.TestCase):
             with self.subTest(case=name):
                 with self.assertRaisesRegex(ValueError, 'Graal native differential control flow'):
                     check(overrides={path.name: original.replace(marker, replacement)})
+
+    def test_pack_and_native_java_dispatch_do_not_accept_dead_scope(self):
+        source = ROOT / 'verification/java/com/maestroai/training/SourceVerification.java'
+        java = source.read_text()
+        cases = (
+            ('dead native dispatch',
+             '        DispatchIntegrationRegression.run(Path.of(args[1]));',
+             '        if (false) {\n        DispatchIntegrationRegression.run(Path.of(args[1]));\n        }'),
+            ('dead pack dispatch',
+             '            PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);',
+             '            if (false) {\n            PackSourceRegression.run(simulator, Path.of(args[1]), args.length > 3);\n            }'),
+            ('unconditional return before native',
+             '        DispatchIntegrationRegression.run(Path.of(args[1]));',
+             '        return;\n        DispatchIntegrationRegression.run(Path.of(args[1]));'),
+            ('dead native move attestation',
+             '            MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);',
+             '            if (false) {\n            MoveAttestationRegression.run(engine,probe,publicBattle,modules,anchor,expected);\n            }'),
+        )
+        for label, before, after in cases:
+            with self.subTest(case=label):
+                self.assertIn(before, java)
+                with self.assertRaisesRegex(ValueError, 'Graal source dispatch control flow'):
+                    check(overrides={source.name: java.replace(before, after)})
+        child = ROOT / 'verification/java/com/maestroai/training/PackSourceRegression.java'
+        old = child.read_text()
+        marker = '            check(runtime.waitFor()==0'
+        self.assertIn(marker, old)
+        changed = old.replace(marker, '            if (false) {\n' + marker).replace(
+            '"native runtime capture child failed");',
+            '"native runtime capture child failed");\n            }', 1)
+        with self.assertRaisesRegex(ValueError, 'Hosted Java pack regression hidden'):
+            check(overrides={child.name: changed})
 
     def test_python_execution_disconnection_is_rejected(self):
         source = (ROOT / 'verification/source_oracle.py').read_text(encoding='utf-8')
