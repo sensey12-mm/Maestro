@@ -1,66 +1,118 @@
-# Developer Battle Diagnostics v1
+# Automatic Developer Battle Reports (MaestroAI 1.1.7)
 
-**Local developer tool; derived evidence, not a battle archive, publication system, or gameplay feature.**
+**Install the mod JAR and play. No Python or after-battle command is required.**
 
-From the Maestro repository checkout, with Python 3.10+ installed:
-
-```bash
-python3 tools/battle_diagnostics.py "/path/to/minecraft/logs/latest.log"
-```
-
-Windows PowerShell: `py -3 tools/battle_diagnostics.py "C:\path\to\minecraft\logs\latest.log"`.
-
-The command reads the original log without modifying it, computes its SHA-256, and replaces only the tool-owned ignored directory `battle-reports/` with deterministic derived views:
+On Minecraft startup, MaestroAI automatically creates a private report folder under
+**the currently running Minecraft instance's game directory**:
 
 ```text
-battle-reports/
-  B01/
-    summary.md
-    battle.jsonl
-  B02/
-    summary.md
-    battle.jsonl
-  issues.jsonl
+<minecraft-instance>/
+  config/
+    maestroai-battle-reports.properties
+  battle-reports/
+    issues.jsonl
+    B01/
+      summary.md
+      battle.jsonl
+    B02/
+      summary.md
+      battle.jsonl
 ```
 
-Specify an alternate private location with `--output /private/battle-reports`. Do **not** point the output at the original log or a directory with other files. The tool uses temporary staging and restores a previous output directory if final replacement fails. Store original logs separately with an owner-controlled backup.
+For example, if the active instance is
+`G:\Maincraf\.minecraft\versions\psokdeonmson\`, reports appear at
+`G:\Maincraf\.minecraft\versions\psokdeonmson\battle-reports\`.
+**The directory is NOT inside the mods folder, mod JAR, Git checkout or Headquarters.**
 
-## Optional in-game capture
+Reports are created automatically **when MaestroAI actually observes or
+chooses in a battle**. The Java mod writes a minimized replay/provenance record
+for each observed public history increment, a decision receipt for each
+selected action, and a terminal record on Cobblemon's actual
+`BATTLE_VICTORY` callback. The global `issues.jsonl` indexes diagnostics
+and any detected gaps. The folder persists across Minecraft restarts;
+previously created B numbers are never reused.
 
-Developer decision receipts are **off by default**. Start Minecraft with:
+## Configuration
 
-```text
--Dmaestroai.developerDiagnostics=true
--Dmaestroai.envelopeCapture=true
--Dmaestroai.legacyChoiceCapture=true
+Auto reporting is **enabled by default**. The mod creates
+`config/maestroai-battle-reports.properties` at startup:
+
+```properties
+enabled=true
 ```
 
-The first flag logs the selected authority and safely representable action after the existing native decision gate, Shadow proposal category, forced-action metadata, certified legal roots **only when an independent native proof is available**, and exact available Legacy fallback code. It never changes the selected action. The second enables existing envelope/terminal provenance. The third enables existing independently checked Legacy return receipts. No runtime file writer, telemetry uploader, GUI or server is added.
+Set `enabled=false` and restart Minecraft to disable automatic reports.
+Alternatively launch with `-Dmaestroai.autoBattleReports=false` to override
+the file. Other legacy observation JVM flags are **not required** to generate
+these reports. The optional console diagnostics
+(`-Dmaestroai.developerDiagnostics=true`,
+`-Dmaestroai.envelopeCapture=true`,
+`-Dmaestroai.legacyChoiceCapture=true`) are separate. With reporting enabled,
+Java automatically gathers the safe portions of those receipt streams without
+requiring their old log opt-ins.
 
-## Schema and interpretation
+This is **local-only**: there is no uploader, external service, GUI or telemetry
+transmission. Reporting never feeds a tactical decision.
 
-Each `battle.jsonl` line is a typed record with `schema`, `kind`, `battle` (B-number, not UUID), `order`, `source_line`, `source_sha256`, `turn`, `artifact_sha256`, and `version`. Types include `public_event`, `identity`, `decision`, `legacy_runtime_authority`, `legacy_receipt`, `shadow_reason`, `fallback`, `provenance`, `terminal`, `diagnostic_presence`, `issue` and final `metadata`. The top-level `issues.jsonl` contains stable issue identifiers, originating B-number, source line, classification, severity and safe detail. B-number ordering follows first observed capture appearance in the source log.
+## Contents and evidence limitations
 
-The `decision` record includes `selected_action`, `proposal`, `authority`, `forced`, `rationale`, `fallback_stage`, `fallback_reason`, `legal_choices`, `legal_choice_count` and `confidence`. Only allowlisted move IDs and own-party slot ordinals may be represented. The legal list is `UNKNOWN` unless the live owning-native legal witness was certified at the decision; forced replacement may therefore have `UNKNOWN` legal choices even when the action itself was recorded. Shadow policy scores are not calibrated probabilities.
+- `summary.md`: active, completed-but-unverified, completed-with-gaps, or
+  interrupted status; event/decision/issue counts; last seen turn; version.
+- `battle.jsonl`: typed JSONL records for `public_event`, `provenance`,
+  `decision`, `fallback`, `legacy_receipt`, `issue` and `terminal`.
+  They have a per-battle B identifier, monotonic order, installed-artifact SHA
+  when available, and explicit `UNKNOWN` source offsets/hashes for live reports.
+- `issues.jsonl`: append-only, global fixed-code issue index.
 
-Public event projections strip nicknames, HP and free-form strings; only recognized public species, moves, forms, types, statuses and effects are emitted. Unreviewed values are `UNKNOWN` and may create issues. Illusion/Transform/Forme-change records are appearance evidence, **never proof of an opponent's hidden true identity**. `UNKNOWN` also covers unseen moves, missing turn context, missing or redacted winners, unconfirmed capture beginning and missing spectator receipt. `INCOMPLETE` means an actual detected gap or contradiction. Neither a clean conversion nor a victory callback independently establishes complete delivered spectator evidence.
+The report writer receives **only allowlisted, minimized output from the existing
+public capture and decision receipts**. It rejects free-form or unrecognized
+values. It does not write players' names, Pokémon nicknames, full UUIDs,
+raw Cobblemon requests, split-private payloads, HP figures, arbitrary log
+strings or filesystem paths. Known public species/move/effect projections
+remain bounded by source-reviewed allowlists. Unrecognized values stay UNKNOWN.
 
-Older logs lacking `DEV_DIAG_DECISION` retain authority-only and public evidence when they contain supported Maestro-owned lines. They cannot provide decision details, legality, or complete beginning/terminal data that they never recorded. Ambiguous correlation and dropped/malformed records are issues, not guessed associations.
+A live capture is a **developer report, not a reviewed privacy-safe Battle
+Evidence archive**. A victory callback proves only that Cobblemon delivered the
+callback to MaestroAI, not who won or whether every packet reached an
+independent spectator. Source beginning, spectator delivery, true concealed
+Illusion identity, unreviewed evidence and unsupported details remain UNKNOWN
+or UNVERIFIED. Diagnosed gaps are marked INCOMPLETE; hitting the bounded event
+limit is an explicit issue.
 
-## Privacy and custody
+Each active battle has a durable `active.marker`. On a clean shutdown,
+unfinished battles become `INTERRUPTED_SHUTDOWN`. If Minecraft crashes,
+on the next launch unfinished folders are marked `INTERRUPTED_RESTART`;
+existing `battle.jsonl` is preserved, and a `UNCLEAN_RESTART` issue is
+appended globally. Reports are written incrementally with durable append
+and atomic summary replacement. Report storage I/O failures disable only
+the reporter, never action selection. A per-instance lock prevents concurrent
+writers from overwriting evidence.
 
-The parser never embeds raw Minecraft log lines in the reports. It does not output usernames, nicknames, full UUIDs, chat, paths, raw request/sideupdate/split payloads, HP figures or unreviewed opponent items and moves. Source line numbers and SHA-256 refer back to the separately retained original. All raw source files and generated reports stay local and Git-ignored. These reports are **not** reviewed Battle Evidence archive submissions: that workflow requires independent review and explicit publication approval.
+## Optional historical log conversion
 
-The input is streamed and source-hashed in chunks; output records are spooled to private staging, with a fixed per-battle event retention bound. Excess events are explicitly flagged as a capture gap. No source data is silently converted to public archive evidence.
+`tools/battle_diagnostics.py` is retained for **older** `latest.log` files.
+This is an optional offline migration/research tool, not needed for battles
+recorded with MaestroAI 1.1.7 or newer.
 
-## Troubleshooting and verification
-
-A missing B folder means no supported capture was found; inspect the global issue index. Missing terminal markers, unknown actions, or ambiguous simultaneous battle correlation are explicit limitations; enable the existing envelope capture for subsequent normal acceptance sessions. If all observations are `UNKNOWN`, inspect the original log privately and verify exact source/runtime provenance; never override by guessing.
-
-Regression command:
-
-```bash
-python3 verification/test_battle_diagnostics.py
+```cmd
+python tools\battle_diagnostics.py "path\to\older\logs\latest.log"
 ```
 
-This runs synthetic and adversarial parser tests. GitHub Actions independently runs the tests alongside existing Java, native and pack-source verification. **Installed Minecraft testing is still required** to validate that the new optional receipt fires, correlates with a real capture, and yields useful output without disclosing private data. No new battle is needed during implementation.
+The Python tool writes separate derived reports to its selected output directory
+and keeps its own schema, provenance and filtering rules. Do not mix its output
+with the live Java writer's instance directory.
+
+## Verification
+
+`AutomaticBattleReportsRegression` runs under the registered standalone Java
+regression suite and exercises default/disabled/invalid configuration, real
+safe receipt formats, duplicate suppression, terminal and gap handling,
+privacy against malicious strings, restart recovery, monotonic B directories,
+exclusive writer lock, and normal shutdown interruption. GitHub Actions
+also runs the existing independent native and pack-source gates.
+
+**Installed Minecraft testing is still necessary** to confirm that Cobblemon
+delivers the expected live terminal event in this modpack, that the current
+instance path is correct, that all real choices reach the opt-out-independent
+hooks, and that performance and completeness are acceptable. Passing CI is
+not an assertion that Minecraft was launched or tested.

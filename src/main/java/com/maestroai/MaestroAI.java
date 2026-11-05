@@ -3,6 +3,8 @@ package com.maestroai;
 import com.gitlab.srcmc.rctapi.api.util.JTO;
 import com.maestroai.ai.MaestroBattleAI;
 import com.maestroai.training.ControlledBattleCaptureRegistry;
+import com.maestroai.training.AutomaticBattleReports;
+import com.maestroai.training.InstalledArtifactReceipt;
 import net.fabricmc.api.ModInitializer;
 
 public class MaestroAI implements ModInitializer {
@@ -25,12 +27,14 @@ public class MaestroAI implements ModInitializer {
                 data -> new MaestroBattleAI()
         );
 
-        ControlledBattleCaptureRegistry.install();
-
         String version = net.fabricmc.loader.api.FabricLoader.getInstance()
                 .getModContainer(MOD_ID)
                 .map(container -> container.getMetadata().getVersion().getFriendlyString())
                 .orElse("UNKNOWN");
+        AutomaticBattleReports.install(
+                net.fabricmc.loader.api.FabricLoader.getInstance().getGameDir(),
+                version, InstalledArtifactReceipt.installedSha256());
+        ControlledBattleCaptureRegistry.install();
         System.out.println("[MaestroAI] Loaded version " + version + ".");
         System.out.println("[MaestroAI] Registered AI type: maestro");
     }

@@ -405,6 +405,7 @@ public final class StandaloneRegression {
         Phase7BenchmarkRegression.run();
         Phase7LegacyImportRegression.run();
         LegacyChoiceCaptureRegression.run();
+        AutomaticBattleReportsRegression.run();
         Phase7CorpusRegression.run();
         Phase7TrustedIntakeRegression.run();
         Phase7RegressionGateRegression.run();

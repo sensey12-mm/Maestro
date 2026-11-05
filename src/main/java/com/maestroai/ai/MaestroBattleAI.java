@@ -656,8 +656,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                 var diagnosticHistory=shadowReplayCapture.observeWithProvenance(
                         battle.getBattleId(),battle.getShowdownMessages());
                 for(String line:diagnosticHistory.replay())System.out.println(line);
-                if(ControlledBattleCaptureRegistry.enabled()){
-                    ControlledBattleCaptureRegistry.observe(battle,shadowReplayCapture);
+                com.maestroai.training.AutomaticBattleReports.recordLines(
+                        developerCapture,
+                        java.util.stream.Stream.concat(diagnosticHistory.replay().stream(),
+                                diagnosticHistory.envelopes().stream()).toList());
+                ControlledBattleCaptureRegistry.observe(battle,shadowReplayCapture);
+                if(ControlledBattleCaptureRegistry.envelopeEnabled()){
                     for(String line:diagnosticHistory.envelopes())System.out.println(line);
                 }
                 DeveloperBattleDecisionCapture.record(
@@ -855,6 +859,9 @@ public class MaestroBattleAI extends RCTBattleAI {
             // This opt-in output is *minimized*: only own move ID/party ordinal,
             // fixed provenance markers and hashes. Raw history remains private.
             System.out.println(observed.receipt().safeLine());
+            com.maestroai.training.AutomaticBattleReports.recordLegacy(
+                    shadowReplayCapture.forBattle(battle.getBattleId()),
+                    observed.receipt().safeLine());
         }
     }
 
@@ -5689,8 +5696,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                     shadowReplayCapture.observeWithProvenance(battle.getBattleId(), history);
             for (String replayLine : capture.replay())
                 System.out.println(replayLine);
-            if (ControlledBattleCaptureRegistry.enabled()) {
-                ControlledBattleCaptureRegistry.observe(battle, shadowReplayCapture);
+            com.maestroai.training.AutomaticBattleReports.recordLines(
+                    shadowReplayCapture.captureNumber(),
+                    java.util.stream.Stream.concat(capture.replay().stream(),
+                            capture.envelopes().stream()).toList());
+            ControlledBattleCaptureRegistry.observe(battle, shadowReplayCapture);
+            if (ControlledBattleCaptureRegistry.envelopeEnabled()) {
                 // No raw split payload, request body, UUID, nickname or winner.
                 for (String metadata : capture.envelopes())
                     System.out.println(metadata);

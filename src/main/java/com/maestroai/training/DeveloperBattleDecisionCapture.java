@@ -83,8 +83,9 @@ public final class DeveloperBattleDecisionCapture {
                               String authority, String selected, String proposal,
                               String reason, String fallbackStage,
                               String fallbackReason, Collection<String> legal) {
-        if (!enabled()) return;
-        System.out.println(safeLine(capture, turn, forced, authority, selected,
-                proposal, reason, fallbackStage, fallbackReason, legal));
+        String line = safeLine(capture, turn, forced, authority, selected,
+                proposal, reason, fallbackStage, fallbackReason, legal);
+        AutomaticBattleReports.recordDecision(capture, line);
+        if (enabled()) System.out.println(line);
     }
 }

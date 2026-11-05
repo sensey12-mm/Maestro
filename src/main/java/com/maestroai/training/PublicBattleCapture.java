@@ -24,6 +24,8 @@ public final class PublicBattleCapture {
 
     public void begin(UUID battleId) {
         if (battleId == null) throw new IllegalArgumentException("battle ID required");
+        if (battle != null && !battle.equals(battleId) && captureNumber > 0 && !closed)
+            AutomaticBattleReports.interrupt(captureNumber, "REPLACED");
         battle = battleId;
         previous = List.of();
         sequence = 0;

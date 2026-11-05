@@ -288,6 +288,7 @@
     "verification/oracle_matrix.py",
     "verification/pinned_public_archive.py",
     "verification/test_battle_diagnostics.py",
+    "verification/java/com/maestroai/training/AutomaticBattleReportsRegression.java",
     "verification/verification_registry.json"
   ],
   "node_profiles": {
@@ -445,6 +446,7 @@
     "Phase7BenchmarkRegression.run();",
     "Phase7LegacyImportRegression.run();",
     "LegacyChoiceCaptureRegression.run();",
+    "AutomaticBattleReportsRegression.run();",
     "Phase7CorpusRegression.run();",
     "Phase7TrustedIntakeRegression.run();",
     "Phase7RegressionGateRegression.run();",

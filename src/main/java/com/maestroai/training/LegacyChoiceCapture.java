@@ -81,7 +81,8 @@ public final class LegacyChoiceCapture {
      * property and the actual installed-file receipt (not a claimed version).
      */
     public static LegacyChoiceCapture installed() {
-        if(!Boolean.getBoolean(PROPERTY)) return new LegacyChoiceCapture(false, "UNKNOWN");
+        if(!Boolean.getBoolean(PROPERTY) && !AutomaticBattleReports.enabled())
+            return new LegacyChoiceCapture(false, "UNKNOWN");
         return new LegacyChoiceCapture(true, InstalledArtifactReceipt.installedSha256());
     }
 
