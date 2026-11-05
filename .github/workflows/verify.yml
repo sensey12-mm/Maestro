@@ -35,7 +35,8 @@ jobs:
           python3 verification/check_registration.py
           for oracle in verification/*.cjs; do node --check "$oracle"; done
       - name: Verify developer battle diagnostics synthetic and adversarial fixtures
-        run: python3 verification/test_battle_diagnostics.py
+        run: |
+          python3 verification/test_battle_diagnostics.py
       - name: Build and run standalone regressions
         run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression phase7Benchmark --stacktrace
       - name: Check JAR and checker regressions
@@ -107,7 +108,8 @@ jobs:
           python3 verification/check_registration.py
           for oracle in verification/*.cjs; do node --check "$oracle"; done
       - name: Verify developer battle diagnostics independently in pack job
-        run: python3 verification/test_battle_diagnostics.py
+        run: |
+          python3 verification/test_battle_diagnostics.py
       - name: Prepare pinned Cobblemon dependency and Graal verification classes
         run: bash gradlew --no-daemon -I verification/verification.init.gradle remapJar verificationClasses --stacktrace
       - name: Provision GraalVM 21 only for embedded JavaScript verification
