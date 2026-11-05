@@ -585,6 +585,15 @@ public final class AutomaticBattleReportsRegression {
                     && read(samplePublish.resolve("issues.jsonl"))
                         .contains("NATIVE_SWITCH_UNAVAILABLE"),
                     "full Java-generated CI sample includes events, decisions, sources and issues");
+            System.out.println("=== MAESTROAI_SYNTHETIC_SUMMARY_BEGIN ===");
+            System.out.print(sampleSummary);
+            System.out.println("=== MAESTROAI_SYNTHETIC_SUMMARY_END ===");
+            System.out.println("=== MAESTROAI_SYNTHETIC_BATTLE_BEGIN ===");
+            System.out.print(sampleJson);
+            System.out.println("=== MAESTROAI_SYNTHETIC_BATTLE_END ===");
+            System.out.println("=== MAESTROAI_SYNTHETIC_ISSUES_BEGIN ===");
+            System.out.print(read(samplePublish.resolve("issues.jsonl")));
+            System.out.println("=== MAESTROAI_SYNTHETIC_ISSUES_END ===");
             System.out.println("AutomaticBattleReportsRegression PASS checks="+checks);
         } finally {
             // All paths are owned by this synthetic temp directory.
