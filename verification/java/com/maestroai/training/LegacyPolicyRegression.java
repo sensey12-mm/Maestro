@@ -100,6 +100,11 @@ public final class LegacyPolicyRegression {
         public UUID lastSwitchDestination;public int lastSwitchTurn=-100,visits,actionCount;public boolean scored;
         public PublicBattleObserver publicProtocolObserver=new PublicBattleObserver();
         public Active getOpponent(Active a){return foe;}
+        // The production chooser now emits observational-only typed report
+        // metadata. This synthetic controller deliberately has no installed
+        // reporter; preserve the compiled policy's action behavior unchanged.
+        public void automaticProducer(Battle b,AutomaticBattleReports.Producer p,
+                AutomaticBattleReports.State state,int count){}
         public void resetMemoryForNewBattle(Battle b){}public void syncObservedTeraState(Battle b){}
         public void syncPublicMoveHistory(Battle b){}public void syncPublicProtocolObservation(Battle b){}
         public void incrementActionCount(BattleMon b){}public static String normalizePublicSpecies(String s){return s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");}
