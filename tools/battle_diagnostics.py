@@ -43,7 +43,7 @@ shadowsneak rocktomb tackle transform protect substitute toxic thunderbolt
 thunderwave surf earthquake quickattack psychic willowisp encore splash
 hydropump darkpulse knockoff stealthrock spikes toxicspikes defog rapidspin
 roost suckerpunch pursuit voltswitch taunt rest sleeptalk dragonclaw
-shadowball trickroom calmmind leechseed seedbomb
+shadowball trickroom calmmind leechseed seedbomb swift psychocut
 """.split())
 SPECIES = frozenset("""
 zoroark zoroarkhisui ditto mew pikachu blissey shedinja shuckle genesect
@@ -197,6 +197,7 @@ class Session:
         self.shadow = 0
         self.legacy = 0
         self.issues = []
+        self.notable = []
         self.artifact = UNKNOWN
         self.observed = {}
         self.capture = UNKNOWN
@@ -256,6 +257,12 @@ class Session:
                 text.append(f"- Additional {len(self.issues) - 40} issues in global issues.jsonl")
         else:
             text.append("- No classified issues observed; this does not prove absence of bugs")
+        text.extend(["", "## Significant decisions", ""])
+        if self.notable:
+            for turn, authority, action, category, stage in self.notable:
+                text.append(f"- Turn {turn}: {authority} selected {action}; category={category}; fallback={stage}")
+        else:
+            text.append("- Selected actions and reasoning UNKNOWN in this capture")
         (target / "summary.md").write_text("\n".join(text) + "\n", encoding="utf-8")
 
 
@@ -365,6 +372,7 @@ class Processor:
                 session.issue("UNKNOWN_EVENT_FIELD", number, "Unreviewed or unsupported public field")
             if projection["event"] in {"replace", "-transform", "-terastallize", "-formechange"}:
                 session.write("identity", number, evidence="PUBLIC_APPEARANCE_ONLY",
+                              true_identity=UNKNOWN,
                               uncertainty="UNCERTAIN", event=projection["event"])
             session.write("public_event", number, event_sequence=seq, **projection)
             session.events += 1
@@ -414,6 +422,8 @@ class Processor:
                     session.issue("SEQUENCE_CONFLICT", number, "Contradictory decision receipt")
                 return
             session.decision_keys[receipt_key] = receipt_body
+            if len(session.notable) < 16:
+                session.notable.append((turn, authority, action, reason, stage))
             session.write("decision", number, authority=authority,
                           selected_action=action, proposal=proposal,
                           forced=forced, rationale=reason,
@@ -439,6 +449,10 @@ class Processor:
                     session = open_sessions[0]
                     session.capture = capture
                     self.by_capture[capture] = session
+            if session is None and len([s for s in self.sessions if not s.terminal
+                                        and s.capture == UNKNOWN]) > 1:
+                self.global_issue("AMBIGUOUS_CORRELATION", number, "Terminal capture cannot be bound")
+                return
             if session is None:
                 session = self.capture_session(capture, number)
             if session is not None:
@@ -458,6 +472,10 @@ class Processor:
                     session = candidates[0]
                     session.capture = capture
                     self.by_capture[capture] = session
+                elif len(candidates) > 1:
+                    self.global_issue("AMBIGUOUS_CORRELATION", number,
+                                      "Envelope matches multiple public captures")
+                    return
             if session is None:
                 session = self.capture_session(capture, number)
             if session:
