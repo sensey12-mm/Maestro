@@ -16,3 +16,8 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Developer Battle Diagnostics: local and private derived evidence.
+/battle-reports/
+/battle-logs/private/
+*.log
