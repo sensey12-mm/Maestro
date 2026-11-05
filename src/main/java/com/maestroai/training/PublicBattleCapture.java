@@ -32,6 +32,13 @@ public final class PublicBattleCapture {
         closed = false;
     }
 
+    /** Stable opaque correlation for opt-in developer receipts; never a UUID. */
+    public synchronized long forBattle(UUID battleId) {
+        if (battleId == null) return -1;
+        if (!battleId.equals(battle)) begin(battleId);
+        return captureNumber;
+    }
+
     public long captureNumber() { return captureNumber; }
     public long recordedEvents() { return sequence; }
     public boolean incomplete() { return incomplete; }
@@ -41,7 +48,7 @@ public final class PublicBattleCapture {
         incomplete = true;
         // Fixed classifier only: never echo untrusted source data or private payload.
         return new Observation(List.of(
-                "[MaestroAI] SHADOW_REPLAY_GAP battle=" + battle + " after=" + sequence),
+                "[MaestroAI] SHADOW_REPLAY_GAP battle=REDACTED capture=" + captureNumber + " after=" + sequence),
                 List.of("[MaestroAI] SHADOW_ENVELOPE_FAILURE capture=" + captureNumber
                         + " reason=" + reason + " status=UNKNOWN"));
     }
@@ -70,7 +77,7 @@ public final class PublicBattleCapture {
         List<String> envelopes = new ArrayList<>();
         for (int i = shared; i < filtered.size(); i++) {
             long seq = ++sequence;
-            replay.add("[MaestroAI] SHADOW_REPLAY battle=" + battle
+            replay.add("[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=" + captureNumber
                     + " seq=" + seq + " event=" + filtered.get(i));
             PublicEnvelopeProvenance.Origin origin = source.origins().get(i);
             envelopes.add("[MaestroAI] SHADOW_ENVELOPE capture=" + captureNumber
