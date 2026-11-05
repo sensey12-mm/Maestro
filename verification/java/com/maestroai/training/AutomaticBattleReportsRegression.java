@@ -191,6 +191,9 @@ public final class AutomaticBattleReportsRegression {
                     DeveloperBattleDecisionCapture.record(number,3,false,"LEGACY",
                             "move:ironhead","UNKNOWN","UNKNOWN","NO_INDEPENDENT_PROPOSAL",
                             "UNKNOWN",null);
+                    DeveloperBattleDecisionCapture.record(number,-1,true,"LEGACY",
+                            "switch:slot3","UNKNOWN","UNKNOWN","NO_OWN_LEASE",
+                            "NO_OWN_LEASE",null);
                     String legacy = "[MaestroAI] LEGACY_CHOICE_RECEIPT "
                             + "schema=phase7.3.v1 capture=REDACTED "
                             + "origin=LEGACY_CHOOSE_RETURN turn=3 action=move:ironhead "
@@ -210,8 +213,8 @@ public final class AutomaticBattleReportsRegression {
                     Path b=live.resolve("battle-reports/B01");
                     String content=read(b.resolve("battle.jsonl"));
                     String overview=read(b.resolve("summary.md"));
-                    check(content.split("\"kind\":\"decision\"",-1).length == 4,
-                            "three actual unique selections, never duplicate despite flags");
+                    check(content.split("\"kind\":\"decision\"",-1).length == 5,
+                            "four actual unique selections, never duplicate despite flags");
                     check(content.split("\"kind\":\"public_event\"",-1).length == 4
                             && content.split("\"kind\":\"provenance\"",-1).length == 4
                             && content.split("\"kind\":\"legacy_receipt\"",-1).length == 2,
@@ -221,13 +224,15 @@ public final class AutomaticBattleReportsRegression {
                             && content.contains("\"fallback_stage\":\"NO_NATIVE_FORCED_PROPOSAL\""),
                             "forced replacement and exact fallback authority retained");
                     check(content.contains("\"fallback_stage\":\"NO_INDEPENDENT_PROPOSAL\"")
+                            && content.contains("\"selected_action\":\"switch:slot3\"")
+                            && content.contains("\"turn\":null,\"turn_evidence\":\"UNKNOWN\"")
                             && content.contains("\"legal_evidence\":\"OWN_NATIVE_CERTIFIED\"")
                             && content.contains("\"legal_evidence\":\"UNKNOWN\""),
                             "ordinary fallback and independently proven versus missing legal evidence distinguished");
                     check(content.contains("\"kind\":\"terminal\"")
                             && content.contains("\"kind\":\"metadata\"")
                             && overview.contains("COMPLETED_UNVERIFIED")
-                            && overview.contains("Decisions: 3"),
+                            && overview.contains("Decisions: 4"),
                             "actual terminal handler closes automatic report without asserting completeness");
                     check(!content.contains("SECRET_OWN_NICK")
                             && !content.contains("SECRET_FOE_NICK")

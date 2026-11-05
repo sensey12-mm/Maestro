@@ -103,6 +103,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
         int decisions;
         int issues;
         int turn;
+        boolean turnKnown;
         boolean gap;
         boolean capped;
         boolean issueCapped;
@@ -280,8 +281,10 @@ public final class AutomaticBattleReports implements AutoCloseable {
                             "-item","-enditem","-ability","-endability")
                             .contains(fields[0]))
                         issue(battle,"UNKNOWN_PUBLIC_FIELD","WARNING");
-                    if (fields[0].equals("turn") && !fields[2].equals("UNKNOWN"))
+                    if (fields[0].equals("turn") && !fields[2].equals("UNKNOWN")) {
                         battle.turn = Integer.parseInt(fields[2]);
+                        battle.turnKnown = true;
+                    }
                     battle.publicEvents++;
                     record(battle,"public_event",
                             ",\"sequence\":"+seq+",\"event\":"+json(fields[0])
@@ -344,12 +347,18 @@ public final class AutomaticBattleReports implements AutoCloseable {
                 summary(b);
                 return;
             }
-            int turn = integer(data.get("turn"),10000);
-            if (turn < 0) { issue(b,"INVALID_DECISION","ERROR"); summary(b); return; }
+            boolean turnKnown = !"UNKNOWN".equals(data.get("turn"));
+            int turn = turnKnown ? integer(data.get("turn"),10000) : -1;
+            if (turnKnown && turn < 0) {
+                issue(b,"INVALID_DECISION","ERROR"); summary(b); return;
+            }
             // Accept only a single copy of this sanitized return-path receipt.
             // Distinct choices in the same turn remain independent.
             if (!b.decisionReceipts.add(line)) return;
-            b.turn = Math.max(b.turn,turn);
+            if (turnKnown) {
+                b.turn = Math.max(b.turn,turn);
+                b.turnKnown = true;
+            }
             String action = DeveloperBattleDecisionCapture.safeAction(data.get("action"));
             String proposal = DeveloperBattleDecisionCapture.safeAction(data.get("proposal"));
             String reason = DeveloperBattleDecisionCapture.safeReason(data.get("reason"));
@@ -357,7 +366,10 @@ public final class AutomaticBattleReports implements AutoCloseable {
             String fallback = DeveloperBattleDecisionCapture.safeReason(data.get("fallback_reason"));
             String legal = safeLegalFromReceipt(data.get("legal"));
             b.decisions++;
-            record(b,"decision",",\"turn\":"+turn+",\"authority\":"+json(data.get("authority"))
+            record(b,"decision",",\"turn\":"
+                    +(turnKnown ? Integer.toString(turn) : "null")
+                    +",\"turn_evidence\":"+json(turnKnown ? "OWN_LEASE" : "UNKNOWN")
+                    +",\"authority\":"+json(data.get("authority"))
                     +",\"selected_action\":"+json(action)+",\"proposal\":"+json(proposal)
                     +",\"forced\":"+data.get("forced")+",\"rationale\":"+json(reason)
                     +",\"fallback_stage\":"+json(stage)+",\"fallback_reason\":"+json(fallback)
@@ -373,7 +385,9 @@ public final class AutomaticBattleReports implements AutoCloseable {
                         ",\"authority\":\"LEGACY\",\"selected_action\":"+json(action)
                         +",\"reason\":"+json(fallback));
             if (data.get("authority").equals("LEGACY") && !fallback.equals("UNKNOWN")) {
-                record(b,"fallback",",\"turn\":"+turn+",\"reason\":"+json(fallback)
+                record(b,"fallback",",\"turn\":"
+                        +(turnKnown ? Integer.toString(turn) : "null")
+                        +",\"reason\":"+json(fallback)
                         +",\"stage\":"+json(stage));
             }
             if (action.equals("UNKNOWN")) issue(b,"UNKNOWN_SELECTED_ACTION","WARNING");
@@ -574,7 +588,8 @@ public final class AutomaticBattleReports implements AutoCloseable {
                 + "- Public events: " + b.publicEvents + "\n"
                 + "- Decisions: " + b.decisions + "\n"
                 + "- Issues: " + b.issues + "\n"
-                + "- Last observed turn: " + b.turn + "\n"
+                + "- Last observed turn: "
+                + (b.turnKnown ? Integer.toString(b.turn) : "UNKNOWN") + "\n"
                 + "- Version: " + version + "\n"
                 + "- Spectator delivery: UNVERIFIED\n"
                 + "- Original log custody: LOCAL_UNREVIEWED\n"

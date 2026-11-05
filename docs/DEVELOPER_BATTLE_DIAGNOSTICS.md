@@ -71,7 +71,10 @@ transmission. Reporting never feeds a tactical decision.
   Each decision retains the already-selected action, authority, forced-choice
   status, proposal and safe rationale/fallback codes. The `legal_evidence`
   field distinguishes `OWN_NATIVE_CERTIFIED` from `UNKNOWN`; it never
-  fabricates a legal-move witness.
+  fabricates a legal-move witness. When the own-lease turn is unavailable, a
+  returned fallback action is retained with `turn=null` and
+  `turn_evidence=UNKNOWN` instead of inventing a native turn or discarding
+  the entire choice.
 - `issues.jsonl`: append-only, global fixed-code issue index.
 
 The report writer receives **only allowlisted, minimized output from the existing

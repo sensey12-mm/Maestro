@@ -66,13 +66,15 @@ public final class DeveloperBattleDecisionCapture {
                                   String authority, String selected, String proposal,
                                   String reason, String fallbackStage,
                                   String fallbackReason, Collection<String> legal) {
-        if (capture <= 0 || turn < 0 || turn > 10000
+        // -1 means the owning-native turn lease was unavailable. Preserve
+        // the actually returned action with an explicitly unknown turn.
+        if (capture <= 0 || turn < -1 || turn > 10000
                 || !(authority.equals("SHADOW") || authority.equals("LEGACY")))
             return "[MaestroAI] DEV_DIAG_REJECTED code=INVALID_SOURCE";
         String available = safeLegal(legal);
         return "[MaestroAI] DEV_DIAG_DECISION "
                 + "capture=" + capture
-                + ";turn=" + turn
+                + ";turn=" + (turn == -1 ? "UNKNOWN" : Integer.toString(turn))
                 + ";forced=" + forced
                 + ";authority=" + authority
                 + ";action=" + safeAction(selected)
