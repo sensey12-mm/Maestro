@@ -33,18 +33,22 @@ public final class PublicEnvelopeProvenance {
     private static final Set<String> NATIVE_ADDITIONAL = Set.of(
             "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
             "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
-            "cant", "-block", "-crit", "-supereffective", "-resisted",
-            "-immune", "-miss", "-fail", "-hitcount", "-swap", "-primal",
-            "-burst", "-endillusion");
+            "cant", "-block");
+    // REPORTER ONLY: the existing native tactical filter is deliberately
+    // unchanged, even for no-effect public annotations.
+    private static final Set<String> REPORT_ADDITIONAL = Set.of(
+            "-crit","-supereffective","-resisted","-immune","-miss",
+            "-fail","-hitcount","-swap","-primal","-burst","-endillusion");
 
 
     private PublicEnvelopeProvenance() {}
 
-    private static boolean allowed(String line,boolean nativeOnly) {
+    private static boolean allowed(String line,boolean nativeOnly,boolean reportOnly) {
         if (!line.startsWith("|")) return false;
         int end = line.indexOf('|', 1);
         String kind = end < 0 ? line.substring(1) : line.substring(1, end);
-        return ALLOWED.contains(kind) || nativeOnly && NATIVE_ADDITIONAL.contains(kind);
+        return ALLOWED.contains(kind) || nativeOnly && NATIVE_ADDITIONAL.contains(kind)
+                || reportOnly && REPORT_ADDITIONAL.contains(kind);
     }
 
     /**
@@ -60,8 +64,17 @@ public final class PublicEnvelopeProvenance {
     static Audit reconcileNative(List<String> rawHistory,List<String> filtered) {
         return reconcileWithPolicy(rawHistory,filtered,true);
     }
+    /** Separate expanded native public grammar; never touch tactic consumers. */
+    static Audit reconcileForReports(List<String> rawHistory,List<String> filtered) {
+        return reconcileWithPolicy(rawHistory,filtered,true,true);
+    }
+
     private static Audit reconcileWithPolicy(List<String> rawHistory,
             List<String> filtered,boolean nativeOnly) {
+        return reconcileWithPolicy(rawHistory,filtered,nativeOnly,false);
+    }
+    private static Audit reconcileWithPolicy(List<String> rawHistory,
+            List<String> filtered,boolean nativeOnly,boolean reportOnly) {
         if (rawHistory == null || filtered == null)
             return new Audit(false, "MISSING_HISTORY", List.of());
         List<String> observed = new ArrayList<>();
@@ -94,7 +107,7 @@ public final class PublicEnvelopeProvenance {
                         return new Audit(false, "MALFORMED_SPLIT_PAYLOAD", List.of());
                     pending--;
                     if (pending == 0) {
-                        if (allowed(line,nativeOnly)) {
+                        if (allowed(line,nativeOnly,reportOnly)) {
                             observed.add(line);
                             sources.add(new Origin(Route.SPLIT_PUBLIC, target));
                         }
@@ -103,7 +116,7 @@ public final class PublicEnvelopeProvenance {
                     // The first split payload (private) is discarded entirely.
                     continue;
                 }
-                if (allowed(line,nativeOnly)) {
+                if (allowed(line,nativeOnly,reportOnly)) {
                     observed.add(line);
                     sources.add(new Origin(framed ? Route.DIRECT_UPDATE
                                                   : Route.UNFRAMED_UNKNOWN, "NONE"));

@@ -64,12 +64,17 @@ public final class ControlledBattleCaptureRegistry {
     /** Shared Cobblemon-terminal processing; also used by synthetic Java tests. */
     static void finishObserved(UUID battleId, PublicBattleCapture capture, List<String> history) {
         if (battleId == null || capture == null || history == null) return;
+        // Native-only report projection must NOT mutate or replace the older
+        // public observer used by tactical/Legacy diagnostics.
+        if (AutomaticBattleReports.enabled()) {
+            List<String> report = capture.onVictoryForReports(battleId,history);
+            if (!report.isEmpty()) {
+                AutomaticBattleReports.recordLines(capture.captureNumber(),
+                        report.subList(0,report.size()-1));
+                AutomaticBattleReports.recordTerminal(capture.captureNumber(),report);
+            }
+        }
         List<String> lines = capture.onVictory(battleId, history);
         for (String line : lines) System.out.println(line);
-        if (!lines.isEmpty()) {
-            AutomaticBattleReports.recordLines(capture.captureNumber(),
-                    lines.subList(0, lines.size() - 1));
-            AutomaticBattleReports.recordTerminal(capture.captureNumber(), lines);
-        }
     }
 }

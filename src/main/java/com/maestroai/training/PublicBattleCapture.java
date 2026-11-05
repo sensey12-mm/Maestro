@@ -22,6 +22,14 @@ public final class PublicBattleCapture {
     private boolean incomplete;
     private boolean closed;
 
+    // The automatic reporter has an independent, native-only public history.
+    // Existing tactical/legacy observeWithProvenance keeps the frozen older
+    // projection and custody behavior, so diagnostics cannot affect choices.
+    private List<String> reportPrevious = List.of();
+    private long reportSequence;
+    private boolean reportIncomplete;
+    private boolean reportClosed;
+
     public void begin(UUID battleId) {
         if (battleId == null) throw new IllegalArgumentException("battle ID required");
         if (battle != null && !battle.equals(battleId) && captureNumber > 0 && !closed)
@@ -32,6 +40,10 @@ public final class PublicBattleCapture {
         captureNumber = NEXT_CAPTURE.incrementAndGet();
         incomplete = false;
         closed = false;
+        reportPrevious = List.of();
+        reportSequence = 0;
+        reportIncomplete = false;
+        reportClosed = false;
     }
 
     /** Stable opaque correlation for opt-in developer receipts; never a UUID. */
@@ -196,12 +208,11 @@ public final class PublicBattleCapture {
         if (!battleId.equals(battle)) begin(battleId);
         if (closed || incomplete) return new Observation(List.of(), List.of());
 
-        // This object is the installed native REPORT projector, not the
-        // frozen Phase 5 offline replay parser. Keep native-only public events
-        // (weather, terrain, miss, crit, etc.) with independent custody.
-        List<String> filtered = PublicProtocolFilter.nativePublicEvents(rawHistory);
+        // Original spectator-compatible projection remains unchanged for
+        // tactical observers and long-standing regression contracts.
+        List<String> filtered = PublicProtocolFilter.publicEvents(rawHistory);
         PublicEnvelopeProvenance.Audit source =
-                PublicEnvelopeProvenance.reconcileNative(rawHistory, filtered);
+                PublicEnvelopeProvenance.reconcile(rawHistory, filtered);
         if (!source.complete()) return rejected(source.reason());
 
         int shared = 0;
@@ -225,6 +236,70 @@ public final class PublicBattleCapture {
         }
         previous = List.copyOf(filtered);
         return new Observation(replay, envelopes);
+    }
+
+    /**
+     * Reporter-only native public projection; deliberately separate from the
+     * historic read-only tactical public observer above. Uses the same opaque
+     * capture ID but disjoint incremental replay sequence/custody.
+     */
+    public Observation observeForReportsWithProvenance(UUID battleId,
+                                                        List<String> rawHistory) {
+        if(battleId==null || rawHistory==null)return new Observation(List.of(),List.of());
+        if(!battleId.equals(battle))begin(battleId);
+        if(reportClosed || reportIncomplete)return new Observation(List.of(),List.of());
+
+        List<String> filtered=PublicProtocolFilter.reportPublicEvents(rawHistory);
+        var source=PublicEnvelopeProvenance.reconcileForReports(rawHistory,filtered);
+        if(!source.complete())return reportRejected(source.reason());
+
+        int shared=0;
+        while(shared<reportPrevious.size() && shared<filtered.size()
+                && reportPrevious.get(shared).equals(filtered.get(shared)))shared++;
+        if(shared<reportPrevious.size())return reportRejected("NON_APPEND_ONLY_HISTORY");
+        List<String> replay=new ArrayList<>(), envelopes=new ArrayList<>();
+        for(int i=shared;i<filtered.size();i++){
+            long seq=++reportSequence;
+            replay.add("[MaestroAI] SHADOW_REPLAY battle=REDACTED capture="
+                    +captureNumber+" seq="+seq+" event="+projectedEvent(filtered.get(i)));
+            PublicEnvelopeProvenance.Origin origin=source.origins().get(i);
+            envelopes.add("[MaestroAI] SHADOW_ENVELOPE capture="+captureNumber
+                    +" seq="+seq+" route="+origin.route()
+                    +" split_target="+origin.splitTarget()
+                    +" spectator=EXPECTED_NOT_OBSERVED"
+                    +" branch_attested="+(origin.route()
+                        !=PublicEnvelopeProvenance.Route.UNFRAMED_UNKNOWN));
+        }
+        reportPrevious=List.copyOf(filtered);
+        return new Observation(replay,envelopes);
+    }
+
+    private Observation reportRejected(String reason){
+        if(reportIncomplete)return new Observation(List.of(),List.of());
+        reportIncomplete=true;
+        return new Observation(List.of("[MaestroAI] SHADOW_REPLAY_GAP battle=REDACTED"
+                +" capture="+captureNumber+" after="+reportSequence),
+                List.of("[MaestroAI] SHADOW_ENVELOPE_FAILURE capture="+captureNumber
+                        +" reason="+reason+" status=UNKNOWN"));
+    }
+
+    /**
+     * A separate real Cobblemon terminal for the native report-only stream;
+     * unlike onVictory below, it never changes the tactical observer.
+     */
+    public List<String> onVictoryForReports(UUID battleId,List<String> history) {
+        if(battleId==null || !battleId.equals(battle) || reportClosed)return List.of();
+        Observation flushed=observeForReportsWithProvenance(battleId,history);
+        List<String> output=new ArrayList<>();
+        output.addAll(flushed.replay());
+        output.addAll(flushed.envelopes());
+        reportClosed=true;
+        output.add("[MaestroAI] SHADOW_TERMINAL capture="+captureNumber
+                +" after="+reportSequence
+                +" event=COBBLEMON_BATTLE_VICTORY winner=REDACTED"
+                +" beginning=UNKNOWN delivery=UNVERIFIED coverage="
+                +(reportIncomplete?"INCOMPLETE":"START_UNKNOWN"));
+        return List.copyOf(output);
     }
 
     /**

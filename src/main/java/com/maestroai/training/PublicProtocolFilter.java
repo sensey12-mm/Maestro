@@ -26,9 +26,12 @@ public final class PublicProtocolFilter {
     private static final Set<String> NATIVE_ADDITIONAL = Set.of(
             "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
             "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
-            "cant", "-block", "-crit", "-supereffective", "-resisted",
-            "-immune", "-miss", "-fail", "-hitcount", "-swap", "-primal",
-            "-burst", "-endillusion");
+            "cant", "-block");
+    // REPORTER ONLY: the existing native tactical filter is deliberately
+    // unchanged, even for no-effect public annotations.
+    private static final Set<String> REPORT_ADDITIONAL = Set.of(
+            "-crit","-supereffective","-resisted","-immune","-miss",
+            "-fail","-hitcount","-swap","-primal","-burst","-endillusion");
 
 
     private PublicProtocolFilter() {}
@@ -43,7 +46,16 @@ public final class PublicProtocolFilter {
         return collect(rawMessages,true);
     }
 
+    /** Complete safe native event selection, used ONLY by the local reporter. */
+    static List<String> reportPublicEvents(List<String> rawMessages) {
+        return collect(rawMessages,true,true);
+    }
+
     private static List<String> collect(List<String> rawMessages,boolean nativeOnly) {
+        return collect(rawMessages,nativeOnly,false);
+    }
+    private static List<String> collect(List<String> rawMessages,
+                                       boolean nativeOnly,boolean reportOnly) {
         if (rawMessages == null) return List.of();
         List<String> result = new ArrayList<>();
         int splitRemaining = 0;
@@ -60,19 +72,20 @@ public final class PublicProtocolFilter {
                 if (splitRemaining > 0) {
                     splitRemaining--;
                     if (splitRemaining == 1) continue; // private side
-                    if (allowed(line,nativeOnly)) result.add(line);
+                    if (allowed(line,nativeOnly,reportOnly)) result.add(line);
                     continue;
                 }
-                if (allowed(line,nativeOnly)) result.add(line);
+                if (allowed(line,nativeOnly,reportOnly)) result.add(line);
             }
         }
         return List.copyOf(result);
     }
 
-    private static boolean allowed(String line,boolean nativeOnly) {
+    private static boolean allowed(String line,boolean nativeOnly,boolean reportOnly) {
         if (line == null || !line.startsWith("|")) return false;
         int end = line.indexOf('|', 1);
         String kind = end < 0 ? line.substring(1) : line.substring(1, end);
-        return ALLOWED.contains(kind) || nativeOnly && NATIVE_ADDITIONAL.contains(kind);
+        return ALLOWED.contains(kind) || nativeOnly && NATIVE_ADDITIONAL.contains(kind)
+                || reportOnly && REPORT_ADDITIONAL.contains(kind);
     }
 }

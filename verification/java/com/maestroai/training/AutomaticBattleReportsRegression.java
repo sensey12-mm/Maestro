@@ -399,11 +399,13 @@ public final class AutomaticBattleReportsRegression {
                         + "|-crit|p2a: PRIVATE_NICK\n"
                         + "|-miss|p2a: PRIVATE_NICK|p1a: PRIVATE_NICK\n"
                         + "|turn|3");
-                var observed=publicCapture.observeWithProvenance(battleId,history);
+                var observed=publicCapture.observeForReportsWithProvenance(battleId,history);
                 check(observed.replay().size()==8 && observed.envelopes().size()==8,
                         "native filter retains weather, stat changes, status, damage, crit, miss and turn");
-                check(PublicProtocolFilter.publicEvents(history).size()==5,
-                        "native additions do not change frozen offline filter");
+                check(PublicProtocolFilter.publicEvents(history).size()==5
+                        && PublicProtocolFilter.nativePublicEvents(history).size()==6
+                        && PublicProtocolFilter.reportPublicEvents(history).size()==8,
+                        "report expansion changes neither frozen offline nor native tactical filters");
                 nativeWriter.testLines(id,java.util.stream.Stream.concat(
                         observed.replay().stream(),observed.envelopes().stream()).toList());
                 String json=read(nativeRoot.resolve("battle-reports/B01/battle.jsonl"));
@@ -489,9 +491,11 @@ public final class AutomaticBattleReportsRegression {
                     && liveSource.contains("automaticProducer(battle,")
                     && liveSource.contains("recordLegacyEstimate("),
                     "source-based diagnostic producer registrations cannot go missing silently");
-            check(liveProjection.contains("PublicProtocolFilter.nativePublicEvents(rawHistory)")
-                    && liveProjection.contains("PublicEnvelopeProvenance.reconcileNative(rawHistory, filtered)"),
-                    "native public source path must retain full allowed event families");
+            check(liveProjection.contains("PublicProtocolFilter.reportPublicEvents(rawHistory)")
+                    && liveProjection.contains("PublicEnvelopeProvenance.reconcileForReports(rawHistory,filtered)")
+                    && liveProjection.contains("PublicProtocolFilter.publicEvents(rawHistory)")
+                    && liveProjection.contains("PublicEnvelopeProvenance.reconcile(rawHistory, filtered)"),
+                    "expanded reporter-only projection cannot alter original tactical observer");
             for(var producer:AutomaticBattleReports.Producer.values())
                 check(liveSource.contains("Producer."+producer.name()),
                         "production source must wire the actual "+producer+" producer");

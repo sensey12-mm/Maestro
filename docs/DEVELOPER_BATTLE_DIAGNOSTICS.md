@@ -157,7 +157,7 @@ is never silently promoted to a spectator-delivery confirmation.
 
 | Existing source producer | Local destination | Meaning / limitation |
 | --- | --- | --- |
-| `PublicBattleCapture`, native `PublicProtocolFilter`, `PublicEnvelopeProvenance` | `public_event` + `provenance`, `identity`, `summary.md` timeline | Turn, move, switch, drag, form, ability, item, status, boosts, hazard, weather, terrain, activation, attack outcome, gimmick and terminal-recognized public kinds; direct or split-public origin, not private half or delivery ACK |
+| Reporter-only `PublicBattleCapture.observeForReportsWithProvenance`, `PublicProtocolFilter.reportPublicEvents`, `PublicEnvelopeProvenance.reconcileForReports` | `public_event` + `provenance`, `identity`, `summary.md` timeline | Turn, move, switch, drag, form, ability, item, status, boosts, hazard, weather, terrain, activation, attack outcome, gimmick and terminal-recognized public kinds; direct or split-public origin, not private half or delivery ACK |
 | `ShadowLiveDecisionEngine.Choice` (own-only/public conditional) | `decision.candidate_evaluations`, `candidate_count`, `shadow_reason` | Actual already-computed ranked heuristic scores/choice reasons from existing policy; **not** predicted damage, probability, or an authorized alternative |
 | `ShadowPromotionPreparation.Report` | `decision.preparation_verdict`, `producer:SHADOW_PREPARATION` | Rejected/accepted conditional preparation verdict, distinct from final authority |
 | `ShadowNativeLegalWindow.Proof`, `OwnRequestTransport.Lease` | `decision.native_legality_witness`, `own_request_witness`, `legal_choices`, `observed_root_alternatives`, `producer:NATIVE_LEGAL_ROOT` | Native source/lease freshness and independently witnessed own roots; private switch UUID becomes an own ordinal; an unsupported forced native window is not invented |
@@ -239,3 +239,15 @@ names, UUIDs, raw precise HP, hidden opponent moves/identity, raw full
 in separate local Minecraft logs or the original native runtime, not in
 public Git history or the structured safe archive. Historical Python
 conversion is optional and is never required to capture new battles.
+
+### Isolation safeguard
+
+The original `PublicBattleCapture.observeWithProvenance`, native tactical
+`PublicProtocolFilter.nativePublicEvents` and
+`PublicEnvelopeProvenance.reconcileNative` are **unchanged as tactical
+inputs**. The expanded public kinds (including miss/critical-hit and similar
+announcements) are handled by a second report-only capture cursor with its
+own incremental sequence. The same opaque battle capture ID correlates the
+writer records, but no report-owned projection or score is read by an action
+chooser. Regression coverage explicitly checks that the old native and offline
+filters remain frozen while the reporter preserves additional public events.
