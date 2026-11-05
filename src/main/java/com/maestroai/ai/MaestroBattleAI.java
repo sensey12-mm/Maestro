@@ -649,8 +649,19 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 break;
                             }
                 }
+                long developerCapture=shadowReplayCapture.forBattle(battle.getBattleId());
+                // Shadow-led choices do not execute Legacy's public-history
+                // sync. Observe from the identical original native history,
+                // independently and only AFTER the action is already chosen.
+                var diagnosticHistory=shadowReplayCapture.observeWithProvenance(
+                        battle.getBattleId(),battle.getShowdownMessages());
+                for(String line:diagnosticHistory.replay())System.out.println(line);
+                if(ControlledBattleCaptureRegistry.enabled()){
+                    ControlledBattleCaptureRegistry.observe(battle,shadowReplayCapture);
+                    for(String line:diagnosticHistory.envelopes())System.out.println(line);
+                }
                 DeveloperBattleDecisionCapture.record(
-                        shadowReplayCapture.forBattle(battle.getBattleId()),
+                        developerCapture,
                         choiceTurn,forceSwitch,selected.authority().name(),
                         selectedForDeveloper,
                         proposal==null?"UNKNOWN":proposal.action(),
