@@ -39,6 +39,15 @@ jobs:
           python3 verification/test_battle_diagnostics.py
       - name: Build and run standalone regressions
         run: bash gradlew --no-daemon -I verification/verification.init.gradle clean build standaloneRegression phase7Benchmark --stacktrace
+      # Complete, redacted reports produced by the real Java regression
+      # writer. A diagnostic sample is not a verified gameplay capture.
+      - name: Upload synthetic Java-generated complete battle report sample
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: maestroai-diagnostics-sample-${{ github.sha }}
+          path: build/diagnostics-sample/
+          if-no-files-found: error
+          retention-days: 7
       - name: Check JAR and checker regressions
         run: |
           python3 verification/check_jar.py --self-test

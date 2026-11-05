@@ -514,6 +514,77 @@ public final class AutomaticBattleReportsRegression {
                         .contains("Decisions: 0"),
                         "no-receipt diagnostic is explicit without fabricating a decision");
             }
+            // Real Java-generated, sanitized, COMPLETE fixture files for the
+            // GitHub verification artifact. Never derived from player logs.
+            Path sampleRoot=tmp.resolve("ci-synthetic-sample");
+            var sampleWriter=AutomaticBattleReports.attachSyntheticForTest(sampleRoot,"1.1.9");
+            try {
+                AutomaticBattleReports.recordLines(900,List.of(
+                        "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=900 "
+                                +"seq=1 event=|switch|p1a|mew",
+                        "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=900 "
+                                +"seq=2 event=|turn|3",
+                        "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=900 "
+                                +"seq=3 event=|-weather|UNKNOWN|raindance",
+                        "[MaestroAI] SHADOW_ENVELOPE capture=900 seq=1 "
+                                +"route=DIRECT_UPDATE split_target=NONE "
+                                +"spectator=EXPECTED_NOT_OBSERVED branch_attested=true",
+                        "[MaestroAI] SHADOW_ENVELOPE capture=900 seq=2 "
+                                +"route=DIRECT_UPDATE split_target=NONE "
+                                +"spectator=EXPECTED_NOT_OBSERVED branch_attested=true",
+                        "[MaestroAI] SHADOW_ENVELOPE capture=900 seq=3 "
+                                +"route=DIRECT_UPDATE split_target=NONE "
+                                +"spectator=EXPECTED_NOT_OBSERVED branch_attested=true"));
+                AutomaticBattleReports.recordDecision(900,
+                        DeveloperBattleDecisionCapture.safeLine(900,3,false,
+                            "SHADOW",chosen.action(),chosen.action(),
+                            chosen.reason().name(),"UNKNOWN","UNKNOWN",
+                            List.of("move:tackle","move:quickattack")),details);
+                AutomaticBattleReports.recordProducer(900,
+                        AutomaticBattleReports.Producer.SHADOW_PREFERENCE,
+                        AutomaticBattleReports.State.EVALUATED,3,chosen.scoredCandidates());
+                AutomaticBattleReports.recordProducer(900,
+                        AutomaticBattleReports.Producer.NATIVE_LEGAL_ROOT,
+                        AutomaticBattleReports.State.NATIVE_WITNESSED,3,2);
+                AutomaticBattleReports.recordFailure(900,
+                        AutomaticBattleReports.Failure.NATIVE_SWITCH_UNAVAILABLE);
+                AutomaticBattleReports.recordTerminal(900,List.of(
+                        "[MaestroAI] SHADOW_TERMINAL capture=900 after=3 "
+                        +"event=COBBLEMON_BATTLE_VICTORY winner=REDACTED "
+                        +"beginning=UNKNOWN delivery=UNVERIFIED coverage=START_UNKNOWN"));
+            } finally {
+                AutomaticBattleReports.detachSyntheticForTest(sampleWriter);
+            }
+            Path sampleSource=sampleRoot.resolve("battle-reports");
+            Path samplePublish=Path.of("build","diagnostics-sample");
+            Files.createDirectories(samplePublish.resolve("B01"));
+            for(String name:List.of("summary.md","battle.jsonl"))
+                Files.copy(sampleSource.resolve("B01").resolve(name),
+                        samplePublish.resolve("B01").resolve(name),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(sampleSource.resolve("issues.jsonl"),
+                    samplePublish.resolve("issues.jsonl"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.writeString(samplePublish.resolve("README.md"),
+                    "# Synthetic MaestroAI Java regression fixture\n\n"
+                    +"This data was generated automatically by "
+                    +"AutomaticBattleReportsRegression using only synthetic "
+                    +"public protocol and action receipts. It is not a "
+                    +"Minecraft battle and is NOT evidence of spectator "
+                    +"delivery or an actually selected in-game move.\n",
+                    StandardCharsets.UTF_8);
+            String sampleJson=read(samplePublish.resolve("B01/battle.jsonl"));
+            String sampleSummary=read(samplePublish.resolve("B01/summary.md"));
+            check(sampleJson.contains("\"candidate_evaluations\":[")
+                    && sampleJson.contains("\"event\":\"-weather\"")
+                    && sampleJson.contains("\"kind\":\"terminal\"")
+                    && sampleJson.contains("\"kind\":\"issue\"")
+                    && sampleSummary.contains("COMPLETED_UNVERIFIED")
+                    && sampleSummary.contains("## Maestro choices")
+                    && sampleSummary.contains("NATIVE_SWITCH_UNAVAILABLE")
+                    && read(samplePublish.resolve("issues.jsonl"))
+                        .contains("NATIVE_SWITCH_UNAVAILABLE"),
+                    "full Java-generated CI sample includes events, decisions, sources and issues");
             System.out.println("AutomaticBattleReportsRegression PASS checks="+checks);
         } finally {
             // All paths are owned by this synthetic temp directory.
