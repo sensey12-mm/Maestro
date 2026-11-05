@@ -619,10 +619,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                 System.out.println("[MaestroAI] Shadow ordinary fallback stage="
                         +ordinaryStage+";authority=LEGACY");
             }
-            // Opt-in diagnostics: observe only the completed, already-selected
-            // response and current owning-native legal witness. Never re-enter
-            // Shadow, Legacy, prediction, or the action materializer.
-            if(DeveloperBattleDecisionCapture.enabled() && battle!=null
+            // Automatic reports and optional console diagnostics share ONE
+            // observation of the already-selected response. Console flags must
+            // never gate the local reporter; no chooser or tactic is re-entered.
+            if(DeveloperBattleDecisionCapture.captureEnabled() && battle!=null
                     && battle.getBattleId()!=null)try{
                 java.util.List<String> legalForDeveloper=null;
                 if(!forceSwitch && phaseShadowLegalWindow!=null
