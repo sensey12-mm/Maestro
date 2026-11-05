@@ -83,6 +83,21 @@ public final class AutomaticBattleReportsRegression {
                 check(json.split("\"kind\":\"public_event\"", -1).length == 3,
                         "duplicate replay retained once and novel unknown event recorded once");
             }
+            // Simulate crash in the narrow window after terminal fsync but
+            // before the active marker could be deleted.
+            Path completeFolder=root.resolve("battle-reports/B01");
+            Files.writeString(completeFolder.resolve("active.marker"),"ACTIVE\\n",
+                    StandardCharsets.UTF_8);
+            try (var completedRecovery=AutomaticBattleReports.synthetic(root,"1.1.7")) {
+                check(read(completeFolder.resolve("summary.md"))
+                        .contains("COMPLETED_CALLBACK_RECOVERED"),
+                        "durable victory terminal survives interrupted marker cleanup");
+                check(!Files.exists(completeFolder.resolve("active.marker")),
+                        "recovery clears marker after persisted terminal");
+                check(!read(root.resolve("battle-reports/issues.jsonl"))
+                        .contains("UNCLEAN_RESTART"),
+                        "recovered terminal is not falsely classified as crash loss");
+            }
             // Crash: unfinished marker remains and next launch labels it conservatively.
             Path crashRoot=tmp.resolve("case2");
             var first=AutomaticBattleReports.synthetic(crashRoot,"1.1.7");

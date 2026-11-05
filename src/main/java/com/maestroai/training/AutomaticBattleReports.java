@@ -431,18 +431,44 @@ public final class AutomaticBattleReports implements AutoCloseable {
             Path summary = folder.resolve("summary.md");
             if (Files.isSymbolicLink(summary) || Files.isSymbolicLink(folder.resolve("active.marker")))
                 continue;
-            // Do not interpret untrusted text from a crashed/truncated report.
+            // The last process could have persisted the real terminal but
+            // crashed before removing its active.marker. Preserve that stronger
+            // evidence instead of falsely relabeling the battle as interrupted.
+            boolean completedCallback = persistedTerminal(folder.resolve("battle.jsonl"));
             atomicSummary(summary, "# MaestroAI battle " + id + "\n\n"
-                    + "- Status: INTERRUPTED_RESTART\n"
-                    + "- Completeness: INCOMPLETE (prior session stopped before terminal)\n"
+                    + "- Status: " + (completedCallback
+                        ? "COMPLETED_CALLBACK_RECOVERED" : "INTERRUPTED_RESTART") + "\n"
+                    + "- Completeness: " + (completedCallback
+                        ? "UNKNOWN (callback persisted; delivery unverified)"
+                        : "INCOMPLETE (no attested terminal)") + "\n"
                     + "- Spectator delivery: UNVERIFIED\n"
                     + "- Original log custody: LOCAL_UNREVIEWED\n"
                     + "- Events and decisions: inspect surviving battle.jsonl\n");
-            append(root.resolve("issues.jsonl"), "{\"schema\":"+json(SCHEMA)
-                    +",\"battle\":"+json(id)+",\"code\":\"UNCLEAN_RESTART\""
-                    +",\"severity\":\"WARNING\"}\n");
+            if (!completedCallback)
+                append(root.resolve("issues.jsonl"), "{\"schema\":"+json(SCHEMA)
+                        +",\"battle\":"+json(id)+",\"code\":\"UNCLEAN_RESTART\""
+                        +",\"severity\":\"WARNING\"}\n");
             Files.deleteIfExists(folder.resolve("active.marker"));
         }
+    }
+
+    /** Read only the writer's own bounded, already-minimized terminal records. */
+    private static boolean persistedTerminal(Path jsonl) throws IOException {
+        if (!Files.isRegularFile(jsonl, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(jsonl) || Files.size(jsonl) > 5_000_000)
+            return false;
+        try (var input = Files.newBufferedReader(jsonl, StandardCharsets.UTF_8)) {
+            String line;
+            int count = 0;
+            while ((line = input.readLine()) != null && ++count <= MAX_EVENTS + 100) {
+                if (line.length() > 1500 || !line.endsWith("}")) continue;
+                if (line.startsWith("{\"schema\":\"maestroai.auto-battle-report.v1\"")
+                        && line.contains("\"kind\":\"terminal\"")
+                        && line.contains("\"event\":\"COBBLEMON_BATTLE_VICTORY\""))
+                    return true;
+            }
+        }
+        return false;
     }
 
     private void issue(Battle b, String code, String severity) throws IOException {

@@ -85,7 +85,9 @@ Each active battle has a durable `active.marker`. On a clean shutdown,
 unfinished battles become `INTERRUPTED_SHUTDOWN`. If Minecraft crashes,
 on the next launch unfinished folders are marked `INTERRUPTED_RESTART`;
 existing `battle.jsonl` is preserved, and a `UNCLEAN_RESTART` issue is
-appended globally. Reports are written incrementally with durable append
+appended globally. If the Cobblemon terminal record was already durably written
+before the crash, recovery instead marks `COMPLETED_CALLBACK_RECOVERED` and
+does not invent an interruption. Reports are written incrementally with durable append
 and atomic summary replacement. Report storage I/O failures disable only
 the reporter, never action selection. A per-instance lock prevents concurrent
 writers from overwriting evidence.
