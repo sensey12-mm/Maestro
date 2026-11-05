@@ -286,8 +286,9 @@
     "verification/ARCHITECTURE.md",
     "verification/check_registration.py",
     "verification/oracle_matrix.py",
-    "verification/verification_registry.json",
-    "verification/pinned_public_archive.py"
+    "verification/pinned_public_archive.py",
+    "verification/test_battle_diagnostics.py",
+    "verification/verification_registry.json"
   ],
   "node_profiles": {
     "native": [
