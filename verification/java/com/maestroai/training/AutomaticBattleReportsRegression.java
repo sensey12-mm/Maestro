@@ -144,6 +144,181 @@ public final class AutomaticBattleReportsRegression {
                 check(!read(privacyRoot.resolve("battle-reports/B01/battle.jsonl"))
                         .contains("PRIVATE_SECRET"),"selected action gate prevents private data");
             }
+            // Acceptance regression: use the real public projector, the real
+            // developer receipt entry point and the real terminal handler with
+            // every optional console flag explicitly OFF.
+            String[] flags = {"maestroai.developerDiagnostics",
+                    "maestroai.envelopeCapture","maestroai.legacyChoiceCapture"};
+            java.util.Map<String,String> previous = new java.util.HashMap<>();
+            for (String flag : flags) {
+                previous.put(flag,System.getProperty(flag));
+                System.setProperty(flag,"false");
+            }
+            try {
+                String source = read(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+                check(source.contains("if(DeveloperBattleDecisionCapture.captureEnabled() && battle!=null"),
+                        "real chooser hook must be reachable with reporter enabled and console OFF");
+                check(!DeveloperBattleDecisionCapture.enabled()
+                        && !DeveloperBattleDecisionCapture.captureEnabled(),
+                        "console OFF without reporter does not generate receipts");
+                Path live = tmp.resolve("no-flags");
+                var auto = AutomaticBattleReports.attachSyntheticForTest(live,"1.1.8");
+                try {
+                    check(DeveloperBattleDecisionCapture.captureEnabled()
+                            && !DeveloperBattleDecisionCapture.enabled()
+                            && ControlledBattleCaptureRegistry.enabled()
+                            && !ControlledBattleCaptureRegistry.envelopeEnabled(),
+                            "writer enables decisions and terminal callback with three console flags false");
+                    var id = java.util.UUID.fromString("20000000-0000-0000-0000-000000000099");
+                    var capture = new PublicBattleCapture();
+                    long number = capture.forBattle(id);
+                    List<String> history = List.of("update\n"
+                            + "|switch|p1a: SECRET_OWN_NICK|Mew, L100|100/100\n"
+                            + "|switch|p2a: SECRET_FOE_NICK|Zoroark, L100|100/100\n"
+                            + "|turn|1");
+                    var projection = capture.observeWithProvenance(id,history);
+                    List<String> safe = java.util.stream.Stream.concat(
+                            projection.replay().stream(),projection.envelopes().stream()).toList();
+                    check(safe.size() == 6 && number > 0,
+                            "public source produces attested replay and metadata");
+                    AutomaticBattleReports.recordLines(number,safe);
+                    DeveloperBattleDecisionCapture.record(number,1,false,"SHADOW",
+                            "move:icebeam","move:uturn","MOVE","UNKNOWN","UNKNOWN",
+                            List.of("move:icebeam","move:uturn"));
+                    DeveloperBattleDecisionCapture.record(number,2,true,"LEGACY",
+                            "switch:slot2","UNKNOWN","UNKNOWN","NO_NATIVE_FORCED_PROPOSAL",
+                            "NO_OWN_LEASE",null);
+                    DeveloperBattleDecisionCapture.record(number,3,false,"LEGACY",
+                            "move:ironhead","UNKNOWN","UNKNOWN","NO_INDEPENDENT_PROPOSAL",
+                            "UNKNOWN",null);
+                    String legacy = "[MaestroAI] LEGACY_CHOICE_RECEIPT "
+                            + "schema=phase7.3.v1 capture=REDACTED "
+                            + "origin=LEGACY_CHOOSE_RETURN turn=3 action=move:ironhead "
+                            + "artifact_sha256=UNKNOWN spectator_delivery=UNVERIFIED "
+                            + "custody=REVIEW_REQUIRED";
+                    AutomaticBattleReports.recordLegacy(number,legacy);
+                    // Console flags may change stdout, never record identity.
+                    // The same source receipt and replay must not be doubled.
+                    for(String flag:flags) System.setProperty(flag,"true");
+                    DeveloperBattleDecisionCapture.record(number,1,false,"SHADOW",
+                            "move:icebeam","move:uturn","MOVE","UNKNOWN","UNKNOWN",
+                            List.of("move:icebeam","move:uturn"));
+                    AutomaticBattleReports.recordLines(number,safe);
+                    AutomaticBattleReports.recordLegacy(number,legacy);
+                    ControlledBattleCaptureRegistry.finishObserved(id,capture,history);
+                    ControlledBattleCaptureRegistry.finishObserved(id,capture,history);
+                    Path b=live.resolve("battle-reports/B01");
+                    String content=read(b.resolve("battle.jsonl"));
+                    String overview=read(b.resolve("summary.md"));
+                    check(content.split("\"kind\":\"decision\"",-1).length == 4,
+                            "three actual unique selections, never duplicate despite flags");
+                    check(content.split("\"kind\":\"public_event\"",-1).length == 4
+                            && content.split("\"kind\":\"provenance\"",-1).length == 4
+                            && content.split("\"kind\":\"legacy_receipt\"",-1).length == 2,
+                            "events, envelopes and optional Legacy receipts recorded once");
+                    check(content.contains("\"selected_action\":\"switch:slot2\"")
+                            && content.contains("\"forced\":true")
+                            && content.contains("\"fallback_stage\":\"NO_NATIVE_FORCED_PROPOSAL\""),
+                            "forced replacement and exact fallback authority retained");
+                    check(content.contains("\"fallback_stage\":\"NO_INDEPENDENT_PROPOSAL\"")
+                            && content.contains("\"legal_evidence\":\"OWN_NATIVE_CERTIFIED\"")
+                            && content.contains("\"legal_evidence\":\"UNKNOWN\""),
+                            "ordinary fallback and independently proven versus missing legal evidence distinguished");
+                    check(content.contains("\"kind\":\"terminal\"")
+                            && content.contains("\"kind\":\"metadata\"")
+                            && overview.contains("COMPLETED_UNVERIFIED")
+                            && overview.contains("Decisions: 3"),
+                            "actual terminal handler closes automatic report without asserting completeness");
+                    check(!content.contains("SECRET_OWN_NICK")
+                            && !content.contains("SECRET_FOE_NICK")
+                            && !content.contains("100/100")
+                            && !content.contains(id.toString()),
+                            "real source projection never exports player-visible private identifiers");
+                    check(!Files.exists(live.resolve("battle-reports/B02")),
+                            "terminal and console retries do not create phantom battles");
+                } finally {
+                    AutomaticBattleReports.detachSyntheticForTest(auto);
+                }
+                // Deliberately malformed and mismatched evidence is an issue,
+                // not forged selected action or a public statement.
+                Path bad = tmp.resolve("malformed");
+                try(var malformed=AutomaticBattleReports.synthetic(bad,"1.1.8")) {
+                    malformed.testDecision(22,
+                            "[MaestroAI] DEV_DIAG_REJECTED code=INVALID_SOURCE");
+                    malformed.testLines(22,List.of(
+                            "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=22 seq=1 "
+                            + "event=|move|p2a|SECRET_LEAK"));
+                    String issues=read(bad.resolve("battle-reports/issues.jsonl"));
+                    check(issues.contains("INVALID_DECISION_RECEIPT")
+                            && issues.contains("UNKNOWN_PUBLIC_FIELD"),
+                            "malformed decisions and unreviewed public fields are explicitly classified");
+                    check(read(bad.resolve("battle-reports/B01/battle.jsonl"))
+                            .contains("\"detail\":\"UNKNOWN\"")
+                            && !read(bad.resolve("battle-reports/B01/battle.jsonl"))
+                                    .contains("SECRET_LEAK"),
+                            "unrecognized public move is UNKNOWN, never exported raw");
+                }
+                Path missingEnvelope=tmp.resolve("unverified");
+                try(var incomplete=AutomaticBattleReports.synthetic(missingEnvelope,"1.1.8")) {
+                    incomplete.testLines(7,List.of(
+                            "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=7 "
+                            + "seq=1 event=|turn|1"));
+                    incomplete.testTerminal(7,List.of(
+                            TERMINAL4.replace("capture=4","capture=7")));
+                    check(read(missingEnvelope.resolve("battle-reports/issues.jsonl"))
+                                .contains("ENVELOPE_SEQUENCE_MISMATCH")
+                            && read(missingEnvelope.resolve("battle-reports/B01/summary.md"))
+                                .contains("COMPLETED_WITH_GAPS"),
+                            "missing public envelope evidence cannot be fabricated at terminal");
+                }
+                // Event and issue retention bounds must emit explicit reasons.
+                Path caps=tmp.resolve("limits");
+                try(var limited=AutomaticBattleReports.synthetic(caps,"1.1.8")) {
+                    for(int i=0;i<300;i++)
+                        limited.testLines(30,List.of(
+                                "[MaestroAI] SHADOW_ENVELOPE_FAILURE capture=30 "
+                                + "reason=INCOMPLETE_SPLIT status=UNKNOWN"));
+                    String issues=read(caps.resolve("battle-reports/issues.jsonl"));
+                    check(issues.contains("ISSUE_LIMIT_REACHED")
+                            && issues.split("\n",-1).length <= 260,
+                            "malformed flood produces bounded issue index with explicit truncation");
+                    for(int start=1;start<=4200;start+=100){
+                        List<String> events=new java.util.ArrayList<>();
+                        for(int seq=start;seq<start+100;seq++)
+                            events.add("[MaestroAI] SHADOW_REPLAY battle=REDACTED "
+                                    + "capture=31 seq="+seq+" event=|turn|1");
+                        limited.testLines(31,events);
+                    }
+                    check(read(caps.resolve("battle-reports/issues.jsonl"))
+                            .contains("EVENT_LIMIT_REACHED")
+                            && read(caps.resolve("battle-reports/B02/summary.md"))
+                            .contains("Completeness: INCOMPLETE"),
+                            "bounded event overflow is detected, never silently claimed complete");
+                }
+                // Storage failures cannot escape the receipt's return path.
+                Path blocked=tmp.resolve("storage-failure");
+                var failing=AutomaticBattleReports.attachSyntheticForTest(blocked,"1.1.8");
+                try {
+                    DeveloperBattleDecisionCapture.record(41,1,false,"SHADOW",
+                            "move:icebeam","move:uturn","MOVE","UNKNOWN","UNKNOWN",null);
+                    Path eventFile=blocked.resolve("battle-reports/B01/battle.jsonl");
+                    Files.delete(eventFile);
+                    Files.createDirectory(eventFile);
+                    DeveloperBattleDecisionCapture.record(41,2,true,"LEGACY",
+                            "switch:slot2","UNKNOWN","UNKNOWN",
+                            "NO_NATIVE_FORCED_PROPOSAL","UNKNOWN",null);
+                    check(!AutomaticBattleReports.enabled(),
+                            "fatal report I/O disables writer without throwing into selected response");
+                } finally {
+                    AutomaticBattleReports.detachSyntheticForTest(failing);
+                }
+            } finally {
+                for(String flag:flags) {
+                    String value=previous.get(flag);
+                    if(value==null) System.clearProperty(flag);
+                    else System.setProperty(flag,value);
+                }
+            }
             System.out.println("AutomaticBattleReportsRegression PASS checks="+checks);
         } finally {
             // All paths are owned by this synthetic temp directory.

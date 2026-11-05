@@ -34,6 +34,11 @@ public final class DeveloperBattleDecisionCapture {
 
     public static boolean enabled() { return Boolean.getBoolean(PROPERTY); }
 
+    /** Console logging is optional; installed local reports are not. */
+    public static boolean captureEnabled() {
+        return enabled() || AutomaticBattleReports.enabled();
+    }
+
     public static String safeAction(String value) {
         if (value == null || !ACTION.matcher(value).matches()) return "UNKNOWN";
         if (value.startsWith("move:") && !MOVE_IDS.contains(value.substring(5)))

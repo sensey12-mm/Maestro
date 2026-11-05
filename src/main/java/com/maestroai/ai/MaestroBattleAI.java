@@ -858,7 +858,8 @@ public class MaestroBattleAI extends RCTBattleAI {
         if (observed.receipt() != null) {
             // This opt-in output is *minimized*: only own move ID/party ordinal,
             // fixed provenance markers and hashes. Raw history remains private.
-            System.out.println(observed.receipt().safeLine());
+            if (Boolean.getBoolean(LegacyChoiceCapture.PROPERTY))
+                System.out.println(observed.receipt().safeLine());
             com.maestroai.training.AutomaticBattleReports.recordLegacy(
                     shadowReplayCapture.forBattle(battle.getBattleId()),
                     observed.receipt().safeLine());

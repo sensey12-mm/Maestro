@@ -35,6 +35,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
     private static final String SCHEMA = "maestroai.auto-battle-report.v1";
     private static final int MAX_BATTLES = 999999;
     private static final int MAX_EVENTS = 4000;
+    private static final int MAX_ISSUES_PER_BATTLE = 256;
     private static final Pattern B_FOLDER = Pattern.compile("B([0-9]{2,6})");
     private static final Pattern REPLAY = Pattern.compile(
             "\\[MaestroAI\\] SHADOW_REPLAY battle=REDACTED capture=([0-9]+) seq=([0-9]+) event=(.*)");
@@ -82,6 +83,9 @@ public final class AutomaticBattleReports implements AutoCloseable {
     private final FileChannel lockChannel;
     private final FileLock lock;
     private final Map<Long, Battle> active = new HashMap<>();
+    // Avoid duplicate records if a callback or diagnostic receipt is delivered
+    // twice in the same game session (including with console flags toggled).
+    private final Set<Long> finishedCaptures = new HashSet<>();
     private int nextNumber = 1;
     private boolean broken;
     private boolean closed;
@@ -91,6 +95,8 @@ public final class AutomaticBattleReports implements AutoCloseable {
         final Path dir;
         final Set<Long> replaySequences = new HashSet<>();
         final Set<Long> provenanceSequences = new HashSet<>();
+        final Set<String> decisionReceipts = new HashSet<>();
+        final Set<String> legacyReceipts = new HashSet<>();
         long lastReplaySeq;
         int records;
         int publicEvents;
@@ -99,6 +105,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
         int turn;
         boolean gap;
         boolean capped;
+        boolean issueCapped;
         String status = "ACTIVE_INCOMPLETE";
         Battle(String id, Path dir) { this.id = id; this.dir = dir; }
     }
@@ -191,6 +198,22 @@ public final class AutomaticBattleReports implements AutoCloseable {
         return writer != null && !writer.closed && !writer.broken;
     }
 
+    // Production singleton with isolated temporary local reports for synthetic
+    // no-flag regression; never used during normal Minecraft startup.
+    static synchronized AutomaticBattleReports attachSyntheticForTest(Path gameDir,
+                                                                       String version)
+            throws IOException {
+        if (installed != null) throw new IllegalStateException("writer already installed");
+        AutomaticBattleReports writer = synthetic(gameDir, version);
+        installed = writer;
+        return writer;
+    }
+    static synchronized void detachSyntheticForTest(AutomaticBattleReports writer) {
+        if (installed != writer) throw new IllegalStateException("writer mismatch");
+        installed = null;
+        writer.close();
+    }
+
     /** Return-path wrappers: never throw into action selection. */
     public static void recordLines(long capture, List<String> lines) {
         AutomaticBattleReports writer = installed;
@@ -226,9 +249,11 @@ public final class AutomaticBattleReports implements AutoCloseable {
 
     private synchronized void acceptLines(long capture, List<String> lines) {
         guarded(() -> {
-            if (capture <= 0 || lines == null || lines.isEmpty()) return;
+            if (capture <= 0 || lines == null || lines.isEmpty()
+                    || finishedCaptures.contains(capture)) return;
             Battle battle = ensure(capture);
             for (String line : lines) {
+                if (battle.capped) break;
                 if (line == null || line.length() > 512) {
                     issue(battle, "INVALID_PROJECTION", "WARNING");
                     continue;
@@ -249,6 +274,12 @@ public final class AutomaticBattleReports implements AutoCloseable {
                     String[] fields = safeEvent(replay.group(3));
                     if (fields[0].equals("UNKNOWN"))
                         issue(battle,"UNKNOWN_PUBLIC_EVENT","WARNING");
+                    else if (fields[2].equals("UNKNOWN") && Set.of(
+                            "turn","move","switch","drag","replace","detailschange",
+                            "-formechange","-terastallize","-status","-curestatus",
+                            "-item","-enditem","-ability","-endability")
+                            .contains(fields[0]))
+                        issue(battle,"UNKNOWN_PUBLIC_FIELD","WARNING");
                     if (fields[0].equals("turn") && !fields[2].equals("UNKNOWN"))
                         battle.turn = Integer.parseInt(fields[2]);
                     battle.publicEvents++;
@@ -287,9 +318,16 @@ public final class AutomaticBattleReports implements AutoCloseable {
 
     private synchronized void acceptDecision(long capture, String line) {
         guarded(() -> {
-            if (capture <= 0 || line == null || !line.startsWith("[MaestroAI] DEV_DIAG_DECISION ")
-                    || line.length() > 768) return;
+            if (capture <= 0 || finishedCaptures.contains(capture)) return;
+            if (line == null || !line.startsWith("[MaestroAI] DEV_DIAG_DECISION ")
+                    || line.length() > 768) {
+                Battle invalid = ensure(capture);
+                issue(invalid, "INVALID_DECISION_RECEIPT", "WARNING");
+                summary(invalid);
+                return;
+            }
             Battle b = ensure(capture);
+            if (b.capped) return;
             Map<String,String> data = new HashMap<>();
             for (String piece : line.substring("[MaestroAI] DEV_DIAG_DECISION ".length()).split(";",-1)) {
                 String[] pair = piece.split("=",2);
@@ -308,6 +346,9 @@ public final class AutomaticBattleReports implements AutoCloseable {
             }
             int turn = integer(data.get("turn"),10000);
             if (turn < 0) { issue(b,"INVALID_DECISION","ERROR"); summary(b); return; }
+            // Accept only a single copy of this sanitized return-path receipt.
+            // Distinct choices in the same turn remain independent.
+            if (!b.decisionReceipts.add(line)) return;
             b.turn = Math.max(b.turn,turn);
             String action = DeveloperBattleDecisionCapture.safeAction(data.get("action"));
             String proposal = DeveloperBattleDecisionCapture.safeAction(data.get("proposal"));
@@ -320,7 +361,10 @@ public final class AutomaticBattleReports implements AutoCloseable {
                     +",\"selected_action\":"+json(action)+",\"proposal\":"+json(proposal)
                     +",\"forced\":"+data.get("forced")+",\"rationale\":"+json(reason)
                     +",\"fallback_stage\":"+json(stage)+",\"fallback_reason\":"+json(fallback)
-                    +",\"legal_choices\":"+json(legal)+",\"confidence\":\"UNKNOWN\"");
+                    +",\"legal_choices\":"+json(legal)
+                    +",\"legal_evidence\":"+json(legal.equals("UNKNOWN")
+                            ? "UNKNOWN" : "OWN_NATIVE_CERTIFIED")
+                    +",\"confidence\":\"UNKNOWN\"");
             if (data.get("authority").equals("SHADOW"))
                 record(b,"shadow_reason",",\"category\":"+json(reason)
                         +",\"confidence\":\"UNKNOWN\"");
@@ -339,12 +383,19 @@ public final class AutomaticBattleReports implements AutoCloseable {
 
     private synchronized void acceptLegacy(long capture, String line) {
         guarded(() -> {
-            if (capture <= 0 || line == null || !line.startsWith("[MaestroAI] LEGACY_CHOICE_RECEIPT ")
-                    || line.length() > 600) return;
+            if (capture <= 0 || finishedCaptures.contains(capture)) return;
+            if (line == null || !line.startsWith("[MaestroAI] LEGACY_CHOICE_RECEIPT ")
+                    || line.length() > 600) {
+                Battle invalid = ensure(capture);
+                issue(invalid, "INVALID_LEGACY_RECEIPT", "WARNING");
+                summary(invalid);
+                return;
+            }
             String action = "UNKNOWN";
             Matcher matcher = Pattern.compile("(?:^| )action=(move:[a-z0-9_-]{1,64}|switch:slot[1-6])(?: |$)").matcher(line);
             if (matcher.find()) action = DeveloperBattleDecisionCapture.safeAction(matcher.group(1));
             Battle b = ensure(capture);
+            if (b.capped || !b.legacyReceipts.add(line)) return;
             record(b,"legacy_receipt",",\"origin\":\"LEGACY_CHOOSE_RETURN\",\"action\":"
                     +json(action)+",\"custody\":\"REVIEW_REQUIRED\"");
             summary(b);
@@ -353,7 +404,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
 
     private synchronized void acceptTerminal(long capture, List<String> lines) {
         guarded(() -> {
-            if (capture <= 0 || lines == null) return;
+            if (capture <= 0 || lines == null || finishedCaptures.contains(capture)) return;
             // Victory is a real Cobblemon callback, but cannot certify
             // spectator delivery, replay beginning, or the winner identity.
             for (String line : lines) {
@@ -361,6 +412,10 @@ public final class AutomaticBattleReports implements AutoCloseable {
                 Matcher terminal = TERMINAL.matcher(line);
                 if (!terminal.matches() || !captureMatch(terminal.group(1), capture)) continue;
                 Battle b = ensure(capture);
+                if (!b.replaySequences.equals(b.provenanceSequences)) {
+                    b.gap = true;
+                    issue(b,"ENVELOPE_SEQUENCE_MISMATCH","ERROR");
+                }
                 record(b,"terminal",",\"event\":\"COBBLEMON_BATTLE_VICTORY\""
                         +",\"winner\":\"REDACTED\",\"spectator_delivery\":\"UNVERIFIED\""
                         +",\"coverage\":"+json(terminal.group(3)));
@@ -372,6 +427,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
                 summary(b);
                 Files.deleteIfExists(b.dir.resolve("active.marker"));
                 active.remove(capture);
+                finishedCaptures.add(capture);
                 return;
             }
             // Do not invent a terminal if the callback did not produce one.
@@ -472,6 +528,17 @@ public final class AutomaticBattleReports implements AutoCloseable {
     }
 
     private void issue(Battle b, String code, String severity) throws IOException {
+        if (b.issues >= MAX_ISSUES_PER_BATTLE) {
+            if (!b.issueCapped) {
+                b.issueCapped = true;
+                b.gap = true;
+                b.issues++;
+                append(root.resolve("issues.jsonl"),
+                        "{\"schema\":"+json(SCHEMA)+",\"battle\":"+json(b.id)
+                        +",\"code\":\"ISSUE_LIMIT_REACHED\",\"severity\":\"ERROR\"}\n");
+            }
+            return;
+        }
         b.issues++;
         String json = "{\"schema\":"+json(SCHEMA)+",\"battle\":"+json(b.id)
                 +",\"code\":"+json(code)+",\"severity\":"+json(severity)+"}\n";

@@ -1,4 +1,4 @@
-# Automatic Developer Battle Reports (MaestroAI 1.1.7)
+# Automatic Developer Battle Reports (MaestroAI 1.1.8)
 
 **Install the mod JAR and play. No Python or after-battle command is required.**
 
@@ -48,7 +48,10 @@ these reports. The optional console diagnostics
 `-Dmaestroai.envelopeCapture=true`,
 `-Dmaestroai.legacyChoiceCapture=true`) are separate. With reporting enabled,
 Java automatically gathers the safe portions of those receipt streams without
-requiring their old log opt-ins.
+requiring their old log opt-ins. In v1.1.8, the selected-action receipt runs
+whenever reporting is enabled, **even when all three optional JVM flags are
+explicitly false**. The flags control optional console diagnostics, not the
+reporter's decisions, replay projections, or terminal callbacks.
 
 This is **local-only**: there is no uploader, external service, GUI or telemetry
 transmission. Reporting never feeds a tactical decision.
@@ -57,16 +60,25 @@ transmission. Reporting never feeds a tactical decision.
 
 - `summary.md`: active, completed-but-unverified, completed-with-gaps, or
   interrupted status; event/decision/issue counts; last seen turn; version.
+  Event or legal-choice gaps are explicitly classified. A completed callback
+  does not establish complete spectator delivery.
 - `battle.jsonl`: typed JSONL records for `public_event`, `identity`,
   `provenance`, `decision`, `shadow_reason`, `legacy_runtime_authority`,
   `fallback`, `legacy_receipt`, `diagnostic_presence`, `issue`,
   `terminal` and `metadata`.
   They have a per-battle B identifier, monotonic order, installed-artifact SHA
   when available, and explicit `UNKNOWN` source offsets/hashes for live reports.
+  Each decision retains the already-selected action, authority, forced-choice
+  status, proposal and safe rationale/fallback codes. The `legal_evidence`
+  field distinguishes `OWN_NATIVE_CERTIFIED` from `UNKNOWN`; it never
+  fabricates a legal-move witness.
 - `issues.jsonl`: append-only, global fixed-code issue index.
 
 The report writer receives **only allowlisted, minimized output from the existing
-public capture and decision receipts**. It rejects free-form or unrecognized
+public capture and decision receipts**. When a public move or identity field
+is outside the reviewed vocabulary it stays `UNKNOWN`, with an
+`UNKNOWN_PUBLIC_FIELD` issue, not a guess. Missing replay-envelope pairs are
+reported as `ENVELOPE_SEQUENCE_MISMATCH` and marked incomplete. It rejects free-form or unrecognized
 values. It does not write players' names, Pokémon nicknames, full UUIDs,
 raw Cobblemon requests, split-private payloads, HP figures, arbitrary log
 strings or filesystem paths. Known public species/move/effect projections
@@ -87,15 +99,20 @@ existing `battle.jsonl` is preserved, and a `UNCLEAN_RESTART` issue is
 appended globally. If the Cobblemon terminal record was already durably written
 before the crash, recovery instead marks `COMPLETED_CALLBACK_RECOVERED` and
 does not invent an interruption. Reports are written incrementally with durable append
-and atomic summary replacement. Report storage I/O failures disable only
-the reporter, never action selection. A per-instance lock prevents concurrent
+and atomic summary replacement. A battle retains at most 4,000 ordinary
+JSONL records and 256 ordinary issue records, with explicit
+`EVENT_LIMIT_REACHED` and `ISSUE_LIMIT_REACHED` signals on overflow;
+a terminal callback still records when the event bound has been reached.
+Duplicate safe decision receipts, replay events, and terminal callbacks are
+not written twice. Historical reports are never overwritten. Report storage
+I/O failures disable only the reporter, never action selection. A per-instance lock prevents concurrent
 writers from overwriting evidence.
 
 ## Optional historical log conversion
 
 `tools/battle_diagnostics.py` is retained for **older** `latest.log` files.
 This is an optional offline migration/research tool, not needed for battles
-recorded with MaestroAI 1.1.7 or newer.
+recorded with MaestroAI 1.1.8 or newer.
 
 ```cmd
 python tools\battle_diagnostics.py "path\to\older\logs\latest.log"
@@ -103,15 +120,20 @@ python tools\battle_diagnostics.py "path\to\older\logs\latest.log"
 
 The Python tool writes separate derived reports to its selected output directory
 and keeps its own schema, provenance and filtering rules. Do not mix its output
-with the live Java writer's instance directory.
+with the live Java writer's instance directory. Older v1.1.7 reports with
+zero captured decisions cannot retroactively recover decision details that the
+runtime did not record. They remain valid partial public-event evidence.
 
 ## Verification
 
 `AutomaticBattleReportsRegression` runs under the registered standalone Java
-regression suite and exercises default/disabled/invalid configuration, real
-safe receipt formats, duplicate suppression, terminal and gap handling,
-privacy against malicious strings, restart recovery, monotonic B directories,
-exclusive writer lock, and normal shutdown interruption. GitHub Actions
+regression suite and exercises default/disabled/invalid configuration, the
+all-three-flags-OFF path through the real minimized projection and decision
+record methods, duplicate suppression when flags are enabled, forced switches,
+ordinary and forced fallbacks, missing evidence, terminal and gap handling,
+privacy against malicious strings, bounded events and issues, restart recovery,
+monotonic B directories, exclusive writer lock, safe writer failure isolation,
+and normal shutdown interruption. GitHub Actions
 also runs the existing independent native and pack-source gates.
 
 **Installed Minecraft testing is still necessary** to confirm that Cobblemon

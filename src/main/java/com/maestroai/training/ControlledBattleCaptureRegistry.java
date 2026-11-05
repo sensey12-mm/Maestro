@@ -11,8 +11,8 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * Opt-in metadata-only diagnostics for controlled singleplayer acceptance.
- * Run Minecraft with -Dmaestroai.envelopeCapture=true to activate.
+ * Metadata-only terminal observer for MaestroAI battles. Automatic local
+ * reports activate this callback without the optional envelope console flag.
  * Only battles actually observed by MaestroAI are tracked (bounded registry).
  */
 public final class ControlledBattleCaptureRegistry {
@@ -58,8 +58,13 @@ public final class ControlledBattleCaptureRegistry {
         PublicBattleCapture capture;
         synchronized (TRACKED) { capture = TRACKED.remove(battle.getBattleId()); }
         if (capture == null) return;
-        // This is a real upstream terminal callback, not an inferred final faint.
-        List<String> lines = capture.onVictory(battle.getBattleId(), battle.getShowdownMessages());
+        finishObserved(battle.getBattleId(), capture, battle.getShowdownMessages());
+    }
+
+    /** Shared Cobblemon-terminal processing; also used by synthetic Java tests. */
+    static void finishObserved(UUID battleId, PublicBattleCapture capture, List<String> history) {
+        if (battleId == null || capture == null || history == null) return;
+        List<String> lines = capture.onVictory(battleId, history);
         for (String line : lines) System.out.println(line);
         if (!lines.isEmpty()) {
             AutomaticBattleReports.recordLines(capture.captureNumber(),
