@@ -58,8 +58,10 @@ transmission. Reporting never feeds a tactical decision.
 
 - `summary.md`: active, completed-but-unverified, completed-with-gaps, or
   interrupted status; event/decision/issue counts; last seen turn; version.
-- `battle.jsonl`: typed JSONL records for `public_event`, `provenance`,
-  `decision`, `fallback`, `legacy_receipt`, `issue` and `terminal`.
+- `battle.jsonl`: typed JSONL records for `public_event`, `identity`,
+  `provenance`, `decision`, `shadow_reason`, `legacy_runtime_authority`,
+  `fallback`, `legacy_receipt`, `diagnostic_presence`, `issue`,
+  `terminal` and `metadata`.
   They have a per-battle B identifier, monotonic order, installed-artifact SHA
   when available, and explicit `UNKNOWN` source offsets/hashes for live reports.
 - `issues.jsonl`: append-only, global fixed-code issue index.

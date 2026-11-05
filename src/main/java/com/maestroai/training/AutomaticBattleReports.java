@@ -256,6 +256,11 @@ public final class AutomaticBattleReports implements AutoCloseable {
                             ",\"sequence\":"+seq+",\"event\":"+json(fields[0])
                             +",\"actor\":"+json(fields[1])+",\"detail\":"+json(fields[2])
                             +",\"target\":"+json(fields[3]));
+                    if (Set.of("replace","-transform","-terastallize","-formechange")
+                            .contains(fields[0]))
+                        record(battle,"identity",",\"evidence\":\"PUBLIC_APPEARANCE_ONLY\""
+                                +",\"true_identity\":\"UNKNOWN\",\"uncertainty\":\"UNCERTAIN\""
+                                +",\"event\":"+json(fields[0]));
                 } else if (envelope.matches() && captureMatch(envelope.group(1),capture)) {
                     long seq = sequence(envelope.group(2));
                     if (seq <= 0 || !battle.provenanceSequences.add(seq)) continue;
@@ -316,6 +321,13 @@ public final class AutomaticBattleReports implements AutoCloseable {
                     +",\"forced\":"+data.get("forced")+",\"rationale\":"+json(reason)
                     +",\"fallback_stage\":"+json(stage)+",\"fallback_reason\":"+json(fallback)
                     +",\"legal_choices\":"+json(legal)+",\"confidence\":\"UNKNOWN\"");
+            if (data.get("authority").equals("SHADOW"))
+                record(b,"shadow_reason",",\"category\":"+json(reason)
+                        +",\"confidence\":\"UNKNOWN\"");
+            else
+                record(b,"legacy_runtime_authority",
+                        ",\"authority\":\"LEGACY\",\"selected_action\":"+json(action)
+                        +",\"reason\":"+json(fallback));
             if (data.get("authority").equals("LEGACY") && !fallback.equals("UNKNOWN")) {
                 record(b,"fallback",",\"turn\":"+turn+",\"reason\":"+json(fallback)
                         +",\"stage\":"+json(stage));
@@ -354,6 +366,9 @@ public final class AutomaticBattleReports implements AutoCloseable {
                         +",\"coverage\":"+json(terminal.group(3)));
                 if (terminal.group(3).equals("INCOMPLETE")) b.gap = true;
                 b.status = b.gap ? "COMPLETED_WITH_GAPS" : "COMPLETED_UNVERIFIED";
+                record(b,"metadata",",\"terminal\":\"OBSERVED\""
+                        +",\"completeness\":"+json(b.gap ? "INCOMPLETE" : "UNKNOWN")
+                        +",\"spectator_delivery\":\"UNVERIFIED\"");
                 summary(b);
                 Files.deleteIfExists(b.dir.resolve("active.marker"));
                 active.remove(capture);
@@ -390,6 +405,8 @@ public final class AutomaticBattleReports implements AutoCloseable {
                 StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
         Battle b = new Battle(id,dir);
         active.put(capture,b);
+        record(b,"diagnostic_presence",",\"category\":\"AUTOMATIC_JAVA_REPORTER\""
+                +",\"content\":\"UNKNOWN\"");
         summary(b);
         return b;
     }

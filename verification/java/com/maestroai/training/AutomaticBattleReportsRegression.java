@@ -59,12 +59,15 @@ public final class AutomaticBattleReportsRegression {
                 check(json.contains("\"kind\":\"public_event\"") && json.contains("\"detail\":\"mew\""),
                         "public event materialized automatically from minimized source");
                 check(json.contains("\"kind\":\"decision\"")
-                        && json.contains("\"selected_action\":\"move:icebeam\""),
-                        "native selection recorded automatically");
+                        && json.contains("\"selected_action\":\"move:icebeam\"")
+                        && json.contains("\"kind\":\"shadow_reason\""),
+                        "native selection and Shadow rationale recorded automatically");
                 check(json.contains("\"kind\":\"provenance\"")
                         && json.contains("\"spectator_delivery\":\"UNVERIFIED\""),
                         "source envelope and uncertainty retained");
                 check(json.contains("\"kind\":\"terminal\"")
+                        && json.contains("\"kind\":\"metadata\"")
+                        && json.contains("\"kind\":\"diagnostic_presence\"")
                         && summary.contains("COMPLETED_WITH_GAPS"),
                         "real callback terminal retains detected incompleteness");
                 check(!Files.exists(battle.resolve("active.marker")),
@@ -99,6 +102,9 @@ public final class AutomaticBattleReportsRegression {
                         "UNKNOWN","NO_NATIVE_FORCED_PROPOSAL","NO_OWN_LEASE",null));
                 check(Files.exists(crashRoot.resolve("battle-reports/B02/battle.jsonl")),
                         "new session never overwrites recovered battle");
+                check(read(crashRoot.resolve("battle-reports/B02/battle.jsonl"))
+                        .contains("\"kind\":\"legacy_runtime_authority\""),
+                        "Legacy return authority retains explicit independent classification");
                 boolean locked=false;
                 try(var another=AutomaticBattleReports.synthetic(crashRoot,"1.1.7")){
                     throw new AssertionError("concurrent writer unexpectedly acquired lock");
@@ -113,6 +119,13 @@ public final class AutomaticBattleReportsRegression {
                         1,1,false,"SHADOW","move:PRIVATE_SECRET","UNKNOWN",
                         "INVALID","UNKNOWN","UNKNOWN",null);
                 safe.testDecision(1,malicious);
+                safe.testLines(1,List.of("[MaestroAI] SHADOW_REPLAY battle=REDACTED "
+                        + "capture=1 seq=1 event=|-transform|p2a|p1a"));
+                check(read(privacyRoot.resolve("battle-reports/B01/battle.jsonl"))
+                        .contains("\"kind\":\"identity\"")
+                        && read(privacyRoot.resolve("battle-reports/B01/battle.jsonl"))
+                        .contains("\"true_identity\":\"UNKNOWN\""),
+                        "transform stays appearance-only, never true concealed identity");
                 check(!read(privacyRoot.resolve("battle-reports/B01/battle.jsonl"))
                         .contains("PRIVATE_SECRET"),"selected action gate prevents private data");
             }
