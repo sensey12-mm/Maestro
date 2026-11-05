@@ -91,6 +91,15 @@ public final class LegacyChoiceCaptureRegression {
                 "SHADOW","move:icebeam","UNKNOWN","MOVE","UNKNOWN","UNKNOWN",null)
                 .equals("[MaestroAI] DEV_DIAG_REJECTED code=INVALID_SOURCE"),
                 "invalid capture identity abstains");
+        var preview=new PublicBattleCapture();
+        var redacted=preview.observe(BATTLE_ID,history());
+        check(!redacted.isEmpty() && redacted.stream().anyMatch(line->
+                line.contains("event=|switch|p2a|mew")),
+                "public event type, actor slot and reviewed species survive minimization");
+        check(redacted.stream().noneMatch(line->
+                line.contains("Opponent") || line.contains("Own")
+                || line.contains("100/100") || line.contains(BATTLE_ID.toString())),
+                "replay diagnostics exclude nicknames, HP and full battle UUIDs");
         var own=choice();
         var disabled=new LegacyChoiceCapture(false,ARTIFACT);
         var battleId=UUID.fromString("20000000-0000-0000-0000-000000000001");
