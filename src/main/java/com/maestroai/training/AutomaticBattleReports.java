@@ -13,6 +13,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +39,33 @@ public final class AutomaticBattleReports implements AutoCloseable {
     private static final int MAX_BATTLES = 999999;
     private static final int MAX_EVENTS = 4000;
     private static final int MAX_ISSUES_PER_BATTLE = 256;
+    private static final int SUMMARY_DECISION_HISTORY = 14;
+    public enum Producer {
+        NATIVE_OWN_ACTION, NATIVE_OWN_SWITCH, OWN_REQUEST_FRESHNESS,
+        NATIVE_LEGAL_ROOT, PUBLIC_OPPONENT_OBSERVATION,
+        PUBLIC_IDENTITY_CONTINUITY, SHADOW_PREFERENCE,
+        SHADOW_PREPARATION, SHADOW_PUBLIC_HISTORY,
+        LEGACY_EVALUATOR_MOVE, LEGACY_EVALUATOR_SWITCH,
+        LEGACY_CROSS_ACTION, PHASE5_ONLINE, PHASE5_HISTORICAL,
+        PHASE6_SIDED_DISPATCH, PHASE6_SPLIT_RETURN,
+        PHASE6_NATIVE_SIDE, PHASE6_PUBLIC_REVEAL, PHASE6_SPLIT_ROUTING,
+        PHASE6_RECIPIENT_CUSTODY, PHASE6_HISTORY_CORRELATION,
+        PHASE6_NATIVE_GATE, PHASE6_RUNTIME_ACCEPTANCE,
+        PHASE6_OWN_ACTION_FUSION, PHASE6_CROSS_STREAM,
+        PHASE7_COMPARISON, PUBLIC_FIELD_MECHANICS,
+        PHASE3_PREREQUISITES
+    }
+    public enum State {
+        OBSERVED, EVALUATED, ACCEPTED, REJECTED, SKIPPED,
+        UNAVAILABLE, UNKNOWN, PUBLIC_HYPOTHESIS,
+        NATIVE_WITNESSED, SOURCE_UNVERIFIED
+    }
+    public enum Failure {
+        CHOICE_RECEIPT_UNAVAILABLE, NATIVE_ACTION_UNAVAILABLE,
+        NATIVE_SWITCH_UNAVAILABLE, PUBLIC_OBSERVATION_UNAVAILABLE,
+        HISTORY_RECONCILIATION_FAILED, REQUEST_FRESHNESS_UNKNOWN,
+        PUBLIC_IDENTITY_UNVERIFIED, EVALUATION_DIAGNOSTIC_FAILED
+    }
     private static final Pattern B_FOLDER = Pattern.compile("B([0-9]{2,6})");
     private static final Pattern REPLAY = Pattern.compile(
             "\\[MaestroAI\\] SHADOW_REPLAY battle=REDACTED capture=([0-9]+) seq=([0-9]+) event=(.*)");
@@ -58,7 +88,9 @@ public final class AutomaticBattleReports implements AutoCloseable {
             "-terastallize","-damage","-heal","-sethp","-sidestart",
             "-sideend","-swapsideconditions","-weather","-fieldstart",
             "-fieldend","-dynamax","-zpower","-singleturn","-singlemove",
-            "-prepare","-mustrecharge","cant","-block");
+            "-prepare","-mustrecharge","cant","-block",
+            "-crit","-supereffective","-resisted","-immune","-miss",
+            "-fail","-hitcount","-swap","-primal","-burst","-endillusion");
     private static final Set<String> SPECIES = Set.of(
             "zoroark","greninja","ditto","mew","pikachu","blissey","shedinja",
             "shuckle","genesect","calyrexshadow","arceus","xerneas","marshadow",
@@ -96,7 +128,13 @@ public final class AutomaticBattleReports implements AutoCloseable {
         final Set<Long> replaySequences = new HashSet<>();
         final Set<Long> provenanceSequences = new HashSet<>();
         final Set<String> decisionReceipts = new HashSet<>();
+        final Deque<String> recentDecisions = new ArrayDeque<>();
+        final Map<String,Integer> issueCodes = new LinkedHashMap<>();
+        final Map<String,Integer> eventKinds = new LinkedHashMap<>();
+        final Map<String,Integer> producerCounts = new LinkedHashMap<>();
+        final Deque<String> recentEvaluations = new ArrayDeque<>();
         final Set<String> legacyReceipts = new HashSet<>();
+        final Set<String> legacyEvaluations = new HashSet<>();
         long lastReplaySeq;
         int records;
         int publicEvents;
@@ -221,8 +259,12 @@ public final class AutomaticBattleReports implements AutoCloseable {
         if (writer != null) writer.acceptLines(capture, lines);
     }
     public static void recordDecision(long capture, String safeLine) {
+        recordDecision(capture,safeLine,DeveloperBattleDecisionCapture.Evidence.unavailable());
+    }
+    public static void recordDecision(long capture, String safeLine,
+                                      DeveloperBattleDecisionCapture.Evidence evidence) {
         AutomaticBattleReports writer = installed;
-        if (writer != null) writer.acceptDecision(capture, safeLine);
+        if (writer != null) writer.acceptDecision(capture,safeLine,evidence);
     }
     public static void recordLegacy(long capture, String safeReceipt) {
         AutomaticBattleReports writer = installed;
@@ -236,6 +278,25 @@ public final class AutomaticBattleReports implements AutoCloseable {
         AutomaticBattleReports writer = installed;
         if (writer != null) writer.acceptInterrupt(capture, reason);
     }
+    /** Closed-type source evidence; no strings from raw runtime payloads. */
+    public static void recordProducer(long capture, Producer producer, State state,
+                                      int observedTurn, int count) {
+        AutomaticBattleReports writer=installed;
+        if(writer!=null)writer.acceptProducer(capture,producer,state,observedTurn,count);
+    }
+    public static void recordFailure(long capture, Failure failure) {
+        AutomaticBattleReports writer=installed;
+        if(writer!=null)writer.acceptFailure(capture,failure);
+    }
+    /** Legacy's existing private-source score is an estimate, not public evidence. */
+    public static void recordLegacyEstimate(long capture, boolean switchCandidate,
+                  String safeAction, double baseScore, double finalScore,
+                  double accuracy, int priority, boolean setup, boolean pivot,
+                  int observedTurn) {
+        AutomaticBattleReports writer=installed;
+        if(writer!=null)writer.acceptLegacyEstimate(capture,switchCandidate,
+                 safeAction,baseScore,finalScore,accuracy,priority,setup,pivot,observedTurn);
+    }
 
     /** Single writer; keep the Minecraft hook side-effect-free on any failure. */
     private void guarded(RunnableIO action) {
@@ -247,6 +308,66 @@ public final class AutomaticBattleReports implements AutoCloseable {
         }
     }
     @FunctionalInterface private interface RunnableIO { void run() throws IOException; }
+
+    private synchronized void acceptProducer(long capture,Producer producer,State state,
+                                              int turn,int count) {
+        guarded(() -> {
+            if(capture<=0 || producer==null || state==null || finishedCaptures.contains(capture))
+                return;
+            Battle b=ensure(capture);
+            if(b.capped)return;
+            int safeTurn=turn>=0 && turn<=10000?turn:-1;
+            int safeCount=count>=0 && count<=10000?count:-1;
+            b.producerCounts.merge(producer.name(),1,Integer::sum);
+            record(b,"producer",",\"producer\":"+json(producer.name())
+                    +",\"state\":"+json(state.name())
+                    +",\"observed_turn\":"+(safeTurn<0?"null":safeTurn)
+                    +",\"count\":"+(safeCount<0?"null":safeCount)
+                    +",\"evidence_class\":\"SOURCE_TYPED_OBSERVATION\"");
+            summary(b);
+        });
+    }
+    private synchronized void acceptFailure(long capture, Failure failure) {
+        guarded(() -> {
+            if(capture<=0 || failure==null || finishedCaptures.contains(capture))return;
+            Battle b=ensure(capture);
+            issue(b,failure.name(),"WARNING");
+            summary(b);
+        });
+    }
+    private synchronized void acceptLegacyEstimate(long capture,boolean isSwitch,
+                 String action,double base,double finalScore,double accuracy,
+                 int priority,boolean setup,boolean pivot,int turn) {
+        guarded(() -> {
+            if(capture<=0 || finishedCaptures.contains(capture) || !Double.isFinite(base)
+                    || !Double.isFinite(finalScore) || !Double.isFinite(accuracy)
+                    || Math.abs(base)>1_000_000 || Math.abs(finalScore)>1_000_000
+                    || accuracy<0 || accuracy>100 || priority<-7 || priority>7)
+                return;
+            Battle b=ensure(capture);
+            if(b.capped)return;
+            String safe=isSwitch?"SWITCH_REDACTED":DeveloperBattleDecisionCapture.safeAction(action);
+            String key=turn+"|"+safe+"|"+base+"|"+finalScore;
+            if(!b.legacyEvaluations.add(key))return;
+            b.recentEvaluations.addLast("T"+(turn>=0&&turn<=10000?turn:"?")+" "
+                    +safe+" base="+Math.rint(base*100)/100.0
+                    +" final="+Math.rint(finalScore*100)/100.0
+                    +" (LEGACY_INTERNAL_UNCALIBRATED)");
+            while(b.recentEvaluations.size()>SUMMARY_DECISION_HISTORY)
+                b.recentEvaluations.removeFirst();
+            record(b,"legacy_evaluation",",\"candidate\":"+json(safe)
+                    +",\"candidate_type\":"+json(isSwitch?"SWITCH":"MOVE")
+                    +",\"source\":\"LEGACY_INTERNAL_UNCALIBRATED\""
+                    +",\"base_heuristic\":"+Double.toString(Math.rint(base*100)/100.0)
+                    +",\"final_heuristic\":"+Double.toString(Math.rint(finalScore*100)/100.0)
+                    +",\"accuracy\":"+Double.toString(Math.rint(accuracy*100)/100.0)
+                    +",\"priority\":"+priority
+                    +",\"setup\":"+setup+",\"pivot\":"+pivot
+                    +",\"observed_turn\":"+(turn>=0 && turn<=10000?turn:"null")
+                    +",\"authority\":\"NONE_EVALUATION_ONLY\"");
+            summary(b);
+        });
+    }
 
     private synchronized void acceptLines(long capture, List<String> lines) {
         guarded(() -> {
@@ -286,12 +407,16 @@ public final class AutomaticBattleReports implements AutoCloseable {
                         battle.turnKnown = true;
                     }
                     battle.publicEvents++;
+                    battle.eventKinds.merge(fields[0],1,Integer::sum);
                     record(battle,"public_event",
                             ",\"sequence\":"+seq+",\"event\":"+json(fields[0])
                             +",\"actor\":"+json(fields[1])+",\"detail\":"+json(fields[2])
-                            +",\"target\":"+json(fields[3]));
-                    if (Set.of("replace","-transform","-terastallize","-formechange")
-                            .contains(fields[0]))
+                            +",\"target\":"+json(fields[3])
+                            +",\"detail_state\":"+json(fields[4])
+                            +",\"stage\":"+(fields[5].equals("UNKNOWN")
+                                    ?"null":fields[5]));
+                    if (Set.of("replace","-transform","-terastallize",
+                            "-formechange","-endillusion").contains(fields[0]))
                         record(battle,"identity",",\"evidence\":\"PUBLIC_APPEARANCE_ONLY\""
                                 +",\"true_identity\":\"UNKNOWN\",\"uncertainty\":\"UNCERTAIN\""
                                 +",\"event\":"+json(fields[0]));
@@ -319,7 +444,8 @@ public final class AutomaticBattleReports implements AutoCloseable {
         });
     }
 
-    private synchronized void acceptDecision(long capture, String line) {
+    private synchronized void acceptDecision(long capture, String line,
+                                              DeveloperBattleDecisionCapture.Evidence evidence) {
         guarded(() -> {
             if (capture <= 0 || finishedCaptures.contains(capture)) return;
             if (line == null || !line.startsWith("[MaestroAI] DEV_DIAG_DECISION ")
@@ -376,7 +502,19 @@ public final class AutomaticBattleReports implements AutoCloseable {
                     +",\"legal_choices\":"+json(legal)
                     +",\"legal_evidence\":"+json(legal.equals("UNKNOWN")
                             ? "UNKNOWN" : "OWN_NATIVE_CERTIFIED")
-                    +",\"confidence\":\"UNKNOWN\"");
+                    +",\"confidence\":\"UNKNOWN\""
+                    +decisionEvidence(evidence));
+            String note="T"+(turnKnown?turn:"?")+" "+
+                    data.get("authority")+" "+action+"; reason="+reason
+                    +"; source="+(evidence==null?"UNKNOWN":evidence.source().name())
+                    +"; candidates="+(evidence==null||evidence.candidateCount()<0
+                        ?"UNKNOWN":evidence.candidateCount())
+                    +"; preparation="+(evidence==null || evidence.preparation()==null
+                        ?"UNKNOWN":evidence.preparation().name())
+                    +"; fallback="+fallback;
+            b.recentDecisions.addLast(note);
+            while(b.recentDecisions.size()>SUMMARY_DECISION_HISTORY)
+                b.recentDecisions.removeFirst();
             if (data.get("authority").equals("SHADOW"))
                 record(b,"shadow_reason",",\"category\":"+json(reason)
                         +",\"confidence\":\"UNKNOWN\"");
@@ -430,6 +568,8 @@ public final class AutomaticBattleReports implements AutoCloseable {
                     b.gap = true;
                     issue(b,"ENVELOPE_SEQUENCE_MISMATCH","ERROR");
                 }
+                if (b.publicEvents>0 && b.decisions==0)
+                    issue(b,"NO_DECISION_RECEIPT_OBSERVED","WARNING");
                 record(b,"terminal",",\"event\":\"COBBLEMON_BATTLE_VICTORY\""
                         +",\"winner\":\"REDACTED\",\"spectator_delivery\":\"UNVERIFIED\""
                         +",\"coverage\":"+json(terminal.group(3)));
@@ -505,15 +645,38 @@ public final class AutomaticBattleReports implements AutoCloseable {
             // crashed before removing its active.marker. Preserve that stronger
             // evidence instead of falsely relabeling the battle as interrupted.
             boolean completedCallback = persistedTerminal(folder.resolve("battle.jsonl"));
-            atomicSummary(summary, "# MaestroAI battle " + id + "\n\n"
-                    + "- Status: " + (completedCallback
-                        ? "COMPLETED_CALLBACK_RECOVERED" : "INTERRUPTED_RESTART") + "\n"
-                    + "- Completeness: " + (completedCallback
-                        ? "UNKNOWN (callback persisted; delivery unverified)"
-                        : "INCOMPLETE (no attested terminal)") + "\n"
-                    + "- Spectator delivery: UNVERIFIED\n"
-                    + "- Original log custody: LOCAL_UNREVIEWED\n"
-                    + "- Events and decisions: inspect surviving battle.jsonl\n");
+            String recoveredStatus=completedCallback
+                    ? "COMPLETED_CALLBACK_RECOVERED" : "INTERRUPTED_RESTART";
+            String recoveredCompleteness=completedCallback
+                    ? "UNKNOWN (callback persisted; delivery unverified)"
+                    : "INCOMPLETE (no attested terminal)";
+            // Keep the prior already-sanitized human developer chronology and
+            // issue counts. A crash may have fsynced JSONL before the atomic
+            // markdown update, so the JSONL remains the primary evidence.
+            String preserved=null;
+            if(Files.isRegularFile(summary,LinkOption.NOFOLLOW_LINKS)
+                    && Files.size(summary)<=131072) {
+                String previous=Files.readString(summary,StandardCharsets.UTF_8);
+                if(previous.startsWith("# MaestroAI battle "+id+"\n")
+                        && previous.contains("\n- Status: ")
+                        && previous.contains("\n- Completeness: ")) {
+                    preserved=previous.replaceFirst("(?m)^- Status: [^\\n]*",
+                            "- Status: "+recoveredStatus)
+                            .replaceFirst("(?m)^- Completeness: [^\\n]*",
+                            "- Completeness: "+recoveredCompleteness)
+                            +"\n## Restart reconciliation\n\n"
+                            +"- The original battle.jsonl is preserved and may contain "
+                            +"durable records newer than the last pre-crash summary.\n";
+                }
+            }
+            if(preserved==null)
+                preserved="# MaestroAI battle "+id+"\n\n"
+                        +"- Status: "+recoveredStatus+"\n"
+                        +"- Completeness: "+recoveredCompleteness+"\n"
+                        +"- Spectator delivery: UNVERIFIED\n"
+                        +"- Original log custody: LOCAL_UNREVIEWED\n"
+                        +"- Evidence: inspect surviving battle.jsonl\n";
+            atomicSummary(summary,preserved);
             if (!completedCallback)
                 append(root.resolve("issues.jsonl"), "{\"schema\":"+json(SCHEMA)
                         +",\"battle\":"+json(id)+",\"code\":\"UNCLEAN_RESTART\""
@@ -525,7 +688,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
     /** Read only the writer's own bounded, already-minimized terminal records. */
     private static boolean persistedTerminal(Path jsonl) throws IOException {
         if (!Files.isRegularFile(jsonl, LinkOption.NOFOLLOW_LINKS)
-                || Files.isSymbolicLink(jsonl) || Files.size(jsonl) > 5_000_000)
+                || Files.isSymbolicLink(jsonl) || Files.size(jsonl) > 32_000_000)
             return false;
         try (var input = Files.newBufferedReader(jsonl, StandardCharsets.UTF_8)) {
             String line;
@@ -554,6 +717,7 @@ public final class AutomaticBattleReports implements AutoCloseable {
             return;
         }
         b.issues++;
+        b.issueCodes.merge(code,1,Integer::sum);
         String json = "{\"schema\":"+json(SCHEMA)+",\"battle\":"+json(b.id)
                 +",\"code\":"+json(code)+",\"severity\":"+json(severity)+"}\n";
         append(root.resolve("issues.jsonl"),json);
@@ -581,19 +745,49 @@ public final class AutomaticBattleReports implements AutoCloseable {
     }
 
     private void summary(Battle b) throws IOException {
-        atomicSummary(b.dir.resolve("summary.md"),
-                "# MaestroAI battle " + b.id + "\n\n"
-                + "- Status: " + b.status + "\n"
-                + "- Completeness: " + (b.gap ? "INCOMPLETE" : "UNKNOWN") + "\n"
-                + "- Public events: " + b.publicEvents + "\n"
-                + "- Decisions: " + b.decisions + "\n"
-                + "- Issues: " + b.issues + "\n"
-                + "- Last observed turn: "
-                + (b.turnKnown ? Integer.toString(b.turn) : "UNKNOWN") + "\n"
-                + "- Version: " + version + "\n"
-                + "- Spectator delivery: UNVERIFIED\n"
-                + "- Original log custody: LOCAL_UNREVIEWED\n"
-                + "- Winner: UNKNOWN\n");
+        StringBuilder body=new StringBuilder("# MaestroAI battle ").append(b.id)
+                .append("\n\n- Status: ").append(b.status)
+                .append("\n- Completeness: ").append(b.gap?"INCOMPLETE":"UNKNOWN")
+                .append("\n- Public events: ").append(b.publicEvents)
+                .append("\n- Decisions: ").append(b.decisions)
+                .append("\n- Issues: ").append(b.issues)
+                .append("\n- Last observed turn: ")
+                .append(b.turnKnown ? Integer.toString(b.turn) : "UNKNOWN")
+                .append("\n- Version: ").append(version)
+                .append("\n- Artifact SHA-256: ").append(artifactSha)
+                .append("\n- Spectator delivery: UNVERIFIED")
+                .append("\n- Original log custody: LOCAL_UNREVIEWED")
+                .append("\n- Winner: UNKNOWN\n\n");
+        body.append("## Observed public timeline\n\n");
+        body.append("Recorded public event kinds (not proof of a complete public beginning):\n\n");
+        for(var entry:b.eventKinds.entrySet())
+            body.append("- ").append(entry.getKey()).append(": ")
+                .append(entry.getValue()).append("\n");
+        if(b.eventKinds.isEmpty())body.append("- None observed yet\n");
+        body.append("\n## Maestro choices (last ")
+                .append(SUMMARY_DECISION_HISTORY).append(")\n\n");
+        if(b.recentDecisions.isEmpty())body.append("- No choice receipt observed\n");
+        else for(String choice:b.recentDecisions)body.append("- ").append(choice).append("\n");
+        body.append("\n## Source-computed evaluations (last ")
+                .append(SUMMARY_DECISION_HISTORY).append(")\n\n");
+        if(b.recentEvaluations.isEmpty())body.append("- None captured in this path\n");
+        else for(String score:b.recentEvaluations)body.append("- ").append(score).append("\n");
+        body.append("\n## Producer coverage\n\n");
+        if(b.producerCounts.isEmpty())body.append("- No typed producer receipts yet\n");
+        else for(var entry:b.producerCounts.entrySet())
+            body.append("- ").append(entry.getKey()).append(": ")
+                    .append(entry.getValue()).append(" observations\n");
+        body.append("\n## Evidence gaps and warnings\n\n");
+        if(b.issueCodes.isEmpty())body.append("- No diagnostic issues detected yet\n");
+        else for(var entry:b.issueCodes.entrySet())
+            body.append("- ").append(entry.getKey()).append(": ")
+                .append(entry.getValue()).append("\n");
+        body.append("\n## Custody and interpretation\n\n");
+        body.append("Developer observation only. Native legality evidence, opponent identity, ")
+            .append("simulator predictions, and independent spectator delivery ")
+            .append("are not inferred from this summary. See battle.jsonl for source-scoped ")
+            .append("candidate scores, actual returns, public envelopes, and their limits.\n");
+        atomicSummary(b.dir.resolve("summary.md"),body.toString());
     }
 
     private static void atomicSummary(Path dest, String text) throws IOException {
@@ -637,39 +831,118 @@ public final class AutomaticBattleReports implements AutoCloseable {
         return DeveloperBattleDecisionCapture.safeLegal(List.of(tokens));
     }
 
+    /**
+     * Independently validate minimized PUBLIC protocol fields. The native
+     * projector never sends arbitrary text/nicknames or private HP.
+     * UNKNOWN is accompanied by an explicit reason rather than erasing
+     * the distinction between unsupported fields and privacy restrictions.
+     */
     private static String[] safeEvent(String value) {
-        String[] fallback = {"UNKNOWN","UNKNOWN","UNKNOWN","UNKNOWN"};
-        if (value == null || value.length() > 150 || !value.startsWith("|")) return fallback;
-        String[] fields = value.split("\\|",-1);
-        if (fields.length < 2 || !EVENT_TYPES.contains(fields[1])) return fallback;
-        String kind = fields[1];
-        if (kind.equals("turn")) {
-            int turn = integer(fields.length > 2 ? fields[2] : null,10000);
-            return new String[]{kind,"UNKNOWN",turn < 0 ? "UNKNOWN" : String.valueOf(turn),"UNKNOWN"};
+        String[] fallback={"UNKNOWN","UNKNOWN","UNKNOWN","UNKNOWN",
+                "UNSUPPORTED_MECHANIC","UNKNOWN"};
+        if(value==null || value.length()>150 || !value.startsWith("|"))return fallback;
+        String[] fields=value.split("\\|",-1);
+        if(fields.length<2 || !EVENT_TYPES.contains(fields[1]))return fallback;
+        String kind=fields[1];
+        if(kind.equals("turn")) {
+            int turn=integer(fields.length>2?fields[2]:null,10000);
+            return new String[]{kind,"UNKNOWN",
+                    turn<0?"UNKNOWN":String.valueOf(turn),
+                    "UNKNOWN",turn<0?"MISSING_PUBLIC_FIELD":"PUBLIC_WITNESSED",
+                    "UNKNOWN"};
         }
-        String actor = fields.length > 2 && SLOT.matcher(fields[2]).matches()
-                ? fields[2] : "UNKNOWN";
-        String detail = "UNKNOWN";
-        if (fields.length > 3) {
-            String candidate = fields[3];
-            if (kind.equals("move") && DeveloperBattleDecisionCapture.safeAction(
-                    "move:"+candidate).equals("move:"+candidate))
-                detail = candidate;
-            else if (Set.of("switch","drag","replace","detailschange","-formechange")
-                    .contains(kind) && SPECIES.contains(candidate))
-                detail = candidate;
-            else if (kind.equals("-terastallize") && TYPES.contains(candidate))
-                detail = candidate;
-            else if (Set.of("-status","-curestatus").contains(kind) && STATUS.contains(candidate))
-                detail = candidate;
-            else if (Set.of("-item","-enditem").contains(kind) && ITEMS.contains(candidate))
-                detail = candidate;
-            else if (Set.of("-ability","-endability").contains(kind) && ABILITIES.contains(candidate))
-                detail = candidate;
+        String actor="UNKNOWN";
+        if(fields.length>2) {
+            if(SLOT.matcher(fields[2]).matches())actor=fields[2];
+            if(Set.of("-sidestart","-sideend","-swapsideconditions").contains(kind)
+                    && Set.of("p1","p2").contains(fields[2]))actor=fields[2];
         }
-        String target = fields.length > 4 && SLOT.matcher(fields[4]).matches()
-                ? fields[4] : "UNKNOWN";
-        return new String[]{kind,actor,detail,target};
+        String detail="UNKNOWN", target="UNKNOWN", state="NOT_APPLICABLE",stage="UNKNOWN";
+        String candidate=fields.length>3?fields[3]:"";
+        if(kind.equals("move")) {
+            detail=DeveloperBattleDecisionCapture.safeAction("move:"+candidate)
+                    .equals("move:"+candidate)?candidate:"UNKNOWN";
+            if(fields.length>4 && SLOT.matcher(fields[4]).matches())
+                target=fields[4];
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("switch","drag","replace","detailschange","-formechange","-mega")
+                .contains(kind)) {
+            detail=PublicBattleCapture.publicSpecies(candidate);
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_DISPLAY_ONLY";
+        } else if(kind.equals("-terastallize")) {
+            if(TYPES.contains(candidate))detail=candidate;
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("-status","-curestatus").contains(kind)) {
+            if(STATUS.contains(candidate))detail=candidate;
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("-item","-enditem").contains(kind)) {
+            if(ITEMS.contains(candidate))detail=candidate;
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("-ability","-endability").contains(kind)) {
+            if(ABILITIES.contains(candidate))detail=candidate;
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("-sidestart","-sideend","-swapsideconditions",
+                    "-weather","-fieldstart","-fieldend","-start","-end",
+                    "-activate","-singleturn","-singlemove").contains(kind)) {
+            detail=PublicBattleCapture.publicEffect(candidate);
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("-boost","-unboost","-setboost").contains(kind)) {
+            if(Set.of("atk","def","spa","spd","spe","accuracy","evasion")
+                    .contains(candidate))detail=candidate;
+            if(fields.length>4 && fields[4].matches("[0-6]"))stage=fields[4];
+            state=detail.equals("UNKNOWN") || stage.equals("UNKNOWN")
+                    ?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(kind.equals("-transform")) {
+            if(SLOT.matcher(candidate).matches())target=candidate;
+            state="PUBLIC_APPEARANCE_ONLY";
+        } else if(Set.of("-miss","-fail").contains(kind)) {
+            if(SLOT.matcher(candidate).matches())target=candidate;
+            state="PUBLIC_WITNESSED";
+        } else if(kind.equals("-hitcount")) {
+            if(candidate.matches("[0-9]{1,2}")) {
+                int count=Integer.parseInt(candidate);
+                if(count>=1 && count<=16)detail=Integer.toString(count);
+            }
+            state=detail.equals("UNKNOWN")?"UNSUPPORTED_PUBLIC_CATALOG":"PUBLIC_WITNESSED";
+        } else if(Set.of("-damage","-heal","-sethp").contains(kind)) {
+            detail="REDACTED_HP";
+            state="PRIVACY_RESTRICTED";
+        } else if(kind.equals("faint")) {
+            state="PUBLIC_WITNESSED";
+        }
+        return new String[]{kind,actor,detail,target,state,stage};
+    }
+
+    private static String decisionEvidence(DeveloperBattleDecisionCapture.Evidence evidence) {
+        var safe=evidence==null ? DeveloperBattleDecisionCapture.Evidence.unavailable() : evidence;
+        StringBuilder out=new StringBuilder();
+        out.append(",\"decision_source\":").append(json(safe.source().name()))
+           .append(",\"preparation_verdict\":").append(json(safe.preparation()==null
+                    ? "UNKNOWN" : safe.preparation().name()))
+           .append(",\"candidate_count\":").append(safe.candidateCount()<0
+                    ? "null" : Integer.toString(safe.candidateCount()))
+           .append(",\"own_request_witness\":").append(json(safe.ownRequest().name()))
+           .append(",\"native_legality_witness\":").append(json(safe.nativeLegality().name()))
+           .append(",\"public_opponent_witness\":").append(json(safe.publicOpponent().name()))
+           .append(",\"observed_root_alternatives\":[");
+        boolean first=true;
+        for(String root:safe.rootAlternatives()) {
+            if(!first)out.append(',');
+            out.append(json(root));
+            first=false;
+        }
+        out.append("],\"candidate_evaluations\":[");
+        first=true;
+        for(var estimate:safe.ranked()) {
+            if(!first)out.append(',');
+            out.append("{\"action\":").append(json(estimate.action()))
+               .append(",\"category\":").append(json(estimate.category()))
+               .append(",\"heuristic_score\":").append(Double.toString(estimate.score()))
+               .append(",\"score_kind\":\"SOURCE_HEURISTIC_NOT_WIN_PROBABILITY\"}");
+            first=false;
+        }
+        out.append(']');
+        return out.toString();
     }
 
     private static String json(String text) {
@@ -710,7 +983,13 @@ public final class AutomaticBattleReports implements AutoCloseable {
         lockChannel.close();
     }
     public void testLines(long capture, List<String> lines) { acceptLines(capture,lines); }
-    public void testDecision(long capture, String line) { acceptDecision(capture,line); }
+    public void testDecision(long capture, String line) {
+        acceptDecision(capture,line,DeveloperBattleDecisionCapture.Evidence.unavailable());
+    }
+    public void testDecisionWithEvidence(long capture,String line,
+                                          DeveloperBattleDecisionCapture.Evidence evidence) {
+        acceptDecision(capture,line,evidence);
+    }
     public void testTerminal(long capture, List<String> lines) { acceptTerminal(capture,lines); }
     public void testInterrupt(long capture, String reason) { acceptInterrupt(capture,reason); }
 }

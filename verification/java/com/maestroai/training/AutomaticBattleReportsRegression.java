@@ -324,6 +324,192 @@ public final class AutomaticBattleReportsRegression {
                     else System.setProperty(flag,value);
                 }
             }
+            // Final diagnostic-coverage acceptance: use the exact live
+            // Shadow heuristic source (no re-scoring or invented odds).
+            var self = new BattleSnapshot.Combatant("self",.85,List.of("normal"),
+                    java.util.Map.of(),List.of("tackle","quickattack"),
+                    null,null,false);
+            var foe = new BattleSnapshot.Combatant("UNKNOWN",
+                    BattleSnapshot.UNKNOWN_HP_FRACTION,List.of(),
+                    java.util.Map.of(),List.of(),null,null,false);
+            var position=new BattleSnapshot(3,self,foe,List.of(),List.of(),
+                    List.of("tackle","quickattack"),List.of(),java.util.Map.of(),false,null);
+            var chosen=ShadowLiveDecisionEngine.ordinary(position,false,false,true);
+            check(chosen!=null && chosen.evaluations().size()==chosen.scoredCandidates()
+                    && chosen.evaluations().stream()
+                            .allMatch(e->Double.isFinite(e.heuristicScore())),
+                    "independent Shadow scorer retains its ACTUAL source-computed rankings");
+            var details=new DeveloperBattleDecisionCapture.Evidence(
+                    DeveloperBattleDecisionCapture.Source.OWN_ONLY,
+                    ShadowPromotionPreparation.Verdict.INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE,
+                    chosen.scoredCandidates(),
+                    DeveloperBattleDecisionCapture.safeEstimates(chosen),
+                    List.of("move:tackle","move:quickattack"),
+                    DeveloperBattleDecisionCapture.Witness.VERIFIED_OWN_REQUEST,
+                    DeveloperBattleDecisionCapture.Witness.VERIFIED_OWN_REQUEST,
+                    DeveloperBattleDecisionCapture.Witness.UNVERIFIED);
+            Path detailedRoot=tmp.resolve("detailed");
+            try(var detailed=AutomaticBattleReports.synthetic(detailedRoot,"1.1.9")) {
+                String choice=DeveloperBattleDecisionCapture.safeLine(77,3,false,"SHADOW",
+                        chosen.action(),chosen.action(),chosen.reason().name(),
+                        "UNKNOWN","UNKNOWN",List.of("move:tackle","move:quickattack"));
+                detailed.testDecisionWithEvidence(77,choice,details);
+                detailed.testDecisionWithEvidence(77,choice,details);
+                detailed.testLines(77,List.of(
+                        "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=77 seq=1 event=|turn|3",
+                        "[MaestroAI] SHADOW_ENVELOPE capture=77 seq=1 route=DIRECT_UPDATE "
+                                + "split_target=NONE spectator=EXPECTED_NOT_OBSERVED branch_attested=true"));
+                String json=read(detailedRoot.resolve("battle-reports/B01/battle.jsonl"));
+                String overview=read(detailedRoot.resolve("battle-reports/B01/summary.md"));
+                check(json.contains("\"decision_source\":\"OWN_ONLY\"")
+                        && json.contains("\"preparation_verdict\":\"INDEPENDENT_LIVE_POLICY_NONAUTHORITATIVE\"")
+                        && json.contains("\"candidate_count\":2")
+                        && json.contains("\"candidate_evaluations\":[")
+                        && json.contains("\"heuristic_score\":")
+                        && json.contains("\"score_kind\":\"SOURCE_HEURISTIC_NOT_WIN_PROBABILITY\""),
+                        "source-calculated Shadow alternatives, score semantics and verdict preserved");
+                check(json.contains("\"own_request_witness\":\"VERIFIED_OWN_REQUEST\"")
+                        && json.contains("\"public_opponent_witness\":\"UNVERIFIED\"")
+                        && json.contains("\"observed_root_alternatives\":[\"move:tackle\",\"move:quickattack\"]"),
+                        "native witness and independently observed alternatives retained");
+                check(json.split("\"kind\":\"decision\"",-1).length==2,
+                        "source evidence does not duplicate the same chooser return");
+                check(overview.contains("Maestro choices") && overview.contains("source=OWN_ONLY")
+                        && overview.contains("Decisions: 1"),
+                        "useful chronological summary retains reason and source");
+                detailed.testInterrupt(77,"REPLACED");
+                check(read(detailedRoot.resolve("battle-reports/B01/summary.md"))
+                        .contains("INTERRUPTED_REPLACED"),
+                        "interruption preserves meaningful diagnostics");
+            }
+
+            // Native-only public protocol kinds must reach the report despite
+            // the frozen, narrower OFFLINE Phase 5 replay allowlist.
+            Path nativeRoot=tmp.resolve("native-public");
+            try(var nativeWriter=AutomaticBattleReports.synthetic(nativeRoot,"1.1.9")) {
+                var battleId=java.util.UUID.fromString("20000000-0000-0000-0000-000000000444");
+                var publicCapture=new PublicBattleCapture();
+                long id=publicCapture.forBattle(battleId);
+                List<String> history=List.of("update\n"
+                        + "|switch|p1a: PRIVATE_NICK|Mew, L100|100/100\n"
+                        + "|-weather|RainDance\n"
+                        + "|-boost|p1a: PRIVATE_NICK|atk|2\n"
+                        + "|-start|p1a: PRIVATE_NICK|move: Encore\n"
+                        + "|-damage|p1a: PRIVATE_NICK|78/100\n"
+                        + "|-crit|p2a: PRIVATE_NICK\n"
+                        + "|-miss|p2a: PRIVATE_NICK|p1a: PRIVATE_NICK\n"
+                        + "|turn|3");
+                var observed=publicCapture.observeWithProvenance(battleId,history);
+                check(observed.replay().size()==8 && observed.envelopes().size()==8,
+                        "native filter retains weather, stat changes, status, damage, crit, miss and turn");
+                check(PublicProtocolFilter.publicEvents(history).size()==5,
+                        "native additions do not change frozen offline filter");
+                nativeWriter.testLines(id,java.util.stream.Stream.concat(
+                        observed.replay().stream(),observed.envelopes().stream()).toList());
+                String json=read(nativeRoot.resolve("battle-reports/B01/battle.jsonl"));
+                check(json.contains("\"event\":\"-weather\",\"actor\":\"UNKNOWN\",\"detail\":\"raindance\"")
+                        && json.contains("\"event\":\"-boost\",\"actor\":\"p1a\",\"detail\":\"atk\"")
+                        && json.contains("\"stage\":2")
+                        && json.contains("\"event\":\"-crit\"")
+                        && json.contains("\"event\":\"-miss\""),
+                        "native-only public event types and safe structured effects retained");
+                check(json.contains("\"detail\":\"REDACTED_HP\"")
+                        && json.contains("\"detail_state\":\"PRIVACY_RESTRICTED\"")
+                        && !json.contains("PRIVATE_NICK") && !json.contains("78/100"),
+                        "HP and nicknames redacted without losing damage event");
+                check(read(nativeRoot.resolve("battle-reports/B01/summary.md"))
+                        .contains("## Observed public timeline"),
+                        "summary includes event-kind chronology");
+            }
+
+            // All read-only native/phase producers share one typed, bounded sink.
+            Path familyRoot=tmp.resolve("families");
+            var family=AutomaticBattleReports.attachSyntheticForTest(familyRoot,"1.1.9");
+            try {
+                for(var producer:AutomaticBattleReports.Producer.values())
+                    AutomaticBattleReports.recordProducer(88,producer,
+                            AutomaticBattleReports.State.OBSERVED,6,2);
+                AutomaticBattleReports.recordLegacyEstimate(88,false,"move:ironhead",
+                        41.23,38.5,100,0,false,false,6);
+                AutomaticBattleReports.recordLegacyEstimate(88,false,"move:ironhead",
+                        41.23,38.5,100,0,false,false,6);
+                AutomaticBattleReports.recordLegacyEstimate(88,true,"SWITCH_SECRET_UUID",
+                        60,60,100,0,false,false,6);
+                AutomaticBattleReports.recordFailure(88,
+                        AutomaticBattleReports.Failure.NATIVE_ACTION_UNAVAILABLE);
+                String journal=read(familyRoot.resolve("battle-reports/B01/battle.jsonl"));
+                String overview=read(familyRoot.resolve("battle-reports/B01/summary.md"));
+                for(var producer:AutomaticBattleReports.Producer.values())
+                    check(journal.contains("\"producer\":\""+producer.name()+"\""),
+                            "producer coverage "+producer+" reaches journal");
+                check(journal.split("\"kind\":\"legacy_evaluation\"",-1).length==3
+                        && journal.contains("\"base_heuristic\":41.23")
+                        && journal.contains("\"final_heuristic\":38.5")
+                        && journal.contains("\"candidate\":\"SWITCH_REDACTED\""),
+                        "Legacy scores, dedup and private switch UUID redaction");
+                check(journal.contains("\"kind\":\"issue\"")
+                        && read(familyRoot.resolve("battle-reports/issues.jsonl"))
+                            .contains("NATIVE_ACTION_UNAVAILABLE"),
+                        "source failure codes reach battle and global issue stream");
+                check(overview.contains("## Producer coverage")
+                        && overview.contains("## Source-computed evaluations")
+                        && overview.contains("NATIVE_ACTION_UNAVAILABLE"),
+                        "developer summary includes producer inventory, comparisons and failures");
+                check(!journal.contains("SWITCH_SECRET_UUID"),
+                        "no hidden identifiers in source-computed candidates");
+            } finally {
+                AutomaticBattleReports.detachSyntheticForTest(family);
+            }
+
+            // Crash recovery must preserve the human-readable evidence too,
+            // not replace it with an unhelpful empty template.
+            Path retain=tmp.resolve("retain-restart");
+            var before=AutomaticBattleReports.synthetic(retain,"1.1.9");
+            before.testDecision(91,DeveloperBattleDecisionCapture.safeLine(
+                    91,8,false,"SHADOW","move:quickattack","move:tackle",
+                    "MOVE","UNKNOWN","UNKNOWN",null));
+            String beforeSummary=read(retain.resolve("battle-reports/B01/summary.md"));
+            before.simulateCrashForTest();
+            try(var after=AutomaticBattleReports.synthetic(retain,"1.1.9")) {
+                String afterSummary=read(retain.resolve("battle-reports/B01/summary.md"));
+                check(beforeSummary.contains("Decisions: 1")
+                        && afterSummary.contains("Decisions: 1")
+                        && afterSummary.contains("Maestro choices")
+                        && afterSummary.contains("INTERRUPTED_RESTART"),
+                        "restart retains summary chronology, counts and accurate incomplete state");
+            }
+
+            // Regression contract: live chooser must wire source evidence, not
+            // silently drop the available computation or replay categories.
+            String liveSource=read(Path.of("src/main/java/com/maestroai/ai/MaestroBattleAI.java"));
+            String liveProjection=read(Path.of("src/main/java/com/maestroai/training/PublicBattleCapture.java"));
+            check(liveSource.contains("developerDecisionReason=preference.reason().name();")
+                    && liveSource.contains("DeveloperBattleDecisionCapture.safeEstimates(preference)")
+                    && liveSource.contains("legalForDeveloper,developerEvidence")
+                    && liveSource.contains("automaticProducer(battle,")
+                    && liveSource.contains("recordLegacyEstimate("),
+                    "source-based diagnostic producer registrations cannot go missing silently");
+            check(liveProjection.contains("PublicProtocolFilter.nativePublicEvents(rawHistory)")
+                    && liveProjection.contains("PublicEnvelopeProvenance.reconcileNative(rawHistory, filtered)"),
+                    "native public source path must retain full allowed event families");
+            for(var producer:AutomaticBattleReports.Producer.values())
+                check(liveSource.contains("Producer."+producer.name()),
+                        "production source must wire the actual "+producer+" producer");
+            // A battle containing public activity but no selected return is a
+            // diagnostic coverage warning, not an invented choice.
+            Path missingChoice=tmp.resolve("no-choice");
+            try(var missing=AutomaticBattleReports.synthetic(missingChoice,"1.1.9")){
+                missing.testLines(61,List.of(
+                        "[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=61 seq=1 event=|turn|1",
+                        "[MaestroAI] SHADOW_ENVELOPE capture=61 seq=1 route=DIRECT_UPDATE "
+                            +"split_target=NONE spectator=EXPECTED_NOT_OBSERVED branch_attested=true"));
+                missing.testTerminal(61,List.of(TERMINAL4.replace("capture=4","capture=61")));
+                check(read(missingChoice.resolve("battle-reports/issues.jsonl"))
+                        .contains("NO_DECISION_RECEIPT_OBSERVED")
+                        && read(missingChoice.resolve("battle-reports/B01/summary.md"))
+                        .contains("Decisions: 0"),
+                        "no-receipt diagnostic is explicit without fabricating a decision");
+            }
             System.out.println("AutomaticBattleReportsRegression PASS checks="+checks);
         } finally {
             // All paths are owned by this synthetic temp directory.

@@ -26,7 +26,9 @@ public final class PublicProtocolFilter {
     private static final Set<String> NATIVE_ADDITIONAL = Set.of(
             "-weather", "-fieldstart", "-fieldend", "-dynamax", "-zpower",
             "-singleturn", "-singlemove", "-prepare", "-mustrecharge",
-            "cant", "-block");
+            "cant", "-block", "-crit", "-supereffective", "-resisted",
+            "-immune", "-miss", "-fail", "-hitcount", "-swap", "-primal",
+            "-burst", "-endillusion");
 
 
     private PublicProtocolFilter() {}

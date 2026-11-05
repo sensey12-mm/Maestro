@@ -85,6 +85,45 @@ public final class PublicBattleCapture {
         String token=slug(v);
         return safe.contains(token)?token:"UNKNOWN";
     }
+    // The public switch DETAILS species is not an actor nickname. Validate it
+    // against the loaded installed public species registry (not private battle
+    // Pokémon state), otherwise preserve UNKNOWN rather than free-form text.
+    static String publicSpecies(String value) {
+        String token=slug(value);
+        if(SAFE_SPECIES.contains(token))return token;
+        if(!token.matches("[a-z0-9]{2,40}"))return "UNKNOWN";
+        try {
+            return com.cobblemon.mod.common.api.pokemon.PokemonSpecies.getByName(token)!=null
+                    ?token:"UNKNOWN";
+        }catch(RuntimeException | LinkageError unavailable) {
+            return "UNKNOWN";
+        }
+    }
+
+    private static final java.util.Set<String> SAFE_STAT=java.util.Set.of(
+            "atk","def","spa","spd","spe","accuracy","evasion");
+    private static final java.util.Set<String> SAFE_EFFECT=java.util.Set.of(
+            "stealthrock","spikes","toxicspikes","stickyweb","reflect",
+            "lightscreen","auroraveil","tailwind","safeguard","mist",
+            "trickroom","gravity","wonderroom","magicroom",
+            "electricterrain","grassyterrain","psychicterrain",
+            "mistyterrain","raindance","sunnyday","sandstorm","hail",
+            "snow","none","substitute","encore","taunt","disable",
+            "yawn","confusion","perishsong","leechseed","ingrain",
+            "protect","dynamax","gmax","torment","focusenergy",
+            "attract","curse","smackdown","telekinesis","stockpile",
+            "charge","flashfire","trapped","magnetrise","uproar");
+    static String publicEffect(String raw) {
+        if(raw==null)return "UNKNOWN";
+        // Showdown public effect IDs sometimes have a move or ability prefix.
+        String base=raw.replaceFirst("(?i)^(move|ability|item):\\s*","");
+        return fromSet(base,SAFE_EFFECT);
+    }
+    private static String publicStage(String raw) {
+        if(raw!=null && raw.matches("[0-6]"))return raw;
+        return "UNKNOWN";
+    }
+
     private static String slot(String s) {
         if(s==null || s.length()<3)return "UNKNOWN";
         String id=s.substring(0,3);
@@ -106,7 +145,12 @@ public final class PublicBattleCapture {
                 || kind.equals("-swapsideconditions")) {
             String side=segment(p,2);
             String index=side.startsWith("p1")?"p1":side.startsWith("p2")?"p2":"UNKNOWN";
-            return "|"+kind+"|"+index+"|UNKNOWN";
+            String effect=publicEffect(segment(p,3));
+            return "|"+kind+"|"+index+"|"+effect;
+        }
+        if(kind.equals("-weather") || kind.equals("-fieldstart")
+                || kind.equals("-fieldend")) {
+            return "|"+kind+"|UNKNOWN|"+publicEffect(segment(p,2));
         }
         String actor=slot(segment(p,2));
         String prefix="|"+kind+"|"+actor;
@@ -118,9 +162,18 @@ public final class PublicBattleCapture {
         }
         if(kind.equals("switch") || kind.equals("drag") || kind.equals("replace")
                 || kind.equals("detailschange") || kind.equals("-formechange")) {
-            return prefix+"|"+fromSet(segment(p,3).split(",",-1)[0],SAFE_SPECIES);
+            return prefix+"|"+publicSpecies(segment(p,3).split(",",-1)[0]);
         }
         if(kind.equals("-transform"))return prefix+"|"+slot(segment(p,3));
+        if(kind.equals("-mega"))return prefix+"|"+publicSpecies(segment(p,3));
+        if(kind.equals("-boost") || kind.equals("-unboost")
+                || kind.equals("-setboost"))
+            return prefix+"|"+fromSet(segment(p,3),SAFE_STAT)
+                    +"|"+publicStage(segment(p,4));
+        if(kind.equals("-start") || kind.equals("-end")
+                || kind.equals("-activate") || kind.equals("-singleturn")
+                || kind.equals("-singlemove"))
+            return prefix+"|"+publicEffect(segment(p,3));
         if(kind.equals("-terastallize"))return prefix+"|"+fromSet(segment(p,3),SAFE_TYPE);
         if(kind.equals("-status") || kind.equals("-curestatus"))
             return prefix+"|"+fromSet(segment(p,3),SAFE_STATUS);
@@ -128,8 +181,8 @@ public final class PublicBattleCapture {
             return prefix+"|"+fromSet(segment(p,3),SAFE_ITEM);
         if(kind.equals("-ability") || kind.equals("-endability"))
             return prefix+"|"+fromSet(segment(p,3),SAFE_ABILITY);
-        // Other public kinds retain type and actor only, never damage, HP,
-        // effects, nicknames, trainer text or unvalidated extra arguments.
+        // Other public kinds retain type and actor only. Never include raw
+        // health/HP, nicknames, text or unvalidated extra arguments.
         return prefix;
     }
 
@@ -143,9 +196,12 @@ public final class PublicBattleCapture {
         if (!battleId.equals(battle)) begin(battleId);
         if (closed || incomplete) return new Observation(List.of(), List.of());
 
-        List<String> filtered = PublicProtocolFilter.publicEvents(rawHistory);
+        // This object is the installed native REPORT projector, not the
+        // frozen Phase 5 offline replay parser. Keep native-only public events
+        // (weather, terrain, miss, crit, etc.) with independent custody.
+        List<String> filtered = PublicProtocolFilter.nativePublicEvents(rawHistory);
         PublicEnvelopeProvenance.Audit source =
-                PublicEnvelopeProvenance.reconcile(rawHistory, filtered);
+                PublicEnvelopeProvenance.reconcileNative(rawHistory, filtered);
         if (!source.complete()) return rejected(source.reason());
 
         int shared = 0;

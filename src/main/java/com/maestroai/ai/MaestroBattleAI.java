@@ -475,12 +475,19 @@ public class MaestroBattleAI extends RCTBattleAI {
             // any tactical input before an independent Shadow choice.
             int choiceTurn=ownChoiceLease==null?-1:ownChoiceLease.turn();
             String developerDecisionReason="UNKNOWN";
+            var developerChoiceSource=DeveloperBattleDecisionCapture.Source.UNKNOWN;
+            com.maestroai.training.ShadowPromotionPreparation.Verdict developerPreparation=null;
+            int developerCandidateCount=-1;
+            java.util.List<DeveloperBattleDecisionCapture.Estimate> developerRanked=java.util.List.of();
+            var developerOpponentWitness=DeveloperBattleDecisionCapture.Witness.UNKNOWN;
             com.maestroai.training.BattleSnapshot liveShadowSnapshot=null;
             if(forceSwitch){
                 var forced=prepareShadowForcedReplacement(activePokemon,battle);
                 if(forced!=null && forced.proposal()!=null) {
                     phaseShadowPrepared=forced;
                     developerDecisionReason="FORCED_REPLACEMENT";
+                    developerChoiceSource=DeveloperBattleDecisionCapture.Source.FORCED_NATIVE;
+                    developerPreparation=forced.verdict();
                 }
             }else{
                 liveShadowSnapshot=captureIndependentShadowSnapshot(
@@ -503,6 +510,10 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 && battle.getActor(nativeActor.getShowdownId())==nativeActor,
                             LivePublicSpeciesTyping::displayedTypeHypothesis);
                     if(witnessed!=null){
+                        developerOpponentWitness=DeveloperBattleDecisionCapture.Witness.OBSERVED;
+                        automaticProducer(battle,
+                                com.maestroai.training.AutomaticBattleReports.Producer.PUBLIC_IDENTITY_CONTINUITY,
+                                com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                         var observed=witnessed.snapshot();
                         var preference=ShadowLiveDecisionEngine.ordinary(
                                 observed,false,moveset.getTrapped(),
@@ -516,10 +527,14 @@ public class MaestroBattleAI extends RCTBattleAI {
                             var proof=ShadowPromotionPreparation.inspectPublicOnly(
                                     battle,phaseShadowRequest,observed,
                                     preference,ownLease,phaseShadowLegalWindow,witnessed);
+                            developerPreparation=proof.verdict();
                             if(proof.proposal()!=null){
                                 liveShadowSnapshot=observed;
                                 phaseShadowPrepared=proof;
                                 developerDecisionReason=preference.reason().name();
+                                developerChoiceSource=DeveloperBattleDecisionCapture.Source.PUBLIC_OPPONENT;
+                                developerCandidateCount=preference.scoredCandidates();
+                                developerRanked=DeveloperBattleDecisionCapture.safeEstimates(preference);
                                 System.out.println("[MaestroAI] "+preference.safeLine());
                                 System.out.println("[MaestroAI] "+witnessed.safeLine());
                             }
@@ -539,8 +554,13 @@ public class MaestroBattleAI extends RCTBattleAI {
                             var proof=ShadowPromotionPreparation.inspectOwnOnly(
                                     battle,phaseShadowRequest,owned,
                                     preference,ownLease,phaseShadowLegalWindow);
+                            developerPreparation=proof.verdict();
                             if(proof.proposal()!=null){
                                 phaseShadowPrepared=proof;
+                                developerDecisionReason=preference.reason().name();
+                                developerChoiceSource=DeveloperBattleDecisionCapture.Source.OWN_ONLY;
+                                developerCandidateCount=preference.scoredCandidates();
+                                developerRanked=DeveloperBattleDecisionCapture.safeEstimates(preference);
                                 System.out.println("[MaestroAI] "+preference.safeLine());
                                 System.out.println("[MaestroAI] Shadow source=NATIVE_OWN;opponent=UNKNOWN");
                             }
@@ -624,31 +644,55 @@ public class MaestroBattleAI extends RCTBattleAI {
             // never gate the local reporter; no chooser or tactic is re-entered.
             if(DeveloperBattleDecisionCapture.captureEnabled() && battle!=null
                     && battle.getBattleId()!=null)try{
-                java.util.List<String> legalForDeveloper=null;
-                if(!forceSwitch && phaseShadowLegalWindow!=null
-                        && choiceSnapshot!=null
-                        && phaseShadowLegalWindow.exactlyCovers(
-                                battle,phaseShadowRequest,choiceSnapshot)){
-                    legalForDeveloper=new java.util.ArrayList<>();
-                    for(String moveId:choiceSnapshot.legalMoves())
-                        legalForDeveloper.add("move:"+moveId);
-                    for(String slot:choiceSnapshot.legalSwitches())
-                        legalForDeveloper.add("switch:"+slot);
+                var evidenceSnapshot=liveShadowSnapshot==null
+                        ?choiceSnapshot:liveShadowSnapshot;
+                java.util.List<String> observedRoots=new java.util.ArrayList<>();
+                if(evidenceSnapshot!=null){
+                    for(String moveId:evidenceSnapshot.legalMoves()){
+                        String safe=DeveloperBattleDecisionCapture.safeAction("move:"+moveId);
+                        if(!safe.equals("UNKNOWN") && !observedRoots.contains(safe))
+                            observedRoots.add(safe);
+                    }
+                    for(String ownSwitch:evidenceSnapshot.legalSwitches()){
+                        String safe=diagnosticOwnPartySlot(activePokemon,ownSwitch);
+                        if(!safe.equals("UNKNOWN") && !observedRoots.contains(safe))
+                            observedRoots.add(safe);
+                    }
                 }
+                boolean nativeExact=!forceSwitch && phaseShadowLegalWindow!=null
+                        && evidenceSnapshot!=null
+                        && phaseShadowLegalWindow.exactlyCovers(
+                                battle,phaseShadowRequest,evidenceSnapshot);
+                java.util.List<String> legalForDeveloper=nativeExact
+                        ?java.util.List.copyOf(observedRoots):null;
                 String selectedForDeveloper="UNKNOWN";
                 if(response instanceof MoveActionResponse move && !forceSwitch)
                     selectedForDeveloper="move:"+move.getMoveName();
                 else if(response instanceof SwitchActionResponse change
                         && activePokemon!=null && activePokemon.getActor()!=null){
-                    var party=activePokemon.getActor().getPokemonList();
-                    if(party!=null && party.size()<=6)
-                        for(int i=0;i<party.size();i++)
-                            if(party.get(i)!=null
-                                    && change.getNewPokemonId().equals(party.get(i).getUuid())){
-                                selectedForDeveloper="switch:slot"+(i+1);
-                                break;
-                            }
+                    selectedForDeveloper=diagnosticOwnPartySlot(
+                            activePokemon,String.valueOf(change.getNewPokemonId()));
                 }
+                String proposedForDeveloper=proposal==null?"UNKNOWN":proposal.action();
+                if(proposedForDeveloper.startsWith("switch:"))
+                    proposedForDeveloper=diagnosticOwnPartySlot(
+                            activePokemon,proposedForDeveloper.substring("switch:".length()));
+                if(selected.authority()==LivePromotionGate.Authority.LEGACY)
+                    developerChoiceSource=DeveloperBattleDecisionCapture.Source.LEGACY_FALLBACK;
+                var ownWitness=ownChoiceLease==null
+                        ?DeveloperBattleDecisionCapture.Witness.MISSING
+                        :ownChoiceLease.current()
+                            ?DeveloperBattleDecisionCapture.Witness.VERIFIED_OWN_REQUEST
+                            :DeveloperBattleDecisionCapture.Witness.UNVERIFIED;
+                var legalWitness=nativeExact
+                        ?DeveloperBattleDecisionCapture.Witness.VERIFIED_OWN_REQUEST
+                        :phaseShadowLegalWindow==null
+                            ?DeveloperBattleDecisionCapture.Witness.MISSING
+                            :DeveloperBattleDecisionCapture.Witness.UNVERIFIED;
+                var developerEvidence=new DeveloperBattleDecisionCapture.Evidence(
+                        developerChoiceSource,developerPreparation,developerCandidateCount,
+                        developerRanked,observedRoots,ownWitness,legalWitness,
+                        developerOpponentWitness);
                 long developerCapture=shadowReplayCapture.forBattle(battle.getBattleId());
                 // Shadow-led choices do not execute Legacy's public-history
                 // sync. Observe from the identical original native history,
@@ -668,11 +712,42 @@ public class MaestroBattleAI extends RCTBattleAI {
                         developerCapture,
                         choiceTurn,forceSwitch,selected.authority().name(),
                         selectedForDeveloper,
-                        proposal==null?"UNKNOWN":proposal.action(),
+                        proposedForDeveloper,
                         developerDecisionReason,developerFallbackStage,
                         forceSwitch?forcedReadinessReason:"UNKNOWN",
-                        legalForDeveloper);
+                        legalForDeveloper,developerEvidence);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.OWN_REQUEST_FRESHNESS,
+                        ownWitness==DeveloperBattleDecisionCapture.Witness.VERIFIED_OWN_REQUEST
+                                ?com.maestroai.training.AutomaticBattleReports.State.NATIVE_WITNESSED
+                                :com.maestroai.training.AutomaticBattleReports.State.SOURCE_UNVERIFIED,-1);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.NATIVE_LEGAL_ROOT,
+                        nativeExact
+                                ?com.maestroai.training.AutomaticBattleReports.State.NATIVE_WITNESSED
+                                :com.maestroai.training.AutomaticBattleReports.State.SOURCE_UNVERIFIED,
+                        observedRoots.size());
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PUBLIC_OPPONENT_OBSERVATION,
+                        developerOpponentWitness==DeveloperBattleDecisionCapture.Witness.OBSERVED
+                                ?com.maestroai.training.AutomaticBattleReports.State.OBSERVED
+                                :com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE,-1);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.SHADOW_PREFERENCE,
+                        developerCandidateCount>0
+                                ?com.maestroai.training.AutomaticBattleReports.State.EVALUATED
+                                :com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE,
+                        developerCandidateCount);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.SHADOW_PREPARATION,
+                        developerPreparation==null
+                                ?com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE
+                                :developerPreparation.name().contains("NONAUTHORITATIVE")
+                                    ?com.maestroai.training.AutomaticBattleReports.State.ACCEPTED
+                                    :com.maestroai.training.AutomaticBattleReports.State.REJECTED,-1);
             }catch(RuntimeException unavailable){
+                automaticFailure(battle,
+                        com.maestroai.training.AutomaticBattleReports.Failure.CHOICE_RECEIPT_UNAVAILABLE);
                 System.out.println("[MaestroAI] DEV_DIAG_REJECTED code=CAPTURE_UNAVAILABLE");
             }
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
@@ -709,8 +784,13 @@ public class MaestroBattleAI extends RCTBattleAI {
                         forceSwitch,phase612Move,phase612Switch);
                 if (PHASE69_OBSERVE) phase69Bridge.observeOwnFusedEvidence(battle,fused);
                 System.out.println("[MaestroAI] Phase 6.12 "+fused);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_OWN_ACTION_FUSION,
+                        com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
             } catch (RuntimeException unavailable) {
                 System.out.println("[MaestroAI] Phase 6.12 own-action fusion=UNKNOWN");
+                automaticFailure(battle,
+                        com.maestroai.training.AutomaticBattleReports.Failure.EVALUATION_DIAGNOSTIC_FAILED);
             }
             // Phase 6.13: refresh exact same public battle source immediately
             // before comparison. No source read can affect Legacy's response.
@@ -724,17 +804,28 @@ public class MaestroBattleAI extends RCTBattleAI {
                 try {
                     var cross=phase613Session.inspect(phase69Bridge,battle,fused);
                     System.out.println("[MaestroAI] Phase 6.13 "+cross);
+                    automaticProducer(battle,
+                            com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_CROSS_STREAM,
+                            com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                     if (PHASE621_OBSERVE) {
                         var endToEnd=phase621Gate.inspectDirect(battle,cross);
                         System.out.println("[MaestroAI] Phase 6.21 "+endToEnd);
+                        automaticProducer(battle,
+                                com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_NATIVE_GATE,
+                                com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                         if (PHASE622_OBSERVE) {
                             var acceptance=phase622Harness.observePhase621(battle,endToEnd);
                             System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+                            automaticProducer(battle,
+                                    com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_RUNTIME_ACCEPTANCE,
+                                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                         }
                     }
                 } catch (RuntimeException unsupported) {
                     phase613Session.withdraw();
                     System.out.println("[MaestroAI] Phase 6.13 cross-stream=UNKNOWN");
+                    automaticFailure(battle,
+                            com.maestroai.training.AutomaticBattleReports.Failure.EVALUATION_DIAGNOSTIC_FAILED);
                 }
             }
             // Phase 7 Legacy receipt never captures a Shadow-selected action.
@@ -780,9 +871,14 @@ public class MaestroBattleAI extends RCTBattleAI {
             if (PHASE69_OBSERVE) phase69Bridge.observeOwnActionEvidence(battle, receipt);
             if (PHASE612_OBSERVE) phase612Move=receipt;
             System.out.println("[MaestroAI] Phase 6.10 " + receipt);
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.NATIVE_OWN_ACTION,
+                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
         } catch (RuntimeException invalid) {
             ownNativeActionEvidence.withdraw();
             System.out.println("[MaestroAI] Phase 6.10 own-action observation=UNKNOWN");
+            automaticFailure(battle,
+                    com.maestroai.training.AutomaticBattleReports.Failure.NATIVE_ACTION_UNAVAILABLE);
         }
     }
 
@@ -815,10 +911,56 @@ public class MaestroBattleAI extends RCTBattleAI {
             if (PHASE69_OBSERVE) phase69Bridge.observeOwnSwitchEvidence(battle, receipt);
             if (PHASE612_OBSERVE) phase612Switch=receipt;
             System.out.println("[MaestroAI] Phase 6.11 " + receipt);
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.NATIVE_OWN_SWITCH,
+                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
         } catch (RuntimeException unsupported) {
             ownNativeSwitchEvidence.withdraw();
             System.out.println("[MaestroAI] Phase 6.11 own-switch observation=UNKNOWN");
+            automaticFailure(battle,
+                    com.maestroai.training.AutomaticBattleReports.Failure.NATIVE_SWITCH_UNAVAILABLE);
         }
+    }
+
+    /** Read-only, minimized, source-typed receipt. Never put private payloads,
+     * player names or an entire arbitrary object.toString() in the reporter. */
+    private void automaticProducer(PokemonBattle battle,
+            com.maestroai.training.AutomaticBattleReports.Producer origin,
+            com.maestroai.training.AutomaticBattleReports.State state,int count) {
+        if(!com.maestroai.training.AutomaticBattleReports.enabled()
+                || battle==null || battle.getBattleId()==null)return;
+        try {
+            long capture=shadowReplayCapture.forBattle(battle.getBattleId());
+            com.maestroai.training.AutomaticBattleReports.recordProducer(
+                    capture,origin,state,battle.getTurn(),count);
+        }catch(RuntimeException unavailable){
+            // Observation must never influence the already-selected action.
+        }
+    }
+    private void automaticFailure(PokemonBattle battle,
+            com.maestroai.training.AutomaticBattleReports.Failure code) {
+        if(!com.maestroai.training.AutomaticBattleReports.enabled()
+                || battle==null || battle.getBattleId()==null)return;
+        try {
+            com.maestroai.training.AutomaticBattleReports.recordFailure(
+                    shadowReplayCapture.forBattle(battle.getBattleId()),code);
+        }catch(RuntimeException unavailable){
+            // Logging failure is never an action failure.
+        }
+    }
+
+    /** The owning party is private; only its current 1-based slot may escape. */
+    private static String diagnosticOwnPartySlot(ActiveBattlePokemon active,
+                                                   String privateUuid) {
+        if(active==null || active.getActor()==null || privateUuid==null)
+            return "UNKNOWN";
+        var party=active.getActor().getPokemonList();
+        if(party==null || party.size()>6)return "UNKNOWN";
+        for(int i=0;i<party.size();i++)
+            if(party.get(i)!=null && party.get(i).getUuid()!=null
+                    && privateUuid.equals(party.get(i).getUuid().toString()))
+                return "switch:slot"+(i+1);
+        return "UNKNOWN";
     }
 
     /** A return-path witness, not an opponent-state or live-selection hook. */
@@ -1860,6 +2002,11 @@ public class MaestroBattleAI extends RCTBattleAI {
         // Compare legacy move selection against the same evaluator's ranked
         // alternatives. Diagnostic only: never override selectedMove.
         logShadowComparison(shadowSnapshot, selectedMove, moves);
+        automaticProducer(battle,
+                com.maestroai.training.AutomaticBattleReports.Producer.PHASE7_COMPARISON,
+                shadowSnapshot==null
+                        ?com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE
+                        :com.maestroai.training.AutomaticBattleReports.State.EVALUATED,moves.size());
         if (bestSwitch != null && Double.isFinite(shadowStayScore)
                 && Double.isFinite(shadowSwitchScore)) {
             logCrossActionShadow(shadowSnapshot, "move", selectedMove.moveId,
@@ -1877,6 +2024,22 @@ public class MaestroBattleAI extends RCTBattleAI {
                 selectedMove
         );
 
+        // Export each already-calculated Legacy candidate, not a re-score,
+        // and never use the values to influence a returned action.
+        if(com.maestroai.training.AutomaticBattleReports.enabled()
+                && battle!=null && battle.getBattleId()!=null) {
+            for(MoveChoice option:moves)
+                if(option!=null)
+                    com.maestroai.training.AutomaticBattleReports.recordLegacyEstimate(
+                            shadowReplayCapture.forBattle(battle.getBattleId()),false,
+                            "move:"+option.moveId,option.score,option.finalScore,
+                            option.accuracy,option.priority,option.setupMove,option.pivotMove,
+                            battle.getTurn());
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.LEGACY_CROSS_ACTION,
+                    com.maestroai.training.AutomaticBattleReports.State.EVALUATED,
+                    moves.size());
+        }
         logMoveDecision(
                 battle,
                 mine,
@@ -5526,6 +5689,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     battle.getTurn(),battle.getShowdownMessages().size(),
                     ownTransportVersionSupported(),battle.getEnded());
             System.out.println("[MaestroAI] Phase 6.24 "+receipt);
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_SIDED_DISPATCH,
+                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
             if (PHASE631_OBSERVE) {
                 com.cobblemon.mod.common.api.battles.model.actor.AIBattleActor own = null;
                 boolean duplicateOwn=false;
@@ -5544,6 +5710,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     if (PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.withdraw();
                     if (PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.withdraw();
                     System.out.println("[MaestroAI] Phase 6.31 nativeSide=UNKNOWN;authority=NONE");
+                    automaticProducer(battle,
+                            com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_NATIVE_SIDE,
+                            com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE,-1);
                     if (PHASE5_LIVE_SHADOW_OBSERVE)
                         System.out.println("[MaestroAI] Phase 5 online Shadow=UNKNOWN;authority=NONE");
                 } else {
@@ -5552,6 +5721,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     var side=phase631Scope.forBattle(battle)
                             .observeFromNativeCallback(battle,own,sourceActor,receipt);
                     System.out.println("[MaestroAI] Phase 6.31 "+side);
+                    automaticProducer(battle,
+                            com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_NATIVE_SIDE,
+                            com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                     if (PHASE5_LIVE_SHADOW_OBSERVE) {
                         // Source-owned public history only. Each callback
                         // is checked against original salted Phase 6.16
@@ -5569,6 +5741,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                                             originalHistory,
                                             PublicCompetitiveLiveShadowConsumer.Request.pinned());
                             System.out.println("[MaestroAI] Phase 5 online Shadow "+diagnostic);
+                            automaticProducer(battle,
+                                    com.maestroai.training.AutomaticBattleReports.Producer.PHASE5_ONLINE,
+                                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                             if (PHASE5_HISTORICAL_OBSERVE
                                     && phase5HistoricalArchive!=null
                                     && phase5HistoricalTrustedSource!=null) {
@@ -5576,11 +5751,17 @@ public class MaestroBattleAI extends RCTBattleAI {
                                         battle,diagnostic,phase5HistoricalArchive,
                                         phase5HistoricalTrustedSource);
                                 System.out.println("[MaestroAI] Phase 5 historical Shadow "+roles);
+                                automaticProducer(battle,
+                                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE5_HISTORICAL,
+                                        com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                             }
                         } catch(RuntimeException unsupported) {
                             phase5LiveScope.withdraw();
                             if (PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.withdraw();
                             System.out.println("[MaestroAI] Phase 5 online Shadow=UNKNOWN;authority=NONE");
+                            automaticProducer(battle,
+                                    com.maestroai.training.AutomaticBattleReports.Producer.PHASE5_ONLINE,
+                                    com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE,-1);
                         }
                     }
                     if (PHASE634_OBSERVE) {
@@ -5588,6 +5769,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                                 .observeNativeReturn(battle,own,sourceActor,
                                         allyPacket,opponentPacket,receipt);
                         System.out.println("[MaestroAI] Phase 6.34 "+publicBranch);
+                        automaticProducer(battle,
+                                com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_PUBLIC_REVEAL,
+                                com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                     }
                 }
             }
@@ -5598,6 +5782,8 @@ public class MaestroBattleAI extends RCTBattleAI {
             if(PHASE5_LIVE_SHADOW_OBSERVE) phase5LiveScope.withdraw();
             if(PHASE5_HISTORICAL_OBSERVE) phase5HistoricalScope.withdraw();
             System.out.println("[MaestroAI] Phase 6.24 nativeSided=UNKNOWN;authority=NONE");
+            automaticFailure(battle,
+                    com.maestroai.training.AutomaticBattleReports.Failure.EVALUATION_DIAGNOSTIC_FAILED);
         }
     }
 
@@ -5616,6 +5802,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     battle.getSpectators().size(),ownTransportVersionSupported(),
                     false);
             System.out.println("[MaestroAI] Phase 6.18 "+receipt);
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_SPLIT_RETURN,
+                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
             if (PHASE622_OBSERVE) {
                 var acceptance=phase622Harness.nativeReturnHook(battle,receipt);
                 System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
@@ -5624,6 +5813,8 @@ public class MaestroBattleAI extends RCTBattleAI {
             phase618Dispatch.withdraw();
             if (PHASE622_OBSERVE) phase622Harness.withdraw();
             System.out.println("[MaestroAI] Phase 6.18 dispatch=UNKNOWN");
+            automaticFailure(battle,
+                    com.maestroai.training.AutomaticBattleReports.Failure.EVALUATION_DIAGNOSTIC_FAILED);
         }
     }
 
@@ -5651,17 +5842,29 @@ public class MaestroBattleAI extends RCTBattleAI {
                         battle,battle.getTurn(),
                         history.size(),ownTransportVersionSupported(),battle.getEnded());
                 System.out.println("[MaestroAI] Phase 6.24 "+status);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_SIDED_DISPATCH,
+                        com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
             } catch(RuntimeException unavailable) {
                 phase624Scope.withdraw();
                 System.out.println("[MaestroAI] Phase 6.24 sidedStatus=UNKNOWN;authority=NONE");
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_SIDED_DISPATCH,
+                        com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE,-1);
             }
             if (PHASE622_OBSERVE) try {
                 var acceptance=phase622Harness.publicHistory(battle,battle.getTurn(),
                         history,ownTransportVersionSupported());
                 System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_RUNTIME_ACCEPTANCE,
+                        com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
             } catch (RuntimeException unavailable) {
                 phase622Harness.withdraw();
                 System.out.println("[MaestroAI] Phase 6.22 source=UNKNOWN;authority=NONE");
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_RUNTIME_ACCEPTANCE,
+                        com.maestroai.training.AutomaticBattleReports.State.UNAVAILABLE,-1);
             }
             if (PHASE618_AUDIT) {
                 // Missing optional injection is UNKNOWN, never dispatch proof.
@@ -5714,6 +5917,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                 var routing=phase616Split.inspect(
                         battle, history, ownTransportVersionSupported());
                 System.out.println("[MaestroAI] Phase 6.16 " + routing);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_SPLIT_ROUTING,
+                        com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                 if (PHASE620_AUDIT) {
                     // This compares ONLY live source-owned metadata and can
                     // never prove packet/event identity or client delivery.
@@ -5723,13 +5929,22 @@ public class MaestroBattleAI extends RCTBattleAI {
                     var correlation=phase620Correlation.inspect(
                             battle,routing,nativeWindow);
                     System.out.println("[MaestroAI] Phase 6.20 " + correlation);
+                    automaticProducer(battle,
+                            com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_HISTORY_CORRELATION,
+                            com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                     if (PHASE621_OBSERVE) {
                         var recipient=phase617Recipients.inspect(battle,routing);
                         var safety=phase621Gate.inspectSplit(battle,correlation,recipient);
                         System.out.println("[MaestroAI] Phase 6.21 " + safety);
+                        automaticProducer(battle,
+                                com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_NATIVE_GATE,
+                                com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                         if (PHASE622_OBSERVE) {
                             var acceptance=phase622Harness.observePhase621(battle,safety);
                             System.out.println("[MaestroAI] Phase 6.22 "+acceptance);
+                            automaticProducer(battle,
+                                    com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_RUNTIME_ACCEPTANCE,
+                                    com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                         }
                     }
                 }
@@ -5739,6 +5954,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     // possible from this existing read-only call site.
                     var recipient=phase617Recipients.inspect(battle,routing);
                     System.out.println("[MaestroAI] Phase 6.17 " + recipient);
+                    automaticProducer(battle,
+                            com.maestroai.training.AutomaticBattleReports.Producer.PHASE6_RECIPIENT_CUSTODY,
+                            com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
                 }
             }
             // Read the already-observed public Showdown history; never obtain
@@ -5747,6 +5965,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                 var observation = phase69Bridge.observe(
                         battle, history, ownTransportVersionSupported());
                 System.out.println("[MaestroAI] Phase 6.9 " + observation);
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.SHADOW_PUBLIC_HISTORY,
+                        com.maestroai.training.AutomaticBattleReports.State.OBSERVED,-1);
             }
             publicProtocolObserver.reset();
             for (String line : publicEvents) publicProtocolObserver.accept(line);
@@ -6690,6 +6911,17 @@ public class MaestroBattleAI extends RCTBattleAI {
             MoveChoice choice,
             SwitchChoice bestSwitch
     ) {
+        if(battle!=null && battle.getBattleId()!=null
+                && com.maestroai.training.AutomaticBattleReports.enabled()) {
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.LEGACY_EVALUATOR_MOVE,
+                    com.maestroai.training.AutomaticBattleReports.State.EVALUATED,1);
+            com.maestroai.training.AutomaticBattleReports.recordLegacyEstimate(
+                    shadowReplayCapture.forBattle(battle.getBattleId()),false,
+                    "move:"+choice.moveId,choice.score,choice.finalScore,
+                    choice.accuracy,choice.priority,choice.setupMove,choice.pivotMove,
+                    battle.getTurn());
+        }
         System.out.println(
                 "[MaestroAI] ===== Maestro Decision ====="
         );
@@ -6984,6 +7216,16 @@ public class MaestroBattleAI extends RCTBattleAI {
             SwitchChoice choice,
             String reason
     ) {
+        if(battle!=null && battle.getBattleId()!=null
+                && com.maestroai.training.AutomaticBattleReports.enabled()) {
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.LEGACY_EVALUATOR_SWITCH,
+                    com.maestroai.training.AutomaticBattleReports.State.EVALUATED,1);
+            com.maestroai.training.AutomaticBattleReports.recordLegacyEstimate(
+                    shadowReplayCapture.forBattle(battle.getBattleId()),true,
+                    "UNKNOWN",choice.score,choice.score,100,0,false,false,
+                    battle.getTurn());
+        }
         Pokemon switchingTo =
                 choice.pokemon
                         .getEffectedPokemon();
@@ -7244,6 +7486,9 @@ public class MaestroBattleAI extends RCTBattleAI {
                     + " currentItemKnown=" + (publicItem != null)
                     + " majorStatus=" + (publicStatus == null ? "UNKNOWN" : publicStatus)
                     + " transformed=" + publicTransformed);
+            automaticProducer(battle,
+                    com.maestroai.training.AutomaticBattleReports.Producer.PUBLIC_FIELD_MECHANICS,
+                    com.maestroai.training.AutomaticBattleReports.State.PUBLIC_HYPOTHESIS,-1);
             String publicTeraType =
                     PublicShadowSnapshot.publicTeraType(publicProtocolObserver, opponentSlot);
             Map<String, Integer> selfStages = ownEffectiveStages.getOrDefault("self", Map.of());
@@ -7377,6 +7622,12 @@ public class MaestroBattleAI extends RCTBattleAI {
                         + " cacheHits=" + search.cacheHits()
                         + " evidence=" + projection.evidence()
                         + " advisoryOnly=true");
+                automaticProducer(battle,
+                        com.maestroai.training.AutomaticBattleReports.Producer.PHASE3_PREREQUISITES,
+                        search.complete()
+                                ?com.maestroai.training.AutomaticBattleReports.State.EVALUATED
+                                :com.maestroai.training.AutomaticBattleReports.State.SOURCE_UNVERIFIED,
+                        search.nodes());
             }
             return snapshot;
         } catch (RuntimeException exception) {

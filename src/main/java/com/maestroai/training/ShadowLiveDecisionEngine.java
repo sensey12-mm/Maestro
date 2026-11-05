@@ -20,10 +20,28 @@ public final class ShadowLiveDecisionEngine {
         MOVE, RECOVERY, SETUP, STATUS, VOLUNTARY_SWITCH,
         FORCED_REPLACEMENT, NATIVE_LEGAL_MINIMUM, UNKNOWN_OR_UNSUPPORTED, NO_LEGAL_ACTION
     }
-    public record Choice(String action, Reason reason, int scoredCandidates) {
+    /**
+     * Source-calculated ranking, not a damage forecast or calibrated win
+     * probability. Kept only in the temporary returned decision evidence;
+     * raw switch UUIDs must NEVER be sent to the report writer.
+     */
+    public record Estimate(String action, Reason reason, double heuristicScore) {
+        public Estimate {
+            if (action == null || reason == null || !Double.isFinite(heuristicScore)
+                    || Math.abs(heuristicScore) > 1_000_000)
+                throw new IllegalArgumentException("invalid heuristic estimate");
+        }
+    }
+    public record Choice(String action, Reason reason, int scoredCandidates,
+                         List<Estimate> evaluations) {
+        public Choice(String action, Reason reason, int scoredCandidates) {
+            this(action,reason,scoredCandidates,List.of());
+        }
         public Choice {
-            if(action==null || action.isBlank() || reason==null || scoredCandidates<1)
+            if(action==null || action.isBlank() || reason==null || scoredCandidates<1
+                    || evaluations==null || evaluations.size()>24)
                 throw new IllegalArgumentException("invalid independent choice");
+            evaluations=List.copyOf(evaluations);
         }
         /** Telemetry never includes opponent identities, own UUIDs or moves. */
         public String safeLine(){
@@ -157,7 +175,9 @@ public final class ShadowLiveDecisionEngine {
         scores.sort(Comparator.comparingDouble(Scored::value).reversed()
                 .thenComparing(Scored::action));
         Scored selected=scores.getFirst();
-        return new Choice(selected.action(),selected.reason(),scores.size());
+        return new Choice(selected.action(),selected.reason(),scores.size(),
+                scores.stream().map(e -> new Estimate(e.action(),e.reason(),e.value()))
+                        .toList());
     }
     /**
      * Deterministic independently sourced native legal action when all

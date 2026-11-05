@@ -32,6 +32,61 @@ public final class DeveloperBattleDecisionCapture {
             "trickroom","calmmind","leechseed","seedbomb");
     private DeveloperBattleDecisionCapture() {}
 
+    public enum Source {
+        PUBLIC_OPPONENT, OWN_ONLY, FORCED_NATIVE, LEGACY_FALLBACK, UNKNOWN
+    }
+    public enum Witness {
+        OBSERVED, VERIFIED_OWN_REQUEST, UNVERIFIED, MISSING, UNKNOWN
+    }
+    public record Estimate(String action, String category, double score) {
+        public Estimate {
+            action=safeAction(action);
+            category=safeReason(category);
+            if(!Double.isFinite(score) || Math.abs(score)>1_000_000)
+                throw new IllegalArgumentException("invalid diagnostic heuristic score");
+            score=Math.rint(score*100)/100.0;
+        }
+    }
+    /** A pure evidence packet from the already chosen action; no hidden sets. */
+    public record Evidence(Source source, ShadowPromotionPreparation.Verdict preparation,
+                           int candidateCount, List<Estimate> ranked,
+                           List<String> rootAlternatives,
+                           Witness ownRequest, Witness nativeLegality,
+                           Witness publicOpponent) {
+        public Evidence {
+            if(source==null || candidateCount < -1 || candidateCount > 24
+                    || ranked==null || ranked.size()>24
+                    || rootAlternatives==null || rootAlternatives.size()>24
+                    || ownRequest==null || nativeLegality==null || publicOpponent==null)
+                throw new IllegalArgumentException("invalid diagnostic evidence");
+            ranked=List.copyOf(ranked);
+            List<String> safe=new ArrayList<>();
+            for(String root:rootAlternatives) {
+                if(!safeAction(root).equals(root) || safe.contains(root))
+                    throw new IllegalArgumentException("unreviewed alternative root");
+                safe.add(root);
+            }
+            rootAlternatives=List.copyOf(safe);
+        }
+        public static Evidence unavailable() {
+            return new Evidence(Source.UNKNOWN,null,-1,List.of(),List.of(),
+                    Witness.UNKNOWN,Witness.UNKNOWN,Witness.UNKNOWN);
+        }
+    }
+
+    /** Copy existing heuristic scores once; never recalculate or alter policy.
+     * UUID-based switch candidates are redacted instead of exported. */
+    public static List<Estimate> safeEstimates(ShadowLiveDecisionEngine.Choice choice) {
+        if(choice==null) return List.of();
+        List<Estimate> values=new ArrayList<>();
+        for(var entry:choice.evaluations()) {
+            if(values.size()>=24)break;
+            String action=safeAction(entry.action());
+            values.add(new Estimate(action,entry.reason().name(),entry.heuristicScore()));
+        }
+        return List.copyOf(values);
+    }
+
     public static boolean enabled() { return Boolean.getBoolean(PROPERTY); }
 
     /** Console logging is optional; installed local reports are not. */
@@ -41,8 +96,17 @@ public final class DeveloperBattleDecisionCapture {
 
     public static String safeAction(String value) {
         if (value == null || !ACTION.matcher(value).matches()) return "UNKNOWN";
-        if (value.startsWith("move:") && !MOVE_IDS.contains(value.substring(5)))
-            return "UNKNOWN";
+        if (value.startsWith("move:") && !MOVE_IDS.contains(value.substring(5))) {
+            // Read-only installed Cobblemon move registry: public move IDs and
+            // own legal choices are safe even outside the short test roster.
+            // Standalone synthetic regressions may not have native registries.
+            try {
+                if (com.cobblemon.mod.common.api.moves.Moves.getByName(
+                        value.substring(5)) == null) return "UNKNOWN";
+            } catch (RuntimeException | LinkageError unavailable) {
+                return "UNKNOWN";
+            }
+        }
         return value;
     }
 
@@ -90,9 +154,17 @@ public final class DeveloperBattleDecisionCapture {
                               String authority, String selected, String proposal,
                               String reason, String fallbackStage,
                               String fallbackReason, Collection<String> legal) {
+        record(capture,turn,forced,authority,selected,proposal,reason,
+                fallbackStage,fallbackReason,legal,Evidence.unavailable());
+    }
+    public static void record(long capture, int turn, boolean forced,
+                              String authority, String selected, String proposal,
+                              String reason, String fallbackStage,
+                              String fallbackReason, Collection<String> legal,
+                              Evidence evidence) {
         String line = safeLine(capture, turn, forced, authority, selected,
                 proposal, reason, fallbackStage, fallbackReason, legal);
-        AutomaticBattleReports.recordDecision(capture, line);
+        AutomaticBattleReports.recordDecision(capture, line, evidence);
         if (enabled()) System.out.println(line);
     }
 }
