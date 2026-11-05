@@ -19,9 +19,8 @@ On Minecraft startup, MaestroAI automatically creates a private report folder un
       battle.jsonl
 ```
 
-For example, if the active instance is
-`G:\Maincraf\.minecraft\versions\psokdeonmson\`, reports appear at
-`G:\Maincraf\.minecraft\versions\psokdeonmson\battle-reports\`.
+For example, if the launcher uses `<instance-root>` as its game directory,
+reports appear at `<instance-root>/battle-reports/`.
 **The directory is NOT inside the mods folder, mod JAR, Git checkout or Headquarters.**
 
 Reports are created automatically **when MaestroAI actually observes or
