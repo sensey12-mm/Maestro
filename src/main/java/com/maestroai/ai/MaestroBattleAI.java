@@ -604,7 +604,7 @@ public class MaestroBattleAI extends RCTBattleAI {
             String developerFallbackStage="UNKNOWN";
             if(forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY) {
                 developerFallbackStage=forcedPreparationStage;
-                System.out.println("[MaestroAI] Shadow forced fallback stage=
+                System.out.println("[MaestroAI] Shadow forced fallback stage="
                         +forcedPreparationStage+";reason="+forcedReadinessReason
                         +";authority=LEGACY");
             }
