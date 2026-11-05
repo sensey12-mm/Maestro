@@ -182,7 +182,8 @@ class Session:
         self.key, self.index, self.first_line = key, index, first_line
         self.name = f"B{index:02d}"
         self.stream = spool.open("w", encoding="utf-8", newline="\n")
-        self.source_hash, self.version = source_hash, version
+        self.source_hash, self.reporter_version = source_hash, version
+        self.version = UNKNOWN  # Runtime version must be evidenced by the log itself.
         self.order = 0
         self.last_event_seq = 0
         self.event_fingerprints = {}
@@ -207,7 +208,8 @@ class Session:
         rec = {"schema": SCHEMA, "kind": kind, "battle": self.name,
                "order": self.order, "source_line": line,
                "source_sha256": self.source_hash, "turn": self.turn,
-               "artifact_sha256": self.artifact, "version": self.version}
+               "artifact_sha256": self.artifact, "version": self.version,
+               "reporter_version": self.reporter_version}
         rec.update(fields)
         self.stream.write(json.dumps(rec, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n")
 
@@ -242,6 +244,8 @@ class Session:
             f"- Significant issues: {len(self.issues)}",
             f"- Last observed turn: {self.turn}",
             f"- Artifact SHA-256: {self.artifact}",
+            f"- Observed runtime version: {self.version}",
+            f"- Reporter version: {self.reporter_version}",
             f"- Original source SHA-256: {self.source_hash}",
             "- Missing evidence: start-of-battle custody and independent spectator delivery unverified",
             "- Decision candidates/reasoning absent from older logs are UNKNOWN",
