@@ -53,6 +53,84 @@ public final class PublicBattleCapture {
                         + " reason=" + reason + " status=UNKNOWN"));
     }
 
+    /*
+     * A public Showdown event is NOT a permission to persist its free-form
+     * nickname, player alias, HP, or arbitrary fields into developer output.
+     * Project a closed vocabulary while retaining the original unmodified
+     * history only in the source-side, in-memory provenance comparison.
+     */
+    private static final java.util.Set<String> SAFE_SPECIES = java.util.Set.of(
+            "zoroark","greninja","ditto","mew","pikachu","blissey","shedinja",
+            "shuckle","genesect","calyrexshadow","arceus","xerneas","marshadow",
+            "mewtwo","mewtwomegay","gholdengo","charizard","gengar","lucario");
+    private static final java.util.Set<String> SAFE_STATUS = java.util.Set.of(
+            "brn","par","psn","tox","slp","frz","none");
+    private static final java.util.Set<String> SAFE_ITEM = java.util.Set.of(
+            "leftovers","choicescarf","choiceband","choicespecs","lifeorb",
+            "powerherb","sitrusberry","focussash","assaultvest","blacksludge",
+            "heavydutyboots","mewtwonitey","marshadiumz");
+    private static final java.util.Set<String> SAFE_ABILITY = java.util.Set.of(
+            "pressure","download","shadowshield","fairyaura","multitype",
+            "technician","asone","levitate","intimidate","prankster");
+    private static final java.util.Set<String> SAFE_TYPE = java.util.Set.of(
+            "normal","fire","water","electric","grass","ice","fighting","poison",
+            "ground","flying","psychic","bug","rock","ghost","dragon","dark",
+            "steel","fairy","stellar");
+    private static String slug(String s) {
+        return s.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+    private static String fromSet(String v,java.util.Set<String> safe) {
+        String token=slug(v);
+        return safe.contains(token)?token:"UNKNOWN";
+    }
+    private static String slot(String s) {
+        if(s==null || s.length()<3)return "UNKNOWN";
+        String id=s.substring(0,3);
+        return id.matches("p[12][a-f]") && (s.length()==3 || s.charAt(3)==':')
+                ?id:"UNKNOWN";
+    }
+    private static String segment(String[] parts,int idx) {
+        return parts.length>idx?parts[idx]:"";
+    }
+    private static String projectedEvent(String event) {
+        String[] p=event.split("\\|",-1);
+        if(p.length<3 || !p[0].isEmpty())return "|UNKNOWN";
+        String kind=p[1];
+        if(kind.equals("turn")) {
+            String turn=segment(p,2);
+            return "|turn|"+(turn.matches("[0-9]{1,4}")?turn:"UNKNOWN");
+        }
+        if(kind.equals("-sidestart") || kind.equals("-sideend")
+                || kind.equals("-swapsideconditions")) {
+            String side=segment(p,2);
+            String index=side.startsWith("p1")?"p1":side.startsWith("p2")?"p2":"UNKNOWN";
+            return "|"+kind+"|"+index+"|UNKNOWN";
+        }
+        String actor=slot(segment(p,2));
+        String prefix="|"+kind+"|"+actor;
+        if(kind.equals("move")) {
+            String move=slug(segment(p,3));
+            String safe=DeveloperBattleDecisionCapture.safeAction("move:"+move);
+            return prefix+"|"+(safe.equals("UNKNOWN")?"UNKNOWN":move)
+                    +"|"+slot(segment(p,4));
+        }
+        if(kind.equals("switch") || kind.equals("drag") || kind.equals("replace")
+                || kind.equals("detailschange") || kind.equals("-formechange")) {
+            return prefix+"|"+fromSet(segment(p,3).split(",",-1)[0],SAFE_SPECIES);
+        }
+        if(kind.equals("-transform"))return prefix+"|"+slot(segment(p,3));
+        if(kind.equals("-terastallize"))return prefix+"|"+fromSet(segment(p,3),SAFE_TYPE);
+        if(kind.equals("-status") || kind.equals("-curestatus"))
+            return prefix+"|"+fromSet(segment(p,3),SAFE_STATUS);
+        if(kind.equals("-item") || kind.equals("-enditem"))
+            return prefix+"|"+fromSet(segment(p,3),SAFE_ITEM);
+        if(kind.equals("-ability") || kind.equals("-endability"))
+            return prefix+"|"+fromSet(segment(p,3),SAFE_ABILITY);
+        // Other public kinds retain type and actor only, never damage, HP,
+        // effects, nicknames, trainer text or unvalidated extra arguments.
+        return prefix;
+    }
+
     /** Compatibility with existing replay users. No tactical side effects. */
     public List<String> observe(UUID battleId, List<String> rawHistory) {
         return observeWithProvenance(battleId, rawHistory).replay();
@@ -78,7 +156,7 @@ public final class PublicBattleCapture {
         for (int i = shared; i < filtered.size(); i++) {
             long seq = ++sequence;
             replay.add("[MaestroAI] SHADOW_REPLAY battle=REDACTED capture=" + captureNumber
-                    + " seq=" + seq + " event=" + filtered.get(i));
+                    + " seq=" + seq + " event=" + projectedEvent(filtered.get(i)));
             PublicEnvelopeProvenance.Origin origin = source.origins().get(i);
             envelopes.add("[MaestroAI] SHADOW_ENVELOPE capture=" + captureNumber
                     + " seq=" + seq + " route=" + origin.route()
