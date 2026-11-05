@@ -67,6 +67,30 @@ public final class LegacyChoiceCaptureRegression {
                 snapshot,criteria,new Phase7Benchmark.Evidence(true,true,true,1),null);
     }
     public static void run() {
+        // v1.1.6: observation-only developer receipt; no raw UUID, names or
+        // private request data may ever enter its log surface.
+        String diagnostic=DeveloperBattleDecisionCapture.safeLine(4,1,false,
+                "SHADOW","move:icebeam","move:uturn","MOVE","UNKNOWN",
+                "UNKNOWN",List.of("move:icebeam","move:uturn"));
+        check(diagnostic.contains("DEV_DIAG_DECISION capture=4;turn=1")
+                && diagnostic.contains("legal=move:icebeam,move:uturn")
+                && diagnostic.contains("authority=SHADOW"),
+                "developer receipt exposes safe own decision and native legal roots");
+        check(DeveloperBattleDecisionCapture.safeLine(4,1,true,
+                "LEGACY","switch:slot2","UNKNOWN","UNKNOWN",
+                "NO_NATIVE_FORCED_PROPOSAL","NO_OWN_LEASE",null)
+                .contains("fallback_stage=NO_NATIVE_FORCED_PROPOSAL"),
+                "forced Legacy fallback stage retained without hidden evidence");
+        check(DeveloperBattleDecisionCapture.safeLegal(List.of(
+                "move:icebeam","move:PRIVATE_USER_SECRET")).equals("UNKNOWN"),
+                "untrusted action in native choices fails closed");
+        check(DeveloperBattleDecisionCapture.safeAction(
+                "switch:20000000-0000-0000-0000-000000000001").equals("UNKNOWN"),
+                "own UUID may never be exported as a switch");
+        check(DeveloperBattleDecisionCapture.safeLine(0,-1,false,
+                "SHADOW","move:icebeam","UNKNOWN","MOVE","UNKNOWN","UNKNOWN",null)
+                .equals("[MaestroAI] DEV_DIAG_REJECTED code=INVALID_SOURCE"),
+                "invalid capture identity abstains");
         var own=choice();
         var disabled=new LegacyChoiceCapture(false,ARTIFACT);
         var battleId=UUID.fromString("20000000-0000-0000-0000-000000000001");
