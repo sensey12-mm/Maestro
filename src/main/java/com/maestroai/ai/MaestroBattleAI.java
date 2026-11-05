@@ -1,6 +1,7 @@
 package com.maestroai.ai;
 
 import com.maestroai.training.LegacyChoiceCapture;
+import com.maestroai.training.DeveloperBattleDecisionCapture;
 
 import com.cobblemon.mod.common.api.battles.model.PokemonBattle;
 import com.maestroai.training.BattleSnapshot;
@@ -473,10 +474,14 @@ public class MaestroBattleAI extends RCTBattleAI {
             // owning-request snapshot. Legacy must not execute or populate
             // any tactical input before an independent Shadow choice.
             int choiceTurn=ownChoiceLease==null?-1:ownChoiceLease.turn();
+            String developerDecisionReason="UNKNOWN";
             com.maestroai.training.BattleSnapshot liveShadowSnapshot=null;
             if(forceSwitch){
                 var forced=prepareShadowForcedReplacement(activePokemon,battle);
-                if(forced!=null && forced.proposal()!=null)phaseShadowPrepared=forced;
+                if(forced!=null && forced.proposal()!=null) {
+                    phaseShadowPrepared=forced;
+                    developerDecisionReason="FORCED_REPLACEMENT";
+                }
             }else{
                 liveShadowSnapshot=captureIndependentShadowSnapshot(
                         activePokemon,battle,moveset);
@@ -514,6 +519,7 @@ public class MaestroBattleAI extends RCTBattleAI {
                             if(proof.proposal()!=null){
                                 liveShadowSnapshot=observed;
                                 phaseShadowPrepared=proof;
+                                developerDecisionReason=preference.reason().name();
                                 System.out.println("[MaestroAI] "+preference.safeLine());
                                 System.out.println("[MaestroAI] "+witnessed.safeLine());
                             }
@@ -595,10 +601,13 @@ public class MaestroBattleAI extends RCTBattleAI {
             }
             System.out.println("[MaestroAI] Live decision authority="+selected.authority()
                     +";currentNativeLegalRequired=true;legacyFallbackAvailable=true");
-            if(forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY)
-                System.out.println("[MaestroAI] Shadow forced fallback stage="
+            String developerFallbackStage="UNKNOWN";
+            if(forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY) {
+                developerFallbackStage=forcedPreparationStage;
+                System.out.println("[MaestroAI] Shadow forced fallback stage=
                         +forcedPreparationStage+";reason="+forcedReadinessReason
                         +";authority=LEGACY");
+            }
             if(!forceSwitch && selected.authority()==LivePromotionGate.Authority.LEGACY){
                 String ordinaryStage=ownChoiceLease==null?"NO_OWN_LEASE"
                         :!ownChoiceLease.current()?"STALE_OWN_LEASE"
@@ -606,8 +615,50 @@ public class MaestroBattleAI extends RCTBattleAI {
                         :choiceSnapshot==null?"INDEPENDENT_SNAPSHOT_UNAVAILABLE"
                         :proposal==null?"NO_INDEPENDENT_PROPOSAL"
                         :"POST_PROPOSAL_NATIVE_LEGALITY_OR_EMERGENCY";
+                developerFallbackStage=ordinaryStage;
                 System.out.println("[MaestroAI] Shadow ordinary fallback stage="
                         +ordinaryStage+";authority=LEGACY");
+            }
+            // Opt-in diagnostics: observe only the completed, already-selected
+            // response and current owning-native legal witness. Never re-enter
+            // Shadow, Legacy, prediction, or the action materializer.
+            if(DeveloperBattleDecisionCapture.enabled() && battle!=null
+                    && battle.getBattleId()!=null)try{
+                java.util.List<String> legalForDeveloper=null;
+                if(!forceSwitch && phaseShadowLegalWindow!=null
+                        && choiceSnapshot!=null
+                        && phaseShadowLegalWindow.exactlyCovers(
+                                battle,phaseShadowRequest,choiceSnapshot)){
+                    legalForDeveloper=new java.util.ArrayList<>();
+                    for(String moveId:choiceSnapshot.legalMoves())
+                        legalForDeveloper.add("move:"+moveId);
+                    for(String slot:choiceSnapshot.legalSwitches())
+                        legalForDeveloper.add("switch:"+slot);
+                }
+                String selectedForDeveloper="UNKNOWN";
+                if(response instanceof MoveActionResponse move && !forceSwitch)
+                    selectedForDeveloper="move:"+move.getMoveName();
+                else if(response instanceof SwitchActionResponse change
+                        && activePokemon!=null && activePokemon.getActor()!=null){
+                    var party=activePokemon.getActor().getPokemonList();
+                    if(party!=null && party.size()<=6)
+                        for(int i=0;i<party.size();i++)
+                            if(party.get(i)!=null
+                                    && change.getNewPokemonId().equals(party.get(i).getUuid())){
+                                selectedForDeveloper="switch:slot"+(i+1);
+                                break;
+                            }
+                }
+                DeveloperBattleDecisionCapture.record(
+                        shadowReplayCapture.forBattle(battle.getBattleId()),
+                        choiceTurn,forceSwitch,selected.authority().name(),
+                        selectedForDeveloper,
+                        proposal==null?"UNKNOWN":proposal.action(),
+                        developerDecisionReason,developerFallbackStage,
+                        forceSwitch?forcedReadinessReason:"UNKNOWN",
+                        legalForDeveloper);
+            }catch(RuntimeException unavailable){
+                System.out.println("[MaestroAI] DEV_DIAG_REJECTED code=CAPTURE_UNAVAILABLE");
             }
             recordOwnChoice(battle, activePokemon, moveset, forceSwitch, response);
             // Phase 6.22's historical source path used to run only inside
